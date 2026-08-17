@@ -1,0 +1,2 @@
+# Runtime dependencies.
+# None yet: this version is standard library only. Content parsing will pin PyYAML here.
