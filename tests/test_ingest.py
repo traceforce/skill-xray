@@ -160,7 +160,10 @@ def test_excluded_dir_is_logged_not_silent(make_package):
 
 
 def test_unreadable_directory_is_logged_not_silent(make_package):
-    # root can read anything, so mode 0 would not fault; skip there.
+    # chmod(0) does not restrict directory traversal on Windows, and root can read
+    # anything on POSIX, so the "cannot enter" condition can't be created there.
+    if os.name == "nt":
+        pytest.skip("chmod(0) does not restrict directory traversal on Windows")
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         pytest.skip("root bypasses directory permissions")
     root = make_package({"SKILL.md": "---\nname: t\n---\n"})
@@ -227,8 +230,8 @@ def test_discover_finds_packages_under_roots(tmp_path):
     (tmp_path / "notaskill" / "README.md").write_text("hi", encoding="utf-8")
     found = ingest.discover_skill_packages([str(tmp_path)])
     assert len(found) == 2
-    assert any(p.endswith("/a") for p in found)
-    assert any(p.endswith("/b") for p in found)
+    assert any(os.path.basename(p) == "a" for p in found)
+    assert any(os.path.basename(p) == "b" for p in found)
 
 
 def test_discover_skips_missing_roots():
