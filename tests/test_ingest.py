@@ -188,6 +188,19 @@ def test_unreadable_directory_is_logged_not_silent(make_package):
     assert not any(a.rel.startswith("locked/") for a in pkg.artifacts)
 
 
+def test_undecodable_files_are_charged_against_the_budget(make_package, monkeypatch):
+    # a package cannot read past the aggregate budget by shipping files that fail
+    # to decode: the bytes read are charged even when decoding fails.
+    monkeypatch.setattr(ingest, "AGGREGATE_MAX_BYTES", 2000)
+    bad = bytes([0x81, 0x8D, 0x90]) * 400        # 1200 bytes, undecodable, no NUL
+    files = {"SKILL.md": "---\nname: t\n---\n"}
+    for i in range(4):
+        files["f%d.md" % i] = bad
+    root = make_package(files)
+    pkg = ingest.build_package(str(root))
+    assert any(e["reasonCode"] == "total_budget_exhausted" for e in pkg.ledger_exceptions)
+
+
 def test_aggregate_byte_budget_bounds_memory(make_package, monkeypatch):
     monkeypatch.setattr(ingest, "AGGREGATE_MAX_BYTES", 2000)
     files = {"SKILL.md": "---\nname: t\n---\n"}

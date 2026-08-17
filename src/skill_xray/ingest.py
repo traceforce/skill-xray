@@ -137,18 +137,22 @@ def read_text(path: str):
             # Bound the read itself: a file that grew after fstat cannot be read
             # unbounded into memory. Read one byte past the cap to detect overflow.
             raw = fh.read(MAX_FILE_BYTES + 1)
-            if len(raw) > MAX_FILE_BYTES:
-                return None, "too_large", 0
         except OSError as exc:
             return None, "unreadable:%s" % type(exc).__name__, 0
+    # Bytes were read, so every outcome below charges the budget for len(raw),
+    # decoded or not: a package of undecodable or NUL-carrying files cannot read
+    # past the aggregate budget by simply failing to decode.
+    nbytes = len(raw)
+    if nbytes > MAX_FILE_BYTES:
+        return None, "too_large", nbytes
     if b"\x00" in raw:
-        return None, "binary_content", 0
+        return None, "binary_content", nbytes
     for enc in ("utf-8-sig", "cp1252"):
         try:
-            return raw.decode(enc), None, len(raw)
+            return raw.decode(enc), None, nbytes
         except UnicodeDecodeError:
             continue
-    return None, "undecodable_text", 0
+    return None, "undecodable_text", nbytes
 
 
 # ---------------------------------------------------------------------------
@@ -285,10 +289,9 @@ def build_package(root: str) -> Package:
                 _skip(pkg, "total_budget_exhausted", rel)
             else:
                 art.text, art.exception, nbytes = read_text(ap)
+                total_read += nbytes   # charge for bytes read, decoded or not
                 if art.exception:
                     _skip(pkg, art.exception, rel)
-                elif art.text is not None:
-                    total_read += nbytes   # bytes actually read, not the pre-read lstat size
             pkg.add(art)
         if truncated:
             break
