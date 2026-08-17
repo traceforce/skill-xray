@@ -3,6 +3,7 @@ git safety checks are tested without touching the network."""
 
 from __future__ import annotations
 
+import os
 import zipfile
 
 import pytest
@@ -30,6 +31,15 @@ def test_single_file_is_wrapped_into_a_package(tmp_path):
         assert r.kind == "file"
         pkg = build_package(r.root)
         assert any(a.rel == "SKILL.md" for a in pkg.artifacts)
+
+
+def test_single_file_temp_dir_is_removed_on_exit(tmp_path):
+    f = tmp_path / "SKILL.md"
+    f.write_text("---\nname: t\n---\n", encoding="utf-8")
+    with resolved_input(str(f)) as r:
+        root = r.root
+        assert os.path.isdir(root)
+    assert not os.path.exists(root)      # the temp dir must not leak
 
 
 def test_missing_target_is_a_clear_error():
@@ -113,6 +123,7 @@ def test_zip_degenerate_member_does_not_crash(tmp_path):
 @pytest.mark.parametrize("url", [
     "http://127.0.0.1/x", "http://localhost/x", "https://10.0.0.5/x",
     "http://169.254.169.254/latest/meta-data", "http://[::1]/x",
+    "http://100.64.0.1/x",   # CGNAT: not is_private, but not public either
 ])
 def test_url_ssrf_blocks_non_public(url):
     with pytest.raises(UnsafeInputError):

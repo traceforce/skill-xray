@@ -72,7 +72,8 @@ def _resolve(target):
     # Local paths are checked first, so a directory or file named `foo.git` is
     # treated as what it is on disk, not routed to the git adapter.
     if os.path.isdir(target):
-        return target, None, "directory", os.path.basename(os.path.abspath(target).rstrip("/\\"))
+        abspath = os.path.abspath(target)
+        return target, None, "directory", os.path.basename(abspath.rstrip("/\\")) or abspath
     if os.path.isfile(target):
         if zipfile.is_zipfile(target):
             tmp = tempfile.mkdtemp(prefix="skillxray-")
@@ -82,7 +83,8 @@ def _resolve(target):
                 shutil.rmtree(tmp, ignore_errors=True)
                 raise
             return tmp, tmp, "zip", _strip_zip_ext(os.path.basename(target))
-        return _wrap_single_file(target), None, "file", os.path.basename(target)
+        tmp = _wrap_single_file(target)          # temp dir must be cleaned up by the caller
+        return tmp, tmp, "file", os.path.basename(target)
     if _looks_like_git(target):
         tmp, name = _git_clone(target)
         return tmp, tmp, "git", name
@@ -170,8 +172,9 @@ def _resolve_public_ip(host, port):
         raise UnsafeInputError("host did not resolve: %s" % host)
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
-                or ip.is_multicast or ip.is_unspecified):
+        # not-global covers private, loopback, link-local (incl. cloud metadata),
+        # CGNAT (100.64/10), reserved, multicast and unspecified in one check.
+        if not ip.is_global:
             raise UnsafeInputError("host resolves to a non-public address (%s); refused" % ip)
     return infos[0][4][0]
 
@@ -282,7 +285,9 @@ def _check_git_remote(url):
 def _git_clone(url):
     _check_git_remote(url)
     tmp = tempfile.mkdtemp(prefix="skillxray-")
-    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="true", GCM_INTERACTIVE="never")
+    # No GIT_ASKPASS: `true` is not a program on Windows, and GIT_TERMINAL_PROMPT=0
+    # already stops git from prompting, so an unauthenticated clone fails cleanly.
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
     try:
         subprocess.run(
             ["git", "clone", "--depth", "1", "--single-branch", "--no-tags", url, tmp],

@@ -329,8 +329,7 @@ def discover_skill_packages(roots=None):
             dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS
                                  and not _is_reparse(os.path.join(dirpath, d)))
             if "SKILL.md" in filenames:
-                found[os.path.realpath(dirpath)] = _relpath(dirpath, os.getcwd()) \
-                    if dirpath.startswith(os.getcwd()) else dirpath
+                found[os.path.realpath(dirpath)] = dirpath
     return [found[k] for k in sorted(found)]
 
 
