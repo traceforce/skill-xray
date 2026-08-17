@@ -106,42 +106,43 @@ def install_identity(package_root: str) -> str:
 
 
 def read_text(path: str):
-    """Return (text, exception_reason). Never raises, never blocks.
+    """Return (text, exception_reason, bytes_read). Never raises, never blocks.
 
     Opens with O_NOFOLLOW and O_NONBLOCK so that if the entry was replaced by a
     symlink or a FIFO between the walk's lstat and this open, the open fails or
     fstat rejects it rather than reading outside the package or waiting forever.
-    A buffer containing a NUL byte is treated as binary. A buffer that decodes as
-    neither UTF-8 nor CP-1252 is returned as undecodable rather than decoded to
-    wrong characters.
+    bytes_read is the number of bytes actually read from this fd, so the caller's
+    memory budget is charged for what was read, not a pre-read lstat size that a
+    TOCTOU swap could understate. A buffer containing a NUL byte is treated as
+    binary; a buffer that decodes as neither UTF-8 nor CP-1252 is undecodable.
     """
     ext = os.path.splitext(path)[1].lower()
     if ext in BINARY_EXT:
-        return None, "binary_content"
+        return None, "binary_content", 0
     flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
              | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
     try:
         fd = os.open(path, flags)
     except OSError as exc:
-        return None, "unreadable:%s" % type(exc).__name__
+        return None, "unreadable:%s" % type(exc).__name__, 0
     with os.fdopen(fd, "rb", closefd=True) as fh:
         try:
             st = os.fstat(fd)
             if not stat.S_ISREG(st.st_mode):
-                return None, "not_regular_file"
+                return None, "not_regular_file", 0
             if st.st_size > MAX_FILE_BYTES:
-                return None, "too_large"
+                return None, "too_large", 0
             raw = fh.read()
         except OSError as exc:
-            return None, "unreadable:%s" % type(exc).__name__
+            return None, "unreadable:%s" % type(exc).__name__, 0
     if b"\x00" in raw:
-        return None, "binary_content"
+        return None, "binary_content", 0
     for enc in ("utf-8-sig", "cp1252"):
         try:
-            return raw.decode(enc), None
+            return raw.decode(enc), None, len(raw)
         except UnicodeDecodeError:
             continue
-    return None, "undecodable_text"
+    return None, "undecodable_text", 0
 
 
 # ---------------------------------------------------------------------------
@@ -277,11 +278,11 @@ def build_package(root: str) -> Package:
                 art.exception = "total_budget_exhausted"
                 _skip(pkg, "total_budget_exhausted", rel)
             else:
-                art.text, art.exception = read_text(ap)
+                art.text, art.exception, nbytes = read_text(ap)
                 if art.exception:
                     _skip(pkg, art.exception, rel)
                 elif art.text is not None:
-                    total_read += st.st_size   # bytes, matching the byte budget
+                    total_read += nbytes   # bytes actually read, not the pre-read lstat size
             pkg.add(art)
         if truncated:
             break

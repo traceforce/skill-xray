@@ -59,6 +59,14 @@ def test_file_at_the_cap_is_read(make_package):
     assert art.text is not None
 
 
+def test_read_text_reports_bytes_actually_read(make_package):
+    # the memory budget must be charged for bytes read from the fd, not a
+    # pre-read lstat size a TOCTOU swap could understate.
+    root = make_package({"SKILL.md": "---\nname: t\n---\n", "a.md": "hello"})
+    text, exc, nbytes = ingest.read_text(os.path.join(str(root), "a.md"))
+    assert exc is None and text == "hello" and nbytes == 5
+
+
 # --- file-count cap ---------------------------------------------------------
 def test_file_count_cap_truncates_and_records(make_package, monkeypatch):
     monkeypatch.setattr(ingest, "MAX_FILES", 3)
