@@ -113,8 +113,10 @@ def read_text(path: str):
     fstat rejects it rather than reading outside the package or waiting forever.
     bytes_read is the number of bytes actually read from this fd, so the caller's
     memory budget is charged for what was read, not a pre-read lstat size that a
-    TOCTOU swap could understate. A buffer containing a NUL byte is treated as
-    binary; a buffer that decodes as neither UTF-8 nor CP-1252 is undecodable.
+    TOCTOU swap could understate. The read itself is bounded to MAX_FILE_BYTES, so
+    a file that grows after fstat cannot be read unbounded into memory. A buffer
+    containing a NUL byte is treated as binary; a buffer that decodes as neither
+    UTF-8 nor CP-1252 is undecodable.
     """
     ext = os.path.splitext(path)[1].lower()
     if ext in BINARY_EXT:
@@ -132,7 +134,11 @@ def read_text(path: str):
                 return None, "not_regular_file", 0
             if st.st_size > MAX_FILE_BYTES:
                 return None, "too_large", 0
-            raw = fh.read()
+            # Bound the read itself: a file that grew after fstat cannot be read
+            # unbounded into memory. Read one byte past the cap to detect overflow.
+            raw = fh.read(MAX_FILE_BYTES + 1)
+            if len(raw) > MAX_FILE_BYTES:
+                return None, "too_large", 0
         except OSError as exc:
             return None, "unreadable:%s" % type(exc).__name__, 0
     if b"\x00" in raw:
