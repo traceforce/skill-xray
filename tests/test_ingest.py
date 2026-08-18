@@ -293,6 +293,34 @@ def test_pyc_inside_pycache_is_seen_not_excluded(make_package):
     assert any(p.endswith("util.cpython-313.pyc") for p in ledger["shippedBytecode"])
 
 
+def test_agent_identity_files_are_first_class(make_package):
+    # identity/memory files are the persistence write-target, so they must be a
+    # distinct class a downstream check can find, not folded into generic docs.
+    identity = ["CLAUDE.md", "AGENTS.md", "GEMINI.md", "SOUL.md", "MEMORY.md",
+                "IDENTITY.md", ".cursorrules", "copilot-instructions.md",
+                "references/AGENTS.md"]
+    files = {"SKILL.md": "---\nname: t\n---\n", "README.md": "docs"}
+    for n in identity:
+        files[n] = "marker"
+    pkg = ingest.build_package(str(make_package(files)))
+    by_rel = {a.rel: a for a in pkg.artifacts}
+    for rel in identity:
+        assert by_rel[rel].kind == "agent_identity", rel
+        assert by_rel[rel].role == "identity", rel
+        assert by_rel[rel].text is not None, rel          # read, not skipped
+    # a doc and the manifest are not swept into the identity class
+    assert by_rel["README.md"].role == "documentation"
+    assert by_rel["SKILL.md"].kind == "skill_manifest"
+
+
+def test_agent_identity_match_is_case_insensitive(make_package):
+    root = make_package({"SKILL.md": "---\nname: t\n---\n",
+                         "claude.md": "x", "Agents.MD": "y"})
+    kinds = {a.rel: a.kind for a in ingest.build_package(str(root)).artifacts}
+    assert kinds["claude.md"] == "agent_identity"
+    assert kinds["Agents.MD"] == "agent_identity"
+
+
 def test_binary_asset_is_ledgered_not_counted_against_coverage(make_package):
     root = make_package({
         "SKILL.md": "---\nname: t\n---\n",

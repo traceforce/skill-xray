@@ -61,6 +61,15 @@ ROOT_CONFIG = {"hooks.json": "hooks_config", ".mcp.json": "mcp_config",
                "plugin.json": "plugin_manifest", ".app.json": "app_manifest",
                "plugin.lock.json": "plugin_lock"}
 
+# Agent identity / memory files. An agent loads these as standing instructions,
+# and a skill that writes to one (e.g. ~/.claude/CLAUDE.md) persists after the
+# skill is removed, so they are tagged as a distinct class rather than folded in
+# with ordinary instruction files, letting a later check target them directly.
+IDENTITY_FILES = {
+    "claude.md", "agents.md", "gemini.md", "soul.md", "memory.md",
+    "identity.md", ".cursorrules", "copilot-instructions.md",
+}
+
 # ---------------------------------------------------------------------------
 # Read limits. A skill package is small (a large SKILL.md is ~125 KB). Past these
 # caps a file, or the package, is skipped and recorded rather than read into
@@ -216,6 +225,8 @@ def _classify(filename: str):
     ext = os.path.splitext(filename)[1].lower()
     if low == "skill.md":
         return "skill_manifest", "instruction_primary"
+    if low in IDENTITY_FILES:
+        return "agent_identity", "identity"
     if low in ROOT_CONFIG:
         return ROOT_CONFIG[low], "root_config"
     if ext == ".md":
