@@ -311,6 +311,8 @@ def test_agent_identity_files_are_first_class(make_package):
     # a doc and the manifest are not swept into the identity class
     assert by_rel["README.md"].role == "documentation"
     assert by_rel["SKILL.md"].kind == "skill_manifest"
+    # the ledger surfaces them as a distinct list, like shippedBytecode
+    assert set(ingest.build_ledger(pkg)["agentIdentityFiles"]) == set(identity)
 
 
 def test_agent_identity_match_is_case_insensitive(make_package):

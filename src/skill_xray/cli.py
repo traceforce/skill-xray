@@ -51,8 +51,11 @@ def _scan_known(as_json) -> int:
     home = os.path.expanduser("~")
     sys.stdout.write("discovered %d skill package(s) under the known roots\n" % len(results))
     for p, led in results:
-        bc = len(led["shippedBytecode"])
-        flag = "  bytecode=%d" % bc if bc else ""
+        flag = ""
+        if led["shippedBytecode"]:
+            flag += "  bytecode=%d" % len(led["shippedBytecode"])
+        if led["agentIdentityFiles"]:
+            flag += "  identity=%d" % len(led["agentIdentityFiles"])
         # plugin layouts reuse folder names (access/configure), so show the path
         shown = ("~" + p[len(home):]) if p.startswith(home) else p
         sys.stdout.write("  seen=%-3d analyzed=%-3d cov=%5.1f%%%s  %s\n" % (

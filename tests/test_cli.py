@@ -45,3 +45,11 @@ def test_cli_scan_known_skills(make_package, monkeypatch, capsys):
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
     assert any(p["package"] == "disc" for p in out)
+
+
+def test_cli_scan_known_skills_flags_identity(make_package, monkeypatch, capsys):
+    # the auto-scan surfaces identity files inline, without pointing at a package
+    root = make_package({"SKILL.md": "---\nname: t\n---\n", "CLAUDE.md": "x"}, name="idpkg")
+    monkeypatch.setattr(ingest, "KNOWN_SKILL_ROOTS", (str(root.parent),))
+    assert cli.main(["--scan-known-skills"]) == 0
+    assert "identity=1" in capsys.readouterr().out

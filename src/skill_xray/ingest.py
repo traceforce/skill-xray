@@ -363,6 +363,11 @@ def discover_skill_packages(roots=None):
 _BENIGN_LEDGER = {"excluded_dir"}
 
 
+def _role_counts(artifacts):
+    return {r: sum(1 for a in artifacts if a.role == r)
+            for r in sorted({a.role for a in artifacts})}
+
+
 def build_ledger(pkg: Package) -> dict:
     """Return the coverage ledger: files seen, files analysed, and why the rest
     were not read.
@@ -382,6 +387,7 @@ def build_ledger(pkg: Package) -> dict:
 
     analyzed = sum(1 for a in artifacts if a.exception is None)
     compiled = sorted(a.rel for a in artifacts if a.role == "compiled")
+    identity = sorted(a.rel for a in artifacts if a.role == "identity")
     not_inspectable = sum(1 for a in artifacts if a.kind == "asset") + len(compiled)
     failed = (sum(1 for a in artifacts
                   if a.exception is not None and a.kind != "asset" and a.role != "compiled")
@@ -395,12 +401,12 @@ def build_ledger(pkg: Package) -> dict:
         "artifactsNotInspectable": not_inspectable,
         "artifactsFailedRead": failed,
         "shippedBytecode": compiled,
+        "agentIdentityFiles": identity,
         "inspectableDenominator": denom,
         # An all-binary or empty package has nothing to read, so coverage is
         # 100%, not 0%.
         "coveragePercent": round(100.0 * analyzed / denom, 2) if denom else 100.0,
-        "byRole": {r: len([a for a in artifacts if a.role == r])
-                   for r in sorted({a.role for a in artifacts})},
+        "byRole": _role_counts(artifacts),
         "exceptions": sorted(pkg.ledger_exceptions,
                              key=lambda e: (e["path"], e["reasonCode"])),
     }
