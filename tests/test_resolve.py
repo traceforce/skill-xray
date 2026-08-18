@@ -33,6 +33,21 @@ def test_single_file_is_wrapped_into_a_package(tmp_path):
         assert any(a.rel == "SKILL.md" for a in pkg.artifacts)
 
 
+def test_single_file_symlink_is_refused(tmp_path):
+    # a single-file input that is a symlink to a sensitive file must not have its
+    # target content copied into the package.
+    secret = tmp_path / "secret"
+    secret.write_text("SENSITIVE", encoding="utf-8")
+    link = tmp_path / "SKILL.md"
+    try:
+        os.symlink(str(secret), str(link))
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not permitted on this host")
+    with pytest.raises(UnsafeInputError):
+        with resolved_input(str(link)):
+            pass
+
+
 def test_single_file_temp_dir_is_removed_on_exit(tmp_path):
     f = tmp_path / "SKILL.md"
     f.write_text("---\nname: t\n---\n", encoding="utf-8")

@@ -112,6 +112,11 @@ def _strip_zip_ext(name):
 # ---------------------------------------------------------------------------
 
 def _wrap_single_file(path):
+    # os.path.isfile() followed a symlink to get here; copying it would pull the
+    # target's content (e.g. /etc/passwd) into the package. Refuse it, matching
+    # how the walker and the zip adapter treat symlinks.
+    if os.path.islink(path):
+        raise UnsafeInputError("single-file input is a symlink; refused: %s" % path)
     if os.path.getsize(path) > INGEST_MAX_BYTES:
         raise IngestLimitExceededError("file exceeds %d bytes" % INGEST_MAX_BYTES)
     tmp = tempfile.mkdtemp(prefix="skillxray-")
