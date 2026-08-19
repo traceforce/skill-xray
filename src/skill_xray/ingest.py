@@ -10,11 +10,13 @@ The package may be malicious, so the walker:
   - does not follow a symlink or an NTFS junction out of the directory;
   - does not open a FIFO, device or socket;
   - caps per-file size, file count and total bytes read;
-  - opens each file with O_NOFOLLOW and O_NONBLOCK, so a symlink or FIFO put in
-    place after the walk cannot be followed or block the read;
-  - inventories shipped compiled code (.pyc/.pyo/.pyd) instead of dropping it
-    with its __pycache__ directory, since compiled code whose source is absent
-    hides behaviour from a source-only scan;
+  - opens each file with O_NOFOLLOW and O_NONBLOCK where the platform provides
+    them (POSIX), so a symlink or FIFO put in place after the walk cannot be
+    followed or block the read; on Windows it relies on the walk-time lstat and
+    the post-open fstat regular-file check instead;
+  - inventories shipped compiled and native code (.pyc/.pyo/.pyd, .so/.dll/.exe,
+    .jar/.class/.node) instead of dropping it, since compiled code whose source is
+    absent hides behaviour from a source-only scan;
   - records every skipped file with a reason, and counts a skipped file against
     coverage unless it is a binary asset, a compiled artifact, or an excluded
     cache directory.
@@ -23,6 +25,7 @@ The package may be malicious, so the walker:
 from __future__ import annotations
 
 import os
+import re
 import stat
 import unicodedata
 
@@ -34,40 +37,84 @@ __all__ = [
 # artifact classification
 # ---------------------------------------------------------------------------
 
-SCRIPT_EXT = {".py": "python", ".sh": "shell", ".bash": "shell", ".zsh": "shell",
-              ".ps1": "powershell", ".js": "javascript", ".ts": "typescript",
-              ".rb": "ruby", ".pl": "perl"}
+SCRIPT_EXT = {".py": "python", ".pyw": "python", ".sh": "shell", ".bash": "shell",
+              ".zsh": "shell", ".command": "shell", ".bat": "batch", ".cmd": "batch",
+              ".ps1": "powershell", ".js": "javascript", ".mjs": "javascript",
+              ".cjs": "javascript", ".ts": "typescript", ".rb": "ruby", ".pl": "perl"}
 
-# Shipped compiled Python: bytecode a text scanner cannot read. A .pyc whose .py
-# source is absent (or does not match it) runs the same but is invisible to a
-# source-only scan, so these are inventoried and surfaced, never dropped. Whether
-# to raise a finding is the checks stage's call, not ingest's.
+# Shipped compiled or native code a text scanner cannot read: Python bytecode,
+# native extensions, and platform binaries (incl. JVM .jar/.class and Node .node).
+# A .pyc whose .py source is absent, or a bundled .so/.dll, runs the same but is
+# invisible to a source-only scan, so these are inventoried and surfaced, never
+# dropped. Versioned shared objects (libfoo.so.1) are caught by _SO_VERSIONED.
 COMPILED_EXT = {".pyc": "python_bytecode", ".pyo": "python_bytecode",
-                ".pyd": "python_extension"}
+                ".pyd": "python_extension", ".so": "native_code",
+                ".dylib": "native_code", ".dll": "native_code",
+                ".exe": "native_code", ".wasm": "native_code",
+                ".node": "native_code", ".jar": "native_code",
+                ".war": "native_code", ".class": "native_code",
+                ".o": "native_code", ".a": "native_code"}
+_SO_VERSIONED = re.compile(r"\.so(\.\d+)+$")     # libfoo.so.1 / libfoo.so.1.2.3
 
 DOC_ONLY_MD = {"readme.md", "changelog.md", "contributing.md", "license.md",
                "security.md", "code_of_conduct.md", "notice.md"}
 
-BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".pdf", ".zip",
-              ".gz", ".tar", ".whl", ".woff", ".woff2", ".ttf", ".mp4", ".webp"}
+# Instruction-bearing text: markdown, Cursor .mdc rule files, reStructuredText.
+INSTRUCTION_EXT = {".md", ".mdc", ".markdown", ".rst"}
 
-# Build caches and VCS metadata that are not part of the shipped skill. Note that
-# __pycache__ is deliberately absent: shipped .pyc bytecode is inventoried via
-# COMPILED_EXT, not silently pruned with the directory.
-SKIP_DIRS = {".git", "node_modules", ".venv", "venv", ".mypy_cache",
-             ".pytest_cache", "dist", "build", ".idea", ".tox"}
+# Inert binary assets (icon, font, video): not text, not code, safe to leave out
+# of the coverage denominator.
+ASSET_EXT = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2",
+             ".ttf", ".mp4", ".webp"}
+# Not plain text but NOT inert: an SVG can carry <script>, a PDF can embed
+# JavaScript, and a nested archive hides a whole subtree the scanner does not
+# recurse into. These are surfaced AND lower coverage -- they must not sit
+# silently behind a 100% number the way an icon can.
+ACTIVE_ASSET_EXT = {".svg", ".pdf"}
+NESTED_ARCHIVE_EXT = {".zip", ".gz", ".tar", ".tgz", ".whl", ".bz2", ".xz",
+                      ".rar", ".7z"}
+# Everything read_text must not attempt to decode.
+BINARY_EXT = ASSET_EXT | ACTIVE_ASSET_EXT | NESTED_ARCHIVE_EXT
+
+# Build caches and VCS metadata that are not part of the shipped skill and are
+# coverage-benign. __pycache__ is deliberately absent: shipped .pyc is inventoried
+# via COMPILED_EXT, not silently pruned with the directory.
+SKIP_DIRS = {".git", ".hg", ".svn", ".venv", "venv", ".mypy_cache",
+             ".pytest_cache", ".idea", ".tox", ".ruff_cache"}
+# Bundled build output / vendored dependencies. Pruned like SKIP_DIRS (walking a
+# node_modules tree is pointless and costly), but NOT coverage-benign: a skill
+# that ships build/, dist/ or node_modules/ is itself a signal, and code an agent
+# could run may hide there, so these are surfaced and lower coverage.
+BUNDLED_DIRS = {"node_modules", "dist", "build", "vendor", "target"}
 
 ROOT_CONFIG = {"hooks.json": "hooks_config", ".mcp.json": "mcp_config",
                "plugin.json": "plugin_manifest", ".app.json": "app_manifest",
                "plugin.lock.json": "plugin_lock"}
+
+# Agent / hook / MCP configuration that is not a root manifest but wires up command
+# execution or MCP servers -- the highest-value surface for a later check, so it is
+# classified rather than left as `other`. (Basename match; the nested-vs-root
+# distinction is the checks stage's job.)
+AGENT_CONFIG_FILES = {
+    "settings.json", "settings.local.json",          # Claude Code / editor settings (hooks)
+    "mcp.json", "claude_desktop_config.json",         # MCP server wiring
+    "config.toml",                                    # Codex config
+}
+
+# Files whose mere presence in a skill is a signal: shipping a private key or a
+# credentials file is not normal. Classified so a later check can flag them.
+SECRET_FILES = {".env", ".netrc", ".npmrc", ".pypirc", "credentials",
+                "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
+SECRET_EXT = {".pem", ".key", ".pfx", ".p12", ".keystore"}
 
 # Agent identity / memory files. An agent loads these as standing instructions,
 # and a skill that writes to one (e.g. ~/.claude/CLAUDE.md) persists after the
 # skill is removed, so they are tagged as a distinct class rather than folded in
 # with ordinary instruction files, letting a later check target them directly.
 IDENTITY_FILES = {
-    "claude.md", "agents.md", "gemini.md", "soul.md", "memory.md",
-    "identity.md", ".cursorrules", "copilot-instructions.md",
+    "claude.md", "agents.md", "agent.md", "gemini.md", "soul.md", "memory.md",
+    "identity.md", ".cursorrules", ".windsurfrules", ".clinerules", ".roorules",
+    "copilot-instructions.md",
 }
 
 # ---------------------------------------------------------------------------
@@ -80,6 +127,7 @@ IDENTITY_FILES = {
 MAX_FILE_BYTES = 1_048_576              # 1 MiB per file
 MAX_FILES = 5000                        # walk stops past this many files
 AGGREGATE_MAX_BYTES = 256 * 1024 * 1024  # 256 MiB total read into memory
+MAX_DISCOVERY_DIRS = 20000              # --scan-known-skills visits at most this many dirs
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +135,10 @@ AGGREGATE_MAX_BYTES = 256 * 1024 * 1024  # 256 MiB total read into memory
 # ---------------------------------------------------------------------------
 
 def posix(p: str) -> str:
-    return p.replace("\\", "/")
+    # Translate only the OS separator. On POSIX a backslash is a legal filename
+    # byte; rewriting it would collapse "a\b.py" onto a real "a/b.py" -- a ledger
+    # key collision that can hide a refused symlink-escape behind 100% coverage.
+    return p.replace(os.sep, "/")
 
 
 def _relpath(abspath: str, root: str) -> str:
@@ -117,9 +168,11 @@ def install_identity(package_root: str) -> str:
 def read_text(path: str):
     """Return (text, exception_reason, bytes_read). Never raises, never blocks.
 
-    Opens with O_NOFOLLOW and O_NONBLOCK so that if the entry was replaced by a
-    symlink or a FIFO between the walk's lstat and this open, the open fails or
-    fstat rejects it rather than reading outside the package or waiting forever.
+    Opens with O_NOFOLLOW and O_NONBLOCK where the platform has them (POSIX) so
+    that if the entry was replaced by a symlink or a FIFO between the walk's lstat
+    and this open, the open fails or fstat rejects it rather than reading outside
+    the package or waiting forever; on Windows the fstat regular-file check is the
+    backstop.
     bytes_read is the number of bytes actually read from this fd, so the caller's
     memory budget is charged for what was read, not a pre-read lstat size that a
     TOCTOU swap could understate. The read itself is bounded to MAX_FILE_BYTES, so
@@ -169,9 +222,8 @@ def read_text(path: str):
 # ---------------------------------------------------------------------------
 
 class Artifact:
-    def __init__(self, rel, abspath, role, kind):
+    def __init__(self, rel, role, kind):
         self.rel = rel
-        self.abs = abspath
         self.role = role
         self.kind = kind
         self.text = None
@@ -190,9 +242,14 @@ class Package:
         self.artifacts.append(art)
 
 
-def _skip(pkg, reason, rel):
-    pkg.ledger_exceptions.append(
-        {"outcome": "skipped", "phase": "static", "reasonCode": reason, "path": rel})
+def _skip(pkg, reason, rel, target=None):
+    entry = {"outcome": "skipped", "phase": "static", "reasonCode": reason, "path": rel}
+    if target is not None:
+        # A refused symlink's target: symlink->/etc/shadow and symlink->./foo must
+        # not look identical in the ledger. Attacker-controlled, so a consumer that
+        # prints it must escape it (the CLI routes paths through _display).
+        entry["target"] = target
+    pkg.ledger_exceptions.append(entry)
 
 
 def _reject_special(st_mode):
@@ -211,8 +268,8 @@ def _is_reparse(path):
     """True for a junction or directory symlink. os.walk(followlinks=False) skips a
     POSIX dir symlink but STILL descends an NTFS junction (os.path.islink is False for
     one), so a package could escape its own directory via `mklink /J` without admin.
-    Prune these. os.path.isjunction is required for the junction case and is why the
-    package floor is Python 3.12."""
+    Prune these. os.path.isjunction (3.12+) is required for the junction case; the
+    package floor is 3.12.4 (also for CVE-2024-4032 in ipaddress, see pyproject)."""
     if os.path.islink(path):
         return True
     isjunction = getattr(os.path, "isjunction", None)
@@ -229,17 +286,25 @@ def _classify(filename: str):
         return "agent_identity", "identity"
     if low in ROOT_CONFIG:
         return ROOT_CONFIG[low], "root_config"
-    if ext == ".md":
+    if low in AGENT_CONFIG_FILES:
+        return "agent_config", "config"
+    if low in SECRET_FILES or ext in SECRET_EXT:
+        return "secret_material", "secret"
+    if ext in INSTRUCTION_EXT:
         if low in DOC_ONLY_MD:
             return "doc", "documentation"
         return "instruction", "instruction_secondary"
     if ext in SCRIPT_EXT:
         return "script_" + SCRIPT_EXT[ext], "script"
-    if ext in COMPILED_EXT:
-        return COMPILED_EXT[ext], "compiled"
+    if ext in COMPILED_EXT or _SO_VERSIONED.search(low):
+        return COMPILED_EXT.get(ext, "native_code"), "compiled"
     if low in ("requirements.txt", "package.json", "pyproject.toml", "setup.py"):
         return "dep_manifest", "dependency_manifest"
-    if ext in BINARY_EXT:
+    if ext in NESTED_ARCHIVE_EXT:
+        return "nested_archive", "opaque"
+    if ext in ACTIVE_ASSET_EXT:
+        return "active_asset", "opaque"
+    if ext in ASSET_EXT:
         return "asset", "asset"
     return "other", "other"
 
@@ -266,6 +331,8 @@ def build_package(root: str) -> Package:
             drel = _relpath(dp, pkg.root)
             if d in SKIP_DIRS:
                 _skip(pkg, "excluded_dir", drel)
+            elif d in BUNDLED_DIRS:
+                _skip(pkg, "bundled_dir", drel)          # pruned, but lowers coverage
             elif _is_reparse(dp):
                 _skip(pkg, "reparse_point", drel)
             else:
@@ -285,16 +352,27 @@ def build_package(root: str) -> Package:
                 continue
             reject = _reject_special(st.st_mode)
             if reject:
-                _skip(pkg, reject, rel)
+                target = None
+                if reject == "symlink":
+                    try:
+                        target = os.readlink(ap)
+                    except OSError:
+                        pass
+                _skip(pkg, reject, rel, target)
                 continue
             kind, role = _classify(fn)
-            art = Artifact(rel, ap, role, kind)
+            art = Artifact(rel, role, kind)
             if kind == "asset":
                 art.exception = "binary_content"
                 _skip(pkg, "binary_content", rel)
+            elif role == "opaque":
+                # Active content (SVG/PDF) or a nested archive: unreviewable, so it
+                # is surfaced and counts against coverage, not excused like an icon.
+                art.exception = "unreviewable_content"
+                _skip(pkg, "unreviewable_content", rel)
             elif role == "compiled":
-                art.exception = "shipped_bytecode"
-                _skip(pkg, "shipped_bytecode", rel)
+                art.exception = "shipped_compiled"
+                _skip(pkg, "shipped_compiled", rel)
             elif total_read >= AGGREGATE_MAX_BYTES:
                 art.exception = "total_budget_exhausted"
                 _skip(pkg, "total_budget_exhausted", rel)
@@ -336,21 +414,53 @@ KNOWN_SKILL_ROOTS = (
 
 def discover_skill_packages(roots=None):
     """Return the skill package directories (each holding a SKILL.md) found under
-    the known skill roots. Roots are searched recursively, so nested and plugin
-    layouts are found, and a package reachable from more than one root (an alias
-    or a symlink target) is returned once."""
+    the known skill roots. A package installed as a symlinked ROOT (a common
+    dotfiles setup, ~/.claude/skills/x -> ~/dotfiles/x) is followed, but nested
+    symlinks are NOT, and a hard directory budget stops a symlink pointing at "/"
+    from walking the whole filesystem. A package reachable more than once (an alias
+    or symlink target) is returned once."""
     if roots is None:
         roots = KNOWN_SKILL_ROOTS
     found = {}
+    seen = set()
+    budget = MAX_DISCOVERY_DIRS
     for root in roots:
         base = os.path.abspath(os.path.expanduser(root))
         if not os.path.isdir(base):
             continue
-        for dirpath, dirnames, filenames in os.walk(base):
-            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS
-                                 and not _is_reparse(os.path.join(dirpath, d)))
-            if "SKILL.md" in filenames:
-                found[os.path.realpath(dirpath)] = dirpath
+        # Walk real subtrees with followlinks=False (a nested symlink is never
+        # followed); additionally treat a top-level entry that is a symlink to a
+        # directory as its own package root to walk -- the dotfiles install.
+        starts = [base]
+        try:
+            for e in os.scandir(base):
+                try:
+                    if e.is_symlink() and e.is_dir():
+                        starts.append(e.path)
+                except OSError:
+                    continue          # one broken/unreadable entry must not drop the root
+        except OSError:
+            pass                      # scandir itself failed: still walk base below
+        for start in starts:
+            for dirpath, dirnames, filenames in os.walk(start, followlinks=False):
+                budget -= 1
+                if budget < 0:                       # DoS backstop for a symlink to /
+                    return [found[k] for k in sorted(found)]
+                real = os.path.realpath(dirpath)
+                if real in seen:                     # loop / alias already walked
+                    dirnames[:] = []
+                    continue
+                seen.add(real)
+                # Case-sensitive on purpose, matching the walker: skipping
+                # "Node_Modules" case-insensitively would let a package hide code in
+                # a re-cased cache dir. Prune reparse points too: followlinks=False
+                # skips POSIX dir symlinks but STILL descends an NTFS junction, so
+                # without this a nested junction escapes the roots on Windows.
+                dirnames[:] = sorted(d for d in dirnames
+                                     if d not in SKIP_DIRS and d not in BUNDLED_DIRS
+                                     and not _is_reparse(os.path.join(dirpath, d)))
+                if any(f.lower() == "skill.md" for f in filenames):
+                    found[real] = dirpath
     return [found[k] for k in sorted(found)]
 
 
@@ -372,13 +482,16 @@ def build_ledger(pkg: Package) -> dict:
     """Return the coverage ledger: files seen, files analysed, and why the rest
     were not read.
 
-    Neither a binary asset (icon, font) nor a compiled artifact (.pyc) is text,
-    so both leave the text-coverage denominator and do not lower coveragePercent.
-    Compiled artifacts are ALSO listed on their own in shippedBytecode, so a 100%
-    text coverage can never hide shipped, unreviewable executable code. Every
-    other unread file -- a NUL-carrying script, a size or budget skip, an
-    unreadable file, and the directory-level skips (symlink, junction, walk
-    error, count truncation) -- is counted against coverage.
+    An inert binary asset (icon, font) and a compiled/native artifact (.pyc, .so)
+    are not text, so both leave the text-coverage denominator and do not lower
+    coveragePercent -- but the compiled ones are ALSO listed in shippedCompiledCode
+    so 100% coverage can never hide shipped, unreviewable executable code. Active or
+    opaque content (SVG, PDF, a nested archive) is NOT excused: it is listed in
+    opaqueContent AND counts against coverage, because it can hide a payload an icon
+    cannot. Shipped secrets and agent/MCP config are surfaced in secretMaterial and
+    agentConfig. Every other unread file -- a NUL-carrying script, a size or budget
+    skip, an unreadable file, a bundled build dir, and the directory-level skips
+    (symlink, junction, walk error, truncation) -- counts against coverage.
     """
     artifacts = pkg.artifacts
     art_paths = {a.rel for a in artifacts}
@@ -388,6 +501,9 @@ def build_ledger(pkg: Package) -> dict:
     analyzed = sum(1 for a in artifacts if a.exception is None)
     compiled = sorted(a.rel for a in artifacts if a.role == "compiled")
     identity = sorted(a.rel for a in artifacts if a.role == "identity")
+    opaque = sorted(a.rel for a in artifacts if a.role == "opaque")
+    secrets = sorted(a.rel for a in artifacts if a.role == "secret")
+    configs = sorted(a.rel for a in artifacts if a.role == "config")
     not_inspectable = sum(1 for a in artifacts if a.kind == "asset") + len(compiled)
     failed = (sum(1 for a in artifacts
                   if a.exception is not None and a.kind != "asset" and a.role != "compiled")
@@ -400,8 +516,11 @@ def build_ledger(pkg: Package) -> dict:
         "artifactsSkipped": not_inspectable + failed,
         "artifactsNotInspectable": not_inspectable,
         "artifactsFailedRead": failed,
-        "shippedBytecode": compiled,
+        "shippedCompiledCode": compiled,
         "agentIdentityFiles": identity,
+        "opaqueContent": opaque,
+        "secretMaterial": secrets,
+        "agentConfig": configs,
         "inspectableDenominator": denom,
         # An all-binary or empty package has nothing to read, so coverage is
         # 100%, not 0%.

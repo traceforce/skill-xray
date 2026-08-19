@@ -25,19 +25,27 @@ def _artifact_rows(pkg):
             for a in pkg.artifacts]
 
 
+def _display(rel):
+    # Artifact paths are attacker-controlled: escape control chars (which could
+    # rewrite the on-screen inventory to hide a file, the one thing this tool must
+    # not allow) and lone surrogates (which crash the write to a strict-UTF-8
+    # stdout). The --json path is already safe via ensure_ascii.
+    return rel.encode("unicode_escape").decode("ascii")
+
+
 def _print_one(pkg, ledger):
-    sys.stdout.write("package: %s\n" % pkg.name)
+    sys.stdout.write("package: %s\n" % _display(pkg.name))
     sys.stdout.write("  seen=%d analyzed=%d skipped=%d coverage=%.1f%%\n" % (
         ledger["artifactsSeen"], ledger["artifactsAnalyzed"],
         ledger["artifactsSkipped"], ledger["coveragePercent"]))
     for a in pkg.artifacts:
         mark = "read " if a.text is not None else "SKIP "
         detail = "" if a.text is not None else "  (%s)" % a.exception
-        sys.stdout.write("  %s %-40s %s%s\n" % (mark, a.rel, a.kind, detail))
+        sys.stdout.write("  %s %-40s %s%s\n" % (mark, _display(a.rel), a.kind, detail))
     art_rels = {a.rel for a in pkg.artifacts}
     for e in ledger["exceptions"]:
         if e["path"] not in art_rels:   # directory-level skips: pruned dirs, symlinks, junctions
-            sys.stdout.write("  SKIP  %-40s %s\n" % (e["path"], e["reasonCode"]))
+            sys.stdout.write("  SKIP  %-40s %s\n" % (_display(e["path"]), e["reasonCode"]))
 
 
 def _scan_known(as_json) -> int:
@@ -52,15 +60,16 @@ def _scan_known(as_json) -> int:
     sys.stdout.write("discovered %d skill package(s) under the known roots\n" % len(results))
     for p, led in results:
         flag = ""
-        if led["shippedBytecode"]:
-            flag += "  bytecode=%d" % len(led["shippedBytecode"])
+        if led["shippedCompiledCode"]:
+            flag += "  compiled=%d" % len(led["shippedCompiledCode"])
         if led["agentIdentityFiles"]:
             flag += "  identity=%d" % len(led["agentIdentityFiles"])
-        # plugin layouts reuse folder names (access/configure), so show the path
-        shown = ("~" + p[len(home):]) if p.startswith(home) else p
+        # plugin layouts reuse folder names (access/configure), so show the path.
+        # Guard the prefix so "/home/al" does not abbreviate "/home/alice/x".
+        shown = ("~" + p[len(home):]) if (p == home or p.startswith(home + os.sep)) else p
         sys.stdout.write("  seen=%-3d analyzed=%-3d cov=%5.1f%%%s  %s\n" % (
             led["artifactsSeen"], led["artifactsAnalyzed"],
-            led["coveragePercent"], flag, shown))
+            led["coveragePercent"], flag, _display(shown)))
     return 0
 
 
@@ -77,6 +86,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     if args.scan_known_skills:
+        if args.package:
+            ap.error("--scan-known-skills takes no package argument")
         return _scan_known(args.json)
 
     if not args.package:
@@ -96,7 +107,9 @@ def main(argv=None) -> int:
             else:
                 _print_one(pkg, ledger)
     except (UnsafeInputError, IngestLimitExceededError) as exc:
-        sys.stderr.write("cannot ingest %s: %s\n" % (args.package, exc))
+        # args.package and the error text can carry attacker-controlled names
+        # (zip members, URLs); escape them like artifact paths.
+        sys.stderr.write("cannot ingest %s: %s\n" % (_display(args.package), _display(str(exc))))
         return 2
     return 0
 

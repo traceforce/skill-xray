@@ -53,3 +53,39 @@ def test_cli_scan_known_skills_flags_identity(make_package, monkeypatch, capsys)
     monkeypatch.setattr(ingest, "KNOWN_SKILL_ROOTS", (str(root.parent),))
     assert cli.main(["--scan-known-skills"]) == 0
     assert "identity=1" in capsys.readouterr().out
+
+
+def test_text_output_escapes_control_chars(make_package, capsys):
+    # a member name carrying an escape/newline must not forge or hide inventory
+    # lines in the human-readable output -- the one thing this tool must prevent.
+    pkg = ingest.build_package(str(make_package({"SKILL.md": "---\nname: t\n---\n"})))
+    pkg.artifacts[0].rel = "evil\x1b[2K\n  read  FAKE.md"
+    cli._print_one(pkg, ingest.build_ledger(pkg))
+    out = capsys.readouterr().out
+    assert "\x1b" not in out          # raw escape neutralised
+    assert "\\x1b" in out             # shown in escaped form instead
+
+
+def test_scan_known_skills_rejects_a_package_arg(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["somepkg", "--scan-known-skills"])
+    assert "no package argument" in capsys.readouterr().err
+
+
+def test_scan_known_escapes_control_chars_in_discovered_path(make_package, monkeypatch, capsys):
+    # a package dir whose NAME carries an escape must not rewrite the scan output;
+    # _scan_known prints the discovered path and must route it through _display.
+    try:
+        root = make_package({"SKILL.md": "---\nname: t\n---\n"}, name="ev\x1bil")
+    except OSError:
+        pytest.skip("control chars in a directory name are not permitted on this host")
+    monkeypatch.setattr(ingest, "KNOWN_SKILL_ROOTS", (str(root.parent),))
+    assert cli.main(["--scan-known-skills"]) == 0
+    assert "\x1b" not in capsys.readouterr().out
+
+
+def test_error_path_escapes_control_chars(capsys):
+    # the package arg is echoed to stderr on failure; a control char must not be
+    # able to forge or hide lines there either.
+    assert cli.main(["/nonexistent/ev\x1bil"]) == 2
+    assert "\x1b" not in capsys.readouterr().err

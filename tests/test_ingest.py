@@ -162,9 +162,26 @@ def test_excluded_dir_is_logged_not_silent(make_package):
     })
     pkg = ingest.build_package(str(root))
     reasons = {(e["reasonCode"], e["path"]) for e in pkg.ledger_exceptions}
-    assert ("excluded_dir", ".git") in reasons
-    assert ("excluded_dir", "node_modules") in reasons
+    assert ("excluded_dir", ".git") in reasons              # VCS metadata: coverage-benign
+    assert ("bundled_dir", "node_modules") in reasons       # vendored code: surfaced signal
     assert not any(a.rel.startswith((".git/", "node_modules/")) for a in pkg.artifacts)
+    # a bundled dependency dir is a signal, so unlike .git it lowers coverage
+    assert ingest.build_ledger(pkg)["coveragePercent"] < 100.0
+
+
+def test_posix_backslash_filename_not_collapsed(make_package):
+    # POSIX: a backslash is a legal filename byte, so a flat file named a\b.py must
+    # stay a distinct ledger key, not collapse onto a real a/b.py -- a collision
+    # that could hide a refused file behind a 100% coverage number.
+    if os.sep != "/":
+        pytest.skip("POSIX-only: backslash is a path separator on Windows")
+    root = make_package({
+        "SKILL.md": "---\nname: t\n---\n",
+        "a/b.py": "print(1)\n",
+        "a\\b.py": "print(2)\n",
+    })
+    rels = {a.rel for a in ingest.build_package(str(root)).artifacts}
+    assert "a/b.py" in rels and "a\\b.py" in rels          # two distinct keys, no collision
 
 
 def test_unreadable_directory_is_logged_not_silent(make_package):
@@ -272,10 +289,10 @@ def test_shipped_bytecode_is_inventoried_not_dropped(make_package):
     assert pyc, "the .pyc was silently dropped"
     assert pyc[0].kind == "python_bytecode"
     assert pyc[0].role == "compiled"
-    assert pyc[0].exception == "shipped_bytecode"
+    assert pyc[0].exception == "shipped_compiled"
     assert pyc[0].text is None
     ledger = ingest.build_ledger(pkg)
-    assert "scripts/mod.cpython-313.pyc" in ledger["shippedBytecode"]
+    assert "scripts/mod.cpython-313.pyc" in ledger["shippedCompiledCode"]
     # text coverage stays honest (SKILL.md read) while the bytecode is surfaced
     assert ledger["coveragePercent"] == 100.0
 
@@ -290,7 +307,7 @@ def test_pyc_inside_pycache_is_seen_not_excluded(make_package):
     assert not any(e["reasonCode"] == "excluded_dir" and e["path"].endswith("__pycache__")
                    for e in pkg.ledger_exceptions)
     ledger = ingest.build_ledger(pkg)
-    assert any(p.endswith("util.cpython-313.pyc") for p in ledger["shippedBytecode"])
+    assert any(p.endswith("util.cpython-313.pyc") for p in ledger["shippedCompiledCode"])
 
 
 def test_agent_identity_files_are_first_class(make_package):
@@ -311,7 +328,7 @@ def test_agent_identity_files_are_first_class(make_package):
     # a doc and the manifest are not swept into the identity class
     assert by_rel["README.md"].role == "documentation"
     assert by_rel["SKILL.md"].kind == "skill_manifest"
-    # the ledger surfaces them as a distinct list, like shippedBytecode
+    # the ledger surfaces them as a distinct list, like shippedCompiledCode
     assert set(ingest.build_ledger(pkg)["agentIdentityFiles"]) == set(identity)
 
 
@@ -385,3 +402,160 @@ def test_excluded_dir_does_not_lower_coverage(make_package):
     assert ledger["coveragePercent"] == 100.0
     assert any(e["reasonCode"] == "excluded_dir" and e["path"] == ".git"
                for e in pkg.ledger_exceptions)
+
+
+def test_discovery_is_case_insensitive_for_skill_md(tmp_path):
+    # classification matches skill.md case-insensitively, so discovery must too, or
+    # a package the agent loads is never returned by --scan-known-skills.
+    pkg = tmp_path / "skills" / "x"
+    pkg.mkdir(parents=True)
+    (pkg / "skill.md").write_text("---\nname: t\n---\n", encoding="utf-8")
+    found = ingest.discover_skill_packages([str(tmp_path / "skills")])
+    assert any(os.path.realpath(p) == os.path.realpath(str(pkg)) for p in found)
+
+
+def test_discovery_follows_a_symlinked_package_root(tmp_path):
+    # a skill installed as a symlinked package root (a common dotfiles setup) must
+    # be discovered, even though the walker refuses symlinks INSIDE a package.
+    real = tmp_path / "dotfiles" / "x"
+    real.mkdir(parents=True)
+    (real / "SKILL.md").write_text("---\nname: t\n---\n", encoding="utf-8")
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    try:
+        os.symlink(str(real), str(skills / "x"), target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not permitted on this host")
+    found = ingest.discover_skill_packages([str(skills)])
+    assert any(os.path.realpath(p) == os.path.realpath(str(real)) for p in found)
+
+
+def test_native_code_is_surfaced_as_compiled(make_package):
+    # a bundled .so is unreviewable native code; it must surface in the ledger, not
+    # vanish as a generic failed read, so 100% text coverage cannot hide it.
+    root = make_package({
+        "SKILL.md": "---\nname: t\n---\n",
+        "lib/ext.so": b"\x7fELF\x00\x00native",
+    })
+    pkg = ingest.build_package(str(root))
+    so = next(a for a in pkg.artifacts if a.rel == "lib/ext.so")
+    assert so.kind == "native_code" and so.role == "compiled"
+    assert so.exception == "shipped_compiled" and so.text is None
+    ledger = ingest.build_ledger(pkg)
+    assert "lib/ext.so" in ledger["shippedCompiledCode"]
+    assert ledger["coveragePercent"] == 100.0        # native code doesn't lower coverage
+
+
+def test_active_and_nested_content_is_surfaced_and_counted(make_package):
+    # an SVG can carry <script>, a PDF can embed JS, a nested archive hides a whole
+    # subtree: unreviewable, so they are surfaced AND lower coverage -- unlike an
+    # inert icon, they must not sit silently behind a 100% number.
+    root = make_package({
+        "SKILL.md": "---\nname: t\n---\n",
+        "icon.png": b"\x89PNG\r\n",              # inert asset: excused, silent
+        "diagram.svg": b"<svg></svg>",           # active content
+        "vendor.zip": b"PK\x03\x04payload",      # nested archive
+    })
+    pkg = ingest.build_package(str(root))
+    by_rel = {a.rel: a for a in pkg.artifacts}
+    assert by_rel["diagram.svg"].kind == "active_asset" and by_rel["diagram.svg"].role == "opaque"
+    assert by_rel["vendor.zip"].kind == "nested_archive" and by_rel["vendor.zip"].role == "opaque"
+    assert by_rel["icon.png"].role == "asset"
+    ledger = ingest.build_ledger(pkg)
+    assert set(ledger["opaqueContent"]) == {"diagram.svg", "vendor.zip"}
+    assert "icon.png" not in ledger["opaqueContent"]     # an inert icon stays excused
+    assert ledger["coveragePercent"] < 100.0             # opaque content lowers coverage
+
+
+def test_native_variants_are_surfaced_as_compiled(make_package):
+    # a JVM .jar/.class, a Node .node, and a versioned libfoo.so.1 are executable
+    # code that must not evade shippedCompiledCode via an extension trick.
+    root = make_package({
+        "SKILL.md": "---\nname: t\n---\n",
+        "a.node": b"\x7fELFnode",
+        "b.jar": b"PK\x03\x04jar",
+        "lib/foo.so.1": b"\x7fELFso",
+    })
+    ledger = ingest.build_ledger(ingest.build_package(str(root)))
+    for rel in ("a.node", "b.jar", "lib/foo.so.1"):
+        assert rel in ledger["shippedCompiledCode"], rel
+
+
+def test_mdc_and_rule_files_are_classified(make_package):
+    root = make_package({
+        "SKILL.md": "---\nname: t\n---\n",
+        "rules.mdc": "do X",                     # Cursor rule format (not .md)
+        ".windsurfrules": "do Y",                # a rule/identity file
+    })
+    by_rel = {a.rel: a for a in ingest.build_package(str(root)).artifacts}
+    assert by_rel["rules.mdc"].kind == "instruction"
+    assert by_rel[".windsurfrules"].role == "identity"
+
+
+def test_agent_config_and_secret_files_are_classified(make_package):
+    root = make_package({
+        "SKILL.md": "---\nname: t\n---\n",
+        ".claude/settings.json": '{"hooks": {}}',
+        "mcp.json": "{}",
+        ".env": "TOKEN=x",
+        "keys/id_rsa": "-----BEGIN PRIVATE KEY-----",
+    })
+    pkg = ingest.build_package(str(root))
+    by_rel = {a.rel: a for a in pkg.artifacts}
+    assert by_rel[".claude/settings.json"].role == "config"
+    assert by_rel["mcp.json"].role == "config"
+    assert by_rel[".env"].role == "secret" and by_rel["keys/id_rsa"].role == "secret"
+    ledger = ingest.build_ledger(pkg)
+    assert "mcp.json" in ledger["agentConfig"]
+    assert set(ledger["secretMaterial"]) == {".env", "keys/id_rsa"}
+
+
+def test_refused_symlink_records_its_target(make_package, tmp_path):
+    # symlink->/etc/shadow and symlink->./foo must not look identical in the ledger.
+    root = make_package({"SKILL.md": "---\nname: t\n---\n"})
+    secret = tmp_path / "secret.txt"
+    secret.write_text("x", encoding="utf-8")
+    try:
+        os.symlink(str(secret), str(root / "link.md"))
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not permitted on this host")
+    pkg = ingest.build_package(str(root))
+    sym = next(e for e in pkg.ledger_exceptions if e["reasonCode"] == "symlink")
+    target = sym["target"]
+    if target.startswith("\\\\?\\"):     # Windows os.readlink returns an extended-length prefix
+        target = target[4:]
+    assert target == str(secret)
+
+
+def test_discovery_does_not_follow_nested_symlinks(tmp_path):
+    # only a symlinked package ROOT is followed; a symlink INSIDE a package must not
+    # be traversed, or a planted link walks the filesystem (the S1 regression).
+    outside = tmp_path / "outside" / "pkg"
+    outside.mkdir(parents=True)
+    (outside / "SKILL.md").write_text("---\nname: t\n---\n", encoding="utf-8")
+    real = tmp_path / "skills" / "real"
+    real.mkdir(parents=True)
+    (real / "SKILL.md").write_text("---\nname: t\n---\n", encoding="utf-8")
+    try:
+        os.symlink(str(tmp_path / "outside"), str(real / "nested"), target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not permitted on this host")
+    found = ingest.discover_skill_packages([str(tmp_path / "skills")])
+    reals = {os.path.realpath(p) for p in found}
+    assert os.path.realpath(str(real)) in reals            # the real package is found
+    assert os.path.realpath(str(outside)) not in reals     # the nested link is NOT followed
+
+
+def test_discovery_survives_a_broken_symlink_entry(tmp_path):
+    # a dangling symlink directly under a root must not drop the whole root; the
+    # per-entry scandir error handling keeps the valid package discoverable.
+    skills = tmp_path / "skills"
+    pkg = skills / "good"
+    pkg.mkdir(parents=True)
+    (pkg / "SKILL.md").write_text("---\nname: t\n---\n", encoding="utf-8")
+    try:
+        os.symlink(str(tmp_path / "nope"), str(skills / "broken"))
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not permitted on this host")
+    found = ingest.discover_skill_packages([str(skills)])
+    assert any(os.path.realpath(p) == os.path.realpath(str(pkg)) for p in found)

@@ -15,6 +15,7 @@ from .ingest import (
 )
 from .resolve import (
     IngestLimitExceededError,
+    Resolved,
     UnsafeInputError,
     resolved_input,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "build_ledger",
     "discover_skill_packages",
     "resolved_input",
+    "Resolved",
     "IngestLimitExceededError",
     "UnsafeInputError",
     "__version__",

@@ -21,12 +21,16 @@ The walker reads a package it does not trust, so:
 - it does not follow a symlink or an NTFS junction out of the package directory;
 - it does not open a FIFO, device, or socket (a `read()` on a FIFO never
   returns);
-- it inventories shipped compiled code (`.pyc`/`.pyo`/`.pyd`) instead of dropping
-  it with its `__pycache__` directory, and lists it under `shippedBytecode`, so a
+- it inventories shipped compiled and native code (`.pyc`/`.pyo`/`.pyd`,
+  `.so`/`.dylib`/`.dll`/`.exe`/`.wasm`, `.jar`/`.class`/`.node`, and versioned
+  `.so.N`) instead of dropping it, and lists it under `shippedCompiledCode`, so a
   full text-coverage number can never hide unreviewable executable code;
-- it records every file it does not read, with a reason, and a skipped file
-  lowers the reported coverage unless it is a binary asset, a compiled artifact,
-  or an excluded cache directory.
+- it surfaces active or opaque content (`.svg`, `.pdf`, nested archives) under
+  `opaqueContent` and counts it against coverage, and surfaces shipped secrets and
+  agent/MCP config under `secretMaterial` and `agentConfig`;
+- it records every file it does not read, with a reason, and a skipped file lowers
+  the reported coverage unless it is an inert asset, compiled code, or an excluded
+  cache directory (a bundled `node_modules`/`dist`/`build` does lower it).
 
 ## Use
 
@@ -35,7 +39,7 @@ pip install -e .
 skill-xray <package-dir>            # a directory
 skill-xray <path>/SKILL.md          # a single file
 skill-xray <path>/skill.zip         # a .zip archive
-skill-xray https://host/skill.zip   # an http(s) URL
+skill-xray https://host/skill.zip   # an https URL
 skill-xray https://github.com/u/r.git   # a git repository
 skill-xray --scan-known-skills      # find and scan every skill under the known agent roots
 skill-xray <target> --json          # JSON output
@@ -46,8 +50,9 @@ use the network; each enforces size, count and SSRF limits and fails closed.
 
 ## Develop
 
-Requires Python 3.12 or newer (the junction check uses `os.path.isjunction`,
-added in 3.12).
+Requires Python 3.12.4 or newer: the junction check uses `os.path.isjunction`
+(added in 3.12), and the SSRF guard relies on the `ipaddress.is_global` fix for
+IPv4-mapped addresses shipped in 3.12.4 (CVE-2024-4032).
 
 ```bash
 python -m ruff check .        # lint

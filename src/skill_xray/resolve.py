@@ -27,8 +27,11 @@ import ipaddress
 import os
 import shutil
 import socket
+import stat
 import subprocess
+import tarfile
 import tempfile
+import time
 import urllib.parse
 import zipfile
 
@@ -39,10 +42,18 @@ __all__ = ["resolved_input", "Resolved", "IngestLimitExceededError", "UnsafeInpu
 # the on-disk size of a clone -- not any single file, which the walker caps.
 INGEST_MAX_BYTES = 100 * 1024 * 1024        # 100 MiB
 INGEST_MAX_ZIP_MEMBERS = 10_000
-URL_TIMEOUT_SECONDS = 30
+URL_TIMEOUT_SECONDS = 30                     # per-operation socket timeout
+URL_DEADLINE_SECONDS = 120                   # wall-clock cap on the whole download
 GIT_TIMEOUT_SECONDS = 120
 _CHUNK = 65536
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+_NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
+# Single-file inputs that are archives skill-xray does not extract. Copied in as
+# one opaque asset they would report 100% coverage with contents never inspected,
+# so they are refused (zip is handled separately). tarfile.is_tarfile catches
+# tar/tar.gz/tar.bz2/tar.xz by content; the extension list catches the rest.
+_ARCHIVE_EXTS = (".tar", ".gz", ".tgz", ".bz2", ".tbz2", ".xz", ".txz",
+                 ".rar", ".7z", ".lz", ".lzma", ".zst")
 
 
 class IngestLimitExceededError(Exception):
@@ -56,6 +67,23 @@ class UnsafeInputError(Exception):
 Resolved = collections.namedtuple("Resolved", ["root", "name", "kind"])
 
 
+def _rmtree(path):
+    """Remove a temp tree. git marks its pack/object files read-only, and on
+    Windows shutil.rmtree would then raise and (with ignore_errors) silently leak
+    the whole clone; clear the read-only bit and retry so cleanup actually runs."""
+    def _clear_readonly(func, p, _exc):
+        try:
+            # OR the owner rwx bits onto the existing mode; don't clobber it to
+            # write-only (0o200), which on POSIX would strip +x and leave a
+            # directory retry (scandir/rmdir) still failing. On Windows this clears
+            # the read-only attribute, which is what actually blocks the delete.
+            os.chmod(p, os.stat(p).st_mode | stat.S_IRWXU)
+            func(p)
+        except OSError:
+            pass
+    shutil.rmtree(path, onexc=_clear_readonly)
+
+
 @contextlib.contextmanager
 def resolved_input(target: str):
     """Yield a Resolved(root, name, kind) for the target, removing any temporary
@@ -65,7 +93,7 @@ def resolved_input(target: str):
         yield Resolved(root, name, kind)
     finally:
         if cleanup:
-            shutil.rmtree(cleanup, ignore_errors=True)
+            _rmtree(cleanup)
 
 
 def _resolve(target):
@@ -73,16 +101,34 @@ def _resolve(target):
     # treated as what it is on disk, not routed to the git adapter.
     if os.path.isdir(target):
         abspath = os.path.abspath(target)
-        return target, None, "directory", os.path.basename(abspath.rstrip("/\\")) or abspath
+        return abspath, None, "directory", os.path.basename(abspath.rstrip("/\\")) or abspath
     if os.path.isfile(target):
+        if os.path.islink(target):
+            # Refuse before the zip check: a symlink to a zip would otherwise be
+            # extracted, pulling the target's contents in and defeating the
+            # single-file symlink refusal.
+            raise UnsafeInputError("single-file input is a symlink; refused: %s" % target)
         if zipfile.is_zipfile(target):
             tmp = tempfile.mkdtemp(prefix="skillxray-")
             try:
                 _extract_zip(target, tmp)
+            except (UnsafeInputError, IngestLimitExceededError):
+                _rmtree(tmp)
+                raise
+            except Exception as exc:
+                # A malformed zip (bad CRC, colliding member order -> FileExistsError,
+                # an FS-rejected name -> OSError) must fail closed like the URL path,
+                # not crash with a raw traceback and exit 1.
+                _rmtree(tmp)
+                raise UnsafeInputError("cannot read zip %s: %s" % (target, exc)) from None
             except BaseException:
-                shutil.rmtree(tmp, ignore_errors=True)
+                _rmtree(tmp)
                 raise
             return tmp, tmp, "zip", _strip_zip_ext(os.path.basename(target))
+        if _is_unsupported_archive(target):
+            raise UnsafeInputError(
+                "%s is an archive skill-xray does not extract; unpack it and scan "
+                "the directory" % os.path.basename(target))
         tmp = _wrap_single_file(target)          # temp dir must be cleaned up by the caller
         return tmp, tmp, "file", os.path.basename(target)
     if _looks_like_git(target):
@@ -95,16 +141,24 @@ def _resolve(target):
 
 
 def _looks_like_git(target):
-    t = target.strip()
+    t = target.strip().lower()               # scheme and .git suffix are case-insensitive
     return t.endswith(".git") or t.startswith(("git@", "git://", "ssh://"))
 
 
 def _looks_like_url(target):
-    return target.strip().startswith(("http://", "https://"))
+    return target.strip().lower().startswith("https://")
 
 
 def _strip_zip_ext(name):
     return name[:-4] if name.lower().endswith(".zip") else name
+
+
+def _is_unsupported_archive(path, name=None):
+    """True if the file is a tar/other archive skill-xray does not extract, so it
+    is refused rather than ingested as one opaque asset with a false 100%."""
+    if tarfile.is_tarfile(path):
+        return True
+    return (name or path).lower().endswith(_ARCHIVE_EXTS)
 
 
 # ---------------------------------------------------------------------------
@@ -112,18 +166,31 @@ def _strip_zip_ext(name):
 # ---------------------------------------------------------------------------
 
 def _wrap_single_file(path):
-    # os.path.isfile() followed a symlink to get here; copying it would pull the
-    # target's content (e.g. /etc/passwd) into the package. Refuse it, matching
-    # how the walker and the zip adapter treat symlinks.
-    if os.path.islink(path):
-        raise UnsafeInputError("single-file input is a symlink; refused: %s" % path)
-    if os.path.getsize(path) > INGEST_MAX_BYTES:
-        raise IngestLimitExceededError("file exceeds %d bytes" % INGEST_MAX_BYTES)
+    # The symlink refusal is done in _resolve before this runs (it also covers the
+    # zip path). Copy in bounded chunks rather than a pre-copy size check: a file
+    # that grows after the check (TOCTOU) must still not write more than
+    # INGEST_MAX_BYTES into the temp dir.
     tmp = tempfile.mkdtemp(prefix="skillxray-")
+    dest = os.path.join(tmp, os.path.basename(path))
     try:
-        shutil.copy2(path, os.path.join(tmp, os.path.basename(path)))
+        written = 0
+        with open(path, "rb") as src, open(dest, "wb") as dst:
+            while True:
+                chunk = src.read(_CHUNK)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > INGEST_MAX_BYTES:
+                    raise IngestLimitExceededError("file exceeds %d bytes" % INGEST_MAX_BYTES)
+                dst.write(chunk)
+    except (UnsafeInputError, IngestLimitExceededError):
+        _rmtree(tmp)
+        raise
+    except Exception as exc:
+        _rmtree(tmp)
+        raise UnsafeInputError("cannot read file %s: %s" % (path, exc)) from None
     except BaseException:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _rmtree(tmp)
         raise
     return tmp
 
@@ -166,42 +233,73 @@ def _extract_zip(zip_path, dest):
 # network adapters: url, git
 # ---------------------------------------------------------------------------
 
+def _embedded_ipv4(ip):
+    """The IPv4 address embedded in an IPv4-mapped (::ffff:a.b.c.d) or NAT64
+    (64:ff9b::/96) IPv6 address, or None. ipaddress.is_global does not look
+    through either, so a v6 literal can smuggle a link-local IPv4 (e.g. cloud
+    metadata 169.254.169.254) past the guard; the embedded address is checked too."""
+    if ip.version != 6:
+        return None
+    if ip.ipv4_mapped is not None:
+        return ip.ipv4_mapped
+    if ip in _NAT64_PREFIX:
+        return ipaddress.ip_address(int(ip) & 0xFFFFFFFF)
+    return None
+
+
 def _resolve_public_ip(host, port):
     """Resolve host and return the first address, refusing if ANY resolved
-    address is non-public."""
+    address (or an IPv4 it embeds) is non-public."""
     try:
         infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
-    except socket.gaierror:
+    except (socket.gaierror, UnicodeError):
         raise UnsafeInputError("cannot resolve host: %s" % host) from None
     if not infos:
         raise UnsafeInputError("host did not resolve: %s" % host)
     for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            # getaddrinfo can hand back a form ipaddress cannot parse (e.g. a
+            # scoped IPv6 "fe80::1%lo0"); fail closed rather than raise a traceback.
+            raise UnsafeInputError(
+                "host resolved to an unparseable address (%s); refused" % info[4][0]) from None
+        embedded = _embedded_ipv4(ip)
         # not-global covers private, loopback, link-local (incl. cloud metadata),
-        # CGNAT (100.64/10), reserved, multicast and unspecified in one check.
-        if not ip.is_global:
+        # CGNAT (100.64/10), reserved, multicast and unspecified in one check; the
+        # embedded test stops an IPv4-mapped or NAT64 v6 literal wrapping a bad IPv4.
+        if not ip.is_global or (embedded is not None and not embedded.is_global):
             raise UnsafeInputError("host resolves to a non-public address (%s); refused" % ip)
     return infos[0][4][0]
 
 
 def _check_url_host(url):
-    """Validate scheme, port and host, returning (scheme, host, port, target, ip).
-    Also used by the git adapter to validate a repository host."""
-    parts = urllib.parse.urlparse(url)
-    if parts.scheme not in ("http", "https"):
-        raise UnsafeInputError("only http/https URLs are allowed")
-    host = parts.hostname
-    if not host:
-        raise UnsafeInputError("no host in URL")
+    """Validate scheme, port and host, returning (host, port, target, ip). Also
+    used by the git adapter to validate a repository host. https only, matching the
+    git adapter: a cleartext http fetch of an untrusted package is MITM-able. A
+    malformed URL (bad IPv6 literal, invalid port) fails closed as UnsafeInputError
+    rather than a raw ValueError, so the CLI exits 2 instead of a traceback."""
     try:
-        port = parts.port or (443 if parts.scheme == "https" else 80)
+        parts = urllib.parse.urlparse(url)
+        if parts.scheme.lower() != "https":
+            raise UnsafeInputError("only https URLs are allowed")
+        if "@" in parts.netloc:
+            # userinfo (user:pass@host) would leak credentials in error output and
+            # enables host confusion; refuse without echoing the URL back.
+            raise UnsafeInputError("URL with embedded credentials is refused")
+        host = parts.hostname
+        if not host:
+            raise UnsafeInputError("no host in URL")
+        port = parts.port or 443
     except ValueError:
-        raise UnsafeInputError("invalid port in URL") from None
+        # Do not echo the raw URL: it can carry userinfo or a query token that
+        # would leak into error output / logs.
+        raise UnsafeInputError("malformed URL") from None
     ip = _resolve_public_ip(host, port)
     target = parts.path or "/"
     if parts.query:
         target += "?" + parts.query
-    return parts.scheme, host, port, target, ip
+    return host, port, target, ip
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
@@ -214,25 +312,12 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
         self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
 
 
-class _PinnedHTTPConnection(http.client.HTTPConnection):
-    def __init__(self, host, ip, port):
-        super().__init__(host, port, timeout=URL_TIMEOUT_SECONDS)
-        self._ip = ip
-
-    def connect(self):
-        self.sock = socket.create_connection((self._ip, self.port), self.timeout)
-
-
-def _pinned_connection(scheme, host, port, ip):
-    if scheme == "https":
-        return _PinnedHTTPSConnection(host, ip, port)
-    return _PinnedHTTPConnection(host, ip, port)
-
-
-def _download_capped(scheme, host, port, target, ip, dest):
-    conn = _pinned_connection(scheme, host, port, ip)
+def _download_capped(host, port, target, ip, dest):
+    conn = _PinnedHTTPSConnection(host, ip, port)
     try:
-        conn.request("GET", target, headers={"User-Agent": "skill-xray", "Host": host})
+        # No explicit Host header: http.client builds a correct one (with the port
+        # and bracketed IPv6) from the hostname; the socket is still IP-pinned.
+        conn.request("GET", target, headers={"User-Agent": "skill-xray"})
         resp = conn.getresponse()
         if resp.status in _REDIRECT_STATUSES:
             raise UnsafeInputError(
@@ -240,8 +325,15 @@ def _download_capped(scheme, host, port, target, ip, dest):
         if resp.status != 200:
             raise UnsafeInputError("URL returned HTTP %d" % resp.status)
         written = 0
+        # Wall-clock deadline across the whole read: the per-operation socket
+        # timeout never trips on a slowloris that trickles one byte before it, so
+        # only this bounds the total transfer time (below the 100 MiB size cap).
+        deadline = time.monotonic() + URL_DEADLINE_SECONDS
         with open(dest, "wb") as fh:
             while True:
+                if time.monotonic() > deadline:
+                    raise IngestLimitExceededError(
+                        "download exceeded the %ds deadline" % URL_DEADLINE_SECONDS)
                 chunk = resp.read(_CHUNK)
                 if not chunk:
                     break
@@ -254,11 +346,11 @@ def _download_capped(scheme, host, port, target, ip, dest):
 
 
 def _fetch_url(url):
-    scheme, host, port, target, ip = _check_url_host(url)
+    host, port, target, ip = _check_url_host(url)
     tmp = tempfile.mkdtemp(prefix="skillxray-")
     try:
         download = os.path.join(tmp, "download")
-        _download_capped(scheme, host, port, target, ip, download)
+        _download_capped(host, port, target, ip, download)
         name = os.path.basename(urllib.parse.urlparse(url).path)
         if name in ("", ".", ".."):
             name = "download"
@@ -268,21 +360,30 @@ def _fetch_url(url):
             _extract_zip(download, extract)
             os.remove(download)
             return extract, tmp, _strip_zip_ext(name)
-        os.rename(download, os.path.join(tmp, name))
+        if _is_unsupported_archive(download, name):
+            raise UnsafeInputError(
+                "downloaded file is an archive skill-xray does not extract; fetch "
+                "and unpack it, then scan the directory")
+        dest = os.path.join(tmp, name)
+        if dest != download:                 # a rename-to-self raises on Windows
+            os.rename(download, dest)
         return tmp, tmp, name
     except (UnsafeInputError, IngestLimitExceededError):
-        shutil.rmtree(tmp, ignore_errors=True)
+        _rmtree(tmp)
         raise
     except Exception as exc:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _rmtree(tmp)
         raise UnsafeInputError("failed to fetch URL: %s" % exc) from None
+    except BaseException:
+        _rmtree(tmp)          # Ctrl-C / SystemExit during download must not leak the temp dir
+        raise
 
 
 def _check_git_remote(url):
     # https only: a validated public IP is enforced, and git/ssh schemes cannot be
     # SSRF-checked the same way. This blocks git://internal, ssh://internal, and a
     # plain http repo, and validates the host of an https .git URL.
-    if not url.startswith("https://"):
+    if not url.lower().startswith("https://"):
         raise UnsafeInputError("git ingest supports https:// repository URLs only")
     _check_url_host(url)
 
@@ -292,28 +393,34 @@ def _git_clone(url):
     tmp = tempfile.mkdtemp(prefix="skillxray-")
     # No GIT_ASKPASS: `true` is not a program on Windows, and GIT_TERMINAL_PROMPT=0
     # already stops git from prompting, so an unauthenticated clone fails cleanly.
-    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
+    # GIT_CONFIG_NOSYSTEM + GIT_CONFIG_GLOBAL=os.devnull neutralise a system- or
+    # user-level url.*.insteadOf / http.proxy / core.hooksPath rewrite that could
+    # redirect the clone off the validated host; http.followRedirects=false stops
+    # git following a 302 from the validated host to an internal one.
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never",
+               GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
     try:
         subprocess.run(
-            ["git", "clone", "--depth", "1", "--single-branch", "--no-tags", url, tmp],
+            ["git", "-c", "http.followRedirects=false",
+             "clone", "--depth", "1", "--single-branch", "--no-tags", url, tmp],
             check=True, capture_output=True, timeout=GIT_TIMEOUT_SECONDS, env=env)
         _enforce_tree_size(tmp)
     except FileNotFoundError:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _rmtree(tmp)
         raise UnsafeInputError("git is not installed") from None
     except subprocess.TimeoutExpired:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _rmtree(tmp)
         raise IngestLimitExceededError(
             "git clone timed out after %ds" % GIT_TIMEOUT_SECONDS) from None
     except subprocess.CalledProcessError as exc:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _rmtree(tmp)
         detail = (exc.stderr or b"").decode("utf-8", "replace").strip()[:200]
         raise UnsafeInputError("git clone failed: %s" % detail) from None
     except BaseException:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _rmtree(tmp)
         raise
     name = os.path.basename(url.rstrip("/"))
-    return tmp, name[:-4] if name.endswith(".git") else name
+    return tmp, name[:-4] if name.lower().endswith(".git") else name
 
 
 def _enforce_tree_size(root):
