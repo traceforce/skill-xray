@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # All three OSes are required. The symlink-escape tests run on Linux and
+    # macOS, the NTFS junction-escape test runs on Windows, and macOS is the
+    # only place the case-insensitive-filesystem and NFC/NFD filename paths are
+    # exercised. Dropping any one leaves part of the walker's checks un-run.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Pin to the declared floor so the documented minimum (3.12.4, for the
+          # CVE-2024-4032 ipaddress fix) is what CI actually exercises.
+          python-version: "3.12.4"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -e .
+      - name: Smoke
+        run: skill-xray --version
+      - name: Lint
+        run: python -m ruff check .
+      - name: Dead-symbol guard
+        run: python dev/deadcode.py src
+      - name: Test
+        run: python -m pytest tests
