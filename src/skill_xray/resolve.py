@@ -73,11 +73,15 @@ def _rmtree(path):
     the whole clone; clear the read-only bit and retry so cleanup actually runs."""
     def _clear_readonly(func, p, _exc):
         try:
-            # OR the owner rwx bits onto the existing mode; don't clobber it to
-            # write-only (0o200), which on POSIX would strip +x and leave a
-            # directory retry (scandir/rmdir) still failing. On Windows this clears
-            # the read-only attribute, which is what actually blocks the delete.
-            os.chmod(p, os.stat(p).st_mode | stat.S_IRWXU)
+            # Never chmod a symlink: os.stat/os.chmod follow it and would change the
+            # permissions of its target OUTSIDE the temp tree (a git clone can carry
+            # symlinks). Only a real file/dir needs the read-only bit cleared; a
+            # symlink just needs unlinking, which needs write on its parent, not it.
+            # OR owner rwx onto the existing mode (via lstat, no follow); don't
+            # clobber to write-only, which on POSIX would strip +x and leave a
+            # directory retry failing. On Windows this clears the read-only bit.
+            if not os.path.islink(p):
+                os.chmod(p, os.lstat(p).st_mode | stat.S_IRWXU)
             func(p)
         except OSError:
             pass

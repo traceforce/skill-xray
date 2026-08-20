@@ -309,6 +309,30 @@ def test_git_clone_strips_uppercase_git_suffix(tmp_path, monkeypatch):
         resolve._rmtree(root)
 
 
+def test_rmtree_does_not_follow_symlink_to_chmod_target(tmp_path):
+    # cleanup must never chmod a symlink's target: os.stat/os.chmod follow links, so
+    # a symlink in a temp clone pointing outside could have its target's perms
+    # changed. Force the handler to fire on the symlink and assert the target is safe.
+    if os.name == "nt":
+        pytest.skip("POSIX permission semantics")
+    target = tmp_path / "outside.txt"
+    target.write_text("x", encoding="utf-8")
+    os.chmod(str(target), 0o644)
+    sub = tmp_path / "tree" / "sub"
+    sub.mkdir(parents=True)
+    try:
+        os.symlink(str(target), str(sub / "link"))
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not permitted on this host")
+    os.chmod(str(sub), 0o500)          # read-only dir -> unlinking the link fires onexc
+    try:
+        resolve._rmtree(str(tmp_path / "tree"))
+        assert (os.stat(str(target)).st_mode & 0o777) == 0o644   # target perms untouched
+    finally:
+        os.chmod(str(sub), 0o700)
+        shutil.rmtree(str(tmp_path / "tree"), ignore_errors=True)
+
+
 # --- fail-closed contract for local + malformed inputs ----------------------
 def test_malformed_zip_fails_closed(tmp_path):
     # 'a' as a file then 'a/b' as its child raises FileExistsError during extract;
