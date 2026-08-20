@@ -142,6 +142,17 @@ def test_zip_prefixed_magic_with_empty_eocd_does_not_evade(tmp_path):
         assert {a.rel for a in build_package(r.root).artifacts}
 
 
+def test_zip_root_only_member_does_not_evade(tmp_path):
+    # A lone '.' member has is_dir() False but _extract_zip skips it as the root, so a
+    # bare member count still leaves an empty package. It must route to the file path.
+    z = tmp_path / "dot.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr(".", b"payload")
+    assert resolve._looks_like_zip(str(z)) is False
+    with resolved_input(str(z)) as r:
+        assert r.kind == "file"                              # not "zip"
+
+
 def test_zip_member_count_cap(tmp_path, monkeypatch):
     monkeypatch.setattr(resolve, "INGEST_MAX_ZIP_MEMBERS", 2)
     z = tmp_path / "many.zip"

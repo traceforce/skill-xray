@@ -165,15 +165,25 @@ def _is_unsupported_archive(path, name=None):
     return (name or path).lower().endswith(_ARCHIVE_EXTS)
 
 
+def _zip_member_extracts(info):
+    """True only for a member that _extract_zip would write as a file: not a
+    directory, and a name that does not normalize to the extraction root. Mirrors the
+    out == dest_real skip in _extract_zip, so a '.' or 'a/..' member -- is_dir() False
+    yet extracted to nothing -- is not mistaken for content."""
+    if info.is_dir():
+        return False
+    return os.path.normpath(info.filename) not in (".", "")
+
+
 def _looks_like_zip(path):
-    """A zip only if it BEGINS with a local file header AND its central directory
-    lists at least one real member. zipfile.is_zipfile scans backwards for the
-    end-of-central-directory record, so a 22-byte empty EOCD appended to any file --
-    even one first padded with a fake PK\\x03\\x04 magic -- reads as a valid zip with
-    zero members: extraction yields nothing and the package reports empty at 100%.
-    Requiring a non-empty member list drops such zero-member matches to the
-    single-file path, where the bytes are inventoried the way an agent would read
-    them. Byte-based, not the filename (_fetch_url names its download 'download')."""
+    """A zip only if it BEGINS with a local file header AND the central directory
+    lists a member that would actually extract to a file. zipfile.is_zipfile scans
+    backwards for the end-of-central-directory record, so a 22-byte empty EOCD
+    appended to any file -- even one first padded with a fake PK\\x03\\x04 magic --
+    reads as a valid zip; and a lone '.' member passes is_dir() yet _extract_zip skips
+    it as the root. Both leave an empty package at 100%, so route anything without a
+    real extractable member to the single-file path where its bytes are inventoried.
+    Byte-based, not the filename (_fetch_url names its download 'download')."""
     try:
         with open(path, "rb") as fh:
             if fh.read(4) != b"PK\x03\x04":
@@ -182,7 +192,7 @@ def _looks_like_zip(path):
         return False
     try:
         with zipfile.ZipFile(path) as zf:
-            return any(not info.is_dir() for info in zf.infolist())
+            return any(_zip_member_extracts(info) for info in zf.infolist())
     except (zipfile.BadZipFile, OSError):
         return False
 
