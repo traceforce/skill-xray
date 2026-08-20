@@ -11,8 +11,10 @@ It is the counterpart of `mcp-xray`, which does the same for MCP servers.
 
 ## Status
 
-This version does ingest only: it walks a package into a file inventory and a
-coverage ledger. It does not yet parse file contents, run checks, or emit SARIF.
+This version does ingest and parse. Ingest walks a package into a file inventory and a
+coverage ledger; parse turns each ingested artifact into one shared representation (the
+IR), line-anchored for markdown, frontmatter, and shell, that the checks stage will read.
+It does not yet run checks or emit SARIF, and it never executes the package.
 
 The walker reads a package it does not trust, so:
 
@@ -68,11 +70,13 @@ is where filenames arrive in a different Unicode form (NFD vs NFC).
 
 ```
 src/skill_xray/
-  ingest.py   walk, decode, classify, and build the ledger (stdlib only, no parsing)
+  ingest.py   walk, decode, classify, and build the ledger
+  parse.py    parse each artifact once into one shared IR (real parser per format), fail closed
   resolve.py  turn a directory/file/zip/URL/git target into a local dir, with caps
   cli.py      inventory a target and print the ledger
 tests/
   test_ingest.py   walker tests, including the symlink, junction, and FIFO cases
+  test_parse.py    parse-layer tests: markdown, frontmatter, grants, shell, deps, refs, hardening
   test_resolve.py  input-resolver tests: zip-slip, zip-bomb, SSRF, git guard
   test_cli.py      CLI tests
 dev/
