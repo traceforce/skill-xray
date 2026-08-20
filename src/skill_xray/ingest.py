@@ -104,6 +104,7 @@ AGENT_CONFIG_FILES = {
 # Files whose mere presence in a skill is a signal: shipping a private key or a
 # credentials file is not normal. Classified so a later check can flag them.
 SECRET_FILES = {".env", ".netrc", ".npmrc", ".pypirc", "credentials",
+                "credentials.json", ".credentials.json", "secrets.json",
                 "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
 SECRET_EXT = {".pem", ".key", ".pfx", ".p12", ".keystore"}
 
@@ -411,14 +412,24 @@ KNOWN_SKILL_ROOTS = (
     ".claude/skills",                                     # project Claude
 )
 
+# A directory is a package ROOT if it holds a SKILL.md or any of these markers. A
+# plugin keeps its exec surface (hooks / MCP / plugin manifest) at the root with
+# its skills nested under skills/*/, so discovery must return the root -- not the
+# leaf SKILL.md dir -- or build_package never sees the root's .mcp.json/hooks.json.
+_PKG_MARKERS = {".claude-plugin", ".codex-plugin",          # plugin root dirs
+                "plugin.json", ".mcp.json", "hooks.json"}    # plugin root files
+
 
 def discover_skill_packages(roots=None):
-    """Return the skill package directories (each holding a SKILL.md) found under
-    the known skill roots. A package installed as a symlinked ROOT (a common
-    dotfiles setup, ~/.claude/skills/x -> ~/dotfiles/x) is followed, but nested
-    symlinks are NOT, and a hard directory budget stops a symlink pointing at "/"
-    from walking the whole filesystem. A package reachable more than once (an alias
-    or symlink target) is returned once."""
+    """Return the skill package roots found under the known skill roots. A root is a
+    directory holding a SKILL.md or a plugin marker (_PKG_MARKERS); once found it is
+    recorded and its subtree pruned, so a plugin is returned as its root -- not the
+    leaf skills/*/ dir -- and its nested skills are covered by build_package walking
+    the whole root (which also sees the root's hooks.json/.mcp.json). A symlinked
+    ROOT (a dotfiles setup, ~/.claude/skills/x -> ~/dotfiles/x) is followed, nested
+    symlinks are NOT, a hard directory budget stops a symlink pointing at "/" from
+    walking the whole filesystem, and a root reachable more than once is returned
+    once."""
     if roots is None:
         roots = KNOWN_SKILL_ROOTS
     found = {}
@@ -459,8 +470,10 @@ def discover_skill_packages(roots=None):
                 dirnames[:] = sorted(d for d in dirnames
                                      if d not in SKIP_DIRS and d not in BUNDLED_DIRS
                                      and not _is_reparse(os.path.join(dirpath, d)))
-                if any(f.lower() == "skill.md" for f in filenames):
+                names = {f.lower() for f in filenames} | {d.lower() for d in dirnames}
+                if (_PKG_MARKERS & names) or "skill.md" in names:
                     found[real] = dirpath
+                    dirnames[:] = []      # this is the package root; nested skills belong to it
     return [found[k] for k in sorted(found)]
 
 

@@ -559,3 +559,38 @@ def test_discovery_survives_a_broken_symlink_entry(tmp_path):
         pytest.skip("symlinks not permitted on this host")
     found = ingest.discover_skill_packages([str(skills)])
     assert any(os.path.realpath(p) == os.path.realpath(str(pkg)) for p in found)
+
+
+def test_credentials_json_classified_secret(make_package):
+    # .credentials.json (the real Claude token file) must be flagged, not read as
+    # ordinary text: exact-basename match, since its extension is .json.
+    root = make_package({"SKILL.md": "---\nname: t\n---\n", ".credentials.json": '{"t":"x"}'})
+    a = {x.rel: x for x in ingest.build_package(str(root)).artifacts}[".credentials.json"]
+    assert a.kind == "secret_material" and a.role == "secret"
+
+
+def test_discovery_returns_plugin_root_not_leaf(tmp_path):
+    # a plugin keeps its exec surface (hooks/MCP) at the root; discovery must return
+    # the root so build_package sees those configs, not the leaf skills/*/ dir.
+    root = tmp_path / "plugins" / "discord"
+    (root / ".claude-plugin").mkdir(parents=True)
+    (root / "skills" / "access").mkdir(parents=True)
+    (root / ".claude-plugin" / "plugin.json").write_text("{}", encoding="utf-8")
+    (root / ".mcp.json").write_text("{}", encoding="utf-8")
+    (root / "hooks.json").write_text("{}", encoding="utf-8")
+    (root / "skills" / "access" / "SKILL.md").write_text("---\nname: t\n---\n", encoding="utf-8")
+    found = ingest.discover_skill_packages([str(tmp_path / "plugins")])
+    reals = {os.path.realpath(p) for p in found}
+    assert os.path.realpath(str(root)) in reals                            # plugin root returned
+    assert os.path.realpath(str(root / "skills" / "access")) not in reals  # leaf not returned
+    root_found = next(p for p in found if os.path.realpath(p) == os.path.realpath(str(root)))
+    rels = {a.rel for a in ingest.build_package(root_found).artifacts}
+    assert {".mcp.json", "hooks.json", "skills/access/SKILL.md"} <= rels
+
+
+def test_discovery_flat_skill_still_found(tmp_path):
+    pkg = tmp_path / "skills" / "mobile-pentest"
+    pkg.mkdir(parents=True)
+    (pkg / "SKILL.md").write_text("---\nname: t\n---\n", encoding="utf-8")
+    found = ingest.discover_skill_packages([str(tmp_path / "skills")])
+    assert any(os.path.realpath(p) == os.path.realpath(str(pkg)) for p in found)
