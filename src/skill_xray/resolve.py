@@ -403,9 +403,15 @@ def _git_clone(url):
     # git following a 302 from the validated host to an internal one.
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never",
                GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+    # Strip proxy vars and force http.proxy empty: a *_PROXY (env or config) could
+    # route the clone through an internal proxy even though the host resolved to a
+    # public IP, which would defeat the SSRF check.
+    for _var in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                 "http_proxy", "https_proxy", "all_proxy"):
+        env.pop(_var, None)
     try:
         subprocess.run(
-            ["git", "-c", "http.followRedirects=false",
+            ["git", "-c", "http.followRedirects=false", "-c", "http.proxy=",
              "clone", "--depth", "1", "--single-branch", "--no-tags", url, tmp],
             check=True, capture_output=True, timeout=GIT_TIMEOUT_SECONDS, env=env)
         _enforce_tree_size(tmp)

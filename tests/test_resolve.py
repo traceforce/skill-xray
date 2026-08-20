@@ -432,3 +432,23 @@ def test_enforce_tree_size_allows_a_small_clone(tmp_path):
 def test_resolved_namedtuple_is_exported():
     from skill_xray import Resolved
     assert Resolved._fields == ("root", "name", "kind")
+
+
+def test_git_clone_strips_proxy_env(monkeypatch):
+    # a *_PROXY env var must not reach git, or it could route the clone through an
+    # internal proxy despite the SSRF host check.
+    monkeypatch.setattr(resolve, "_check_git_remote", lambda url: None)
+    monkeypatch.setenv("HTTPS_PROXY", "http://169.254.169.254:3128")
+    monkeypatch.setenv("HTTP_PROXY", "http://169.254.169.254:3128")
+    seen = {}
+
+    def _capture(argv, **kw):
+        seen["argv"] = argv
+        seen["env"] = kw.get("env", {})
+        raise resolve.subprocess.CalledProcessError(1, argv)
+
+    monkeypatch.setattr(resolve.subprocess, "run", _capture)
+    with pytest.raises(resolve.UnsafeInputError):
+        resolve._git_clone("https://github.com/u/r.git")
+    assert "HTTPS_PROXY" not in seen["env"] and "HTTP_PROXY" not in seen["env"]
+    assert "http.proxy=" in seen["argv"]

@@ -150,11 +150,13 @@ def _relpath(abspath: str, root: str) -> str:
 
 
 def install_identity(package_root: str) -> str:
-    """Injective over INSTALL LOCATION, not content.
+    """Stable identity for an install, keyed on the package's CANONICAL path.
 
-    Deliberately NOT a content hash: a corpus contains byte-identical SKILL.md
-    copies, and a content-keyed identity would collapse them onto one value,
-    destroying alert state in any consumer that tracks findings per install.
+    realpath() resolves symlink aliases, so two symlinked install locations that
+    point at the same target share one identity -- matching how discovery dedups by
+    realpath. Deliberately NOT a content hash: a corpus has byte-identical SKILL.md
+    copies, and a content key would collapse them, destroying alert state in a
+    consumer that tracks findings per install.
     """
     real = os.path.realpath(package_root)
     real = posix(os.path.abspath(real))
@@ -516,7 +518,7 @@ def build_ledger(pkg: Package) -> dict:
     identity = sorted(a.rel for a in artifacts if a.role == "identity")
     opaque = sorted(a.rel for a in artifacts if a.role == "opaque")
     secrets = sorted(a.rel for a in artifacts if a.role == "secret")
-    configs = sorted(a.rel for a in artifacts if a.role == "config")
+    configs = sorted(a.rel for a in artifacts if a.role in ("config", "root_config"))
     not_inspectable = sum(1 for a in artifacts if a.kind == "asset") + len(compiled)
     failed = (sum(1 for a in artifacts
                   if a.exception is not None and a.kind != "asset" and a.role != "compiled")

@@ -594,3 +594,11 @@ def test_discovery_flat_skill_still_found(tmp_path):
     (pkg / "SKILL.md").write_text("---\nname: t\n---\n", encoding="utf-8")
     found = ingest.discover_skill_packages([str(tmp_path / "skills")])
     assert any(os.path.realpath(p) == os.path.realpath(str(pkg)) for p in found)
+
+
+def test_root_config_surfaced_in_agent_config(make_package):
+    # .mcp.json / hooks.json (role root_config) are the top exec surface and must
+    # appear in the agentConfig ledger list, not only nested settings.json.
+    root = make_package({"SKILL.md": "---\nname: t\n---\n", ".mcp.json": "{}", "hooks.json": "{}"})
+    cfg = ingest.build_ledger(ingest.build_package(str(root)))["agentConfig"]
+    assert ".mcp.json" in cfg and "hooks.json" in cfg
