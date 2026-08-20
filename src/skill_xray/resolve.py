@@ -112,7 +112,7 @@ def _resolve(target):
             # extracted, pulling the target's contents in and defeating the
             # single-file symlink refusal.
             raise UnsafeInputError("single-file input is a symlink; refused: %s" % target)
-        if zipfile.is_zipfile(target):
+        if _looks_like_zip(target):
             tmp = tempfile.mkdtemp(prefix="skillxray-")
             try:
                 _extract_zip(target, tmp)
@@ -163,6 +163,23 @@ def _is_unsupported_archive(path, name=None):
     if tarfile.is_tarfile(path):
         return True
     return (name or path).lower().endswith(_ARCHIVE_EXTS)
+
+
+def _looks_like_zip(path):
+    """A zip only if it BEGINS with a local file header. zipfile.is_zipfile scans
+    backwards for the end-of-central-directory record, so a 22-byte EOCD trailer
+    appended to any file makes it read as a zip with zero members -- the file's real
+    bytes are then discarded and the package reports empty at 100%. Route by the
+    start, the way an agent reads the file, so trailer-smuggled content falls to the
+    single-file path and is inventoried. Byte-based, not the filename (_fetch_url
+    names its download 'download')."""
+    try:
+        with open(path, "rb") as fh:
+            if fh.read(4) != b"PK\x03\x04":
+                return False
+    except OSError:
+        return False
+    return zipfile.is_zipfile(path)
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +375,7 @@ def _fetch_url(url):
         name = os.path.basename(urllib.parse.urlparse(url).path)
         if name in ("", ".", ".."):
             name = "download"
-        if zipfile.is_zipfile(download):
+        if _looks_like_zip(download):
             extract = os.path.join(tmp, "extracted")
             os.makedirs(extract)
             _extract_zip(download, extract)

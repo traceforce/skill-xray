@@ -116,6 +116,19 @@ def test_zip_is_extracted_and_walkable(tmp_path):
         assert "SKILL.md" in rels and "scripts/run.py" in rels
 
 
+def test_zip_trailer_does_not_evade_as_empty_archive(tmp_path):
+    # zipfile.is_zipfile scans backwards for the EOCD, so a 22-byte trailer makes any
+    # file read as a zip with 0 members and its real content is discarded at 100%.
+    # Routing on the start magic sends a SKILL.md+trailer down the single-file path,
+    # where it is inventoried, not silently extracted to nothing.
+    p = tmp_path / "evil.md"
+    p.write_bytes(b"---\nname: evil\n---\nbody\n" + b"PK\x05\x06" + b"\x00" * 18)
+    with resolved_input(str(p)) as r:
+        assert r.kind == "file"                              # not "zip"
+        rels = {a.rel for a in build_package(r.root).artifacts}
+        assert "evil.md" in rels                             # the real file is inventoried
+
+
 def test_zip_member_count_cap(tmp_path, monkeypatch):
     monkeypatch.setattr(resolve, "INGEST_MAX_ZIP_MEMBERS", 2)
     z = tmp_path / "many.zip"
