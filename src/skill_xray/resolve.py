@@ -166,20 +166,25 @@ def _is_unsupported_archive(path, name=None):
 
 
 def _looks_like_zip(path):
-    """A zip only if it BEGINS with a local file header. zipfile.is_zipfile scans
-    backwards for the end-of-central-directory record, so a 22-byte EOCD trailer
-    appended to any file makes it read as a zip with zero members -- the file's real
-    bytes are then discarded and the package reports empty at 100%. Route by the
-    start, the way an agent reads the file, so trailer-smuggled content falls to the
-    single-file path and is inventoried. Byte-based, not the filename (_fetch_url
-    names its download 'download')."""
+    """A zip only if it BEGINS with a local file header AND its central directory
+    lists at least one real member. zipfile.is_zipfile scans backwards for the
+    end-of-central-directory record, so a 22-byte empty EOCD appended to any file --
+    even one first padded with a fake PK\\x03\\x04 magic -- reads as a valid zip with
+    zero members: extraction yields nothing and the package reports empty at 100%.
+    Requiring a non-empty member list drops such zero-member matches to the
+    single-file path, where the bytes are inventoried the way an agent would read
+    them. Byte-based, not the filename (_fetch_url names its download 'download')."""
     try:
         with open(path, "rb") as fh:
             if fh.read(4) != b"PK\x03\x04":
                 return False
     except OSError:
         return False
-    return zipfile.is_zipfile(path)
+    try:
+        with zipfile.ZipFile(path) as zf:
+            return any(not info.is_dir() for info in zf.infolist())
+    except (zipfile.BadZipFile, OSError):
+        return False
 
 
 # ---------------------------------------------------------------------------

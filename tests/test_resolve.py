@@ -129,6 +129,19 @@ def test_zip_trailer_does_not_evade_as_empty_archive(tmp_path):
         assert "evil.md" in rels                             # the real file is inventoried
 
 
+def test_zip_prefixed_magic_with_empty_eocd_does_not_evade(tmp_path):
+    # Padding the payload with a fake PK\x03\x04 local-header magic passes a start-byte
+    # check, and the appended empty EOCD still makes is_zipfile accept it as a valid
+    # zero-member zip -- extraction yields nothing. Requiring a real member drops it to
+    # the single-file path instead of a silent empty package at 100%.
+    p = tmp_path / "evil.md"
+    p.write_bytes(b"PK\x03\x04" + b"---\nname: evil\n---\nbody\n" + b"PK\x05\x06" + b"\x00" * 18)
+    assert resolve._looks_like_zip(str(p)) is False
+    with resolved_input(str(p)) as r:
+        assert r.kind == "file"                              # not "zip"
+        assert {a.rel for a in build_package(r.root).artifacts}
+
+
 def test_zip_member_count_cap(tmp_path, monkeypatch):
     monkeypatch.setattr(resolve, "INGEST_MAX_ZIP_MEMBERS", 2)
     z = tmp_path / "many.zip"
