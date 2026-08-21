@@ -116,6 +116,80 @@ def test_zip_is_extracted_and_walkable(tmp_path):
         assert "SKILL.md" in rels and "scripts/run.py" in rels
 
 
+def test_zip_trailer_does_not_evade_as_empty_archive(tmp_path):
+    # zipfile.is_zipfile scans backwards for the EOCD, so a 22-byte trailer makes any
+    # file read as a zip with 0 members and its real content is discarded at 100%.
+    # Routing on the start magic sends a SKILL.md+trailer down the single-file path,
+    # where it is inventoried, not silently extracted to nothing.
+    p = tmp_path / "evil.md"
+    p.write_bytes(b"---\nname: evil\n---\nbody\n" + b"PK\x05\x06" + b"\x00" * 18)
+    with resolved_input(str(p)) as r:
+        assert r.kind == "file"                              # not "zip"
+        rels = {a.rel for a in build_package(r.root).artifacts}
+        assert "evil.md" in rels                             # the real file is inventoried
+
+
+def test_zip_prefixed_magic_with_empty_eocd_does_not_evade(tmp_path):
+    # Padding the payload with a fake PK\x03\x04 local-header magic passes a start-byte
+    # check, and the appended empty EOCD still makes is_zipfile accept it as a valid
+    # zero-member zip -- extraction yields nothing. Requiring a real member drops it to
+    # the single-file path instead of a silent empty package at 100%.
+    p = tmp_path / "evil.md"
+    p.write_bytes(b"PK\x03\x04" + b"---\nname: evil\n---\nbody\n" + b"PK\x05\x06" + b"\x00" * 18)
+    assert resolve._looks_like_zip(str(p)) is False
+    with resolved_input(str(p)) as r:
+        assert r.kind == "file"                              # not "zip"
+        assert {a.rel for a in build_package(r.root).artifacts}
+
+
+def test_zip_root_only_member_does_not_evade(tmp_path):
+    # A lone '.' member has is_dir() False but _extract_zip skips it as the root, so a
+    # bare member count still leaves an empty package. It must route to the file path.
+    z = tmp_path / "dot.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr(".", b"payload")
+    assert resolve._looks_like_zip(str(z)) is False
+    with resolved_input(str(z)) as r:
+        assert r.kind == "file"                              # not "zip"
+
+
+def test_url_trailer_does_not_evade_as_empty_archive(monkeypatch):
+    # The same guard runs on the URL path (_fetch_url), byte-based: an EOCD-trailer
+    # blob served from a .zip URL is inventoried as one asset, not extracted to an
+    # empty archive. (kind is "url" for any download; the zip-vs-file routing is
+    # internal, so the tell is the surfaced artifact.)
+    blob = b"---\nname: evil\n---\nbody\n" + b"PK\x05\x06" + b"\x00" * 18
+    monkeypatch.setattr(resolve, "_check_url_host",
+                        lambda url: ("example.com", 443, "/skill.zip", "93.184.216.34"))
+
+    class _Resp:
+        status = 200
+
+        def __init__(self):
+            self._sent = False
+
+        def read(self, n):
+            if self._sent:
+                return b""
+            self._sent = True
+            return blob
+
+    class _Conn:
+        def request(self, *a, **k):
+            pass
+
+        def getresponse(self):
+            return _Resp()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(resolve, "_PinnedHTTPSConnection", lambda *a: _Conn())
+    with resolved_input("https://example.com/skill.zip") as r:
+        # extracted-as-empty-zip would leave this empty; the blob must be surfaced
+        assert "skill.zip" in {a.rel for a in build_package(r.root).artifacts}
+
+
 def test_zip_member_count_cap(tmp_path, monkeypatch):
     monkeypatch.setattr(resolve, "INGEST_MAX_ZIP_MEMBERS", 2)
     z = tmp_path / "many.zip"

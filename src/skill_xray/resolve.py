@@ -112,7 +112,7 @@ def _resolve(target):
             # extracted, pulling the target's contents in and defeating the
             # single-file symlink refusal.
             raise UnsafeInputError("single-file input is a symlink; refused: %s" % target)
-        if zipfile.is_zipfile(target):
+        if _looks_like_zip(target):
             tmp = tempfile.mkdtemp(prefix="skillxray-")
             try:
                 _extract_zip(target, tmp)
@@ -163,6 +163,38 @@ def _is_unsupported_archive(path, name=None):
     if tarfile.is_tarfile(path):
         return True
     return (name or path).lower().endswith(_ARCHIVE_EXTS)
+
+
+def _zip_member_extracts(info):
+    """True only for a member that _extract_zip would write as a file: not a
+    directory, and a name that does not normalize to the extraction root. Mirrors the
+    out == dest_real skip in _extract_zip, so a '.' or 'a/..' member -- is_dir() False
+    yet extracted to nothing -- is not mistaken for content."""
+    if info.is_dir():
+        return False
+    return os.path.normpath(info.filename) != "."
+
+
+def _looks_like_zip(path):
+    """A zip only if it BEGINS with a local file header AND the central directory
+    lists a member that would actually extract to a file. zipfile.is_zipfile scans
+    backwards for the end-of-central-directory record, so a 22-byte empty EOCD
+    appended to any file -- even one first padded with a fake PK\\x03\\x04 magic --
+    reads as a valid zip; and a lone '.' member passes is_dir() yet _extract_zip skips
+    it as the root. Both leave an empty package at 100%, so route anything without a
+    real extractable member to the single-file path where its bytes are inventoried.
+    Byte-based, not the filename (_fetch_url names its download 'download')."""
+    try:
+        with open(path, "rb") as fh:
+            if fh.read(4) != b"PK\x03\x04":
+                return False
+    except OSError:
+        return False
+    try:
+        with zipfile.ZipFile(path) as zf:
+            return any(_zip_member_extracts(info) for info in zf.infolist())
+    except (zipfile.BadZipFile, OSError):
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +390,7 @@ def _fetch_url(url):
         name = os.path.basename(urllib.parse.urlparse(url).path)
         if name in ("", ".", ".."):
             name = "download"
-        if zipfile.is_zipfile(download):
+        if _looks_like_zip(download):
             extract = os.path.join(tmp, "extracted")
             os.makedirs(extract)
             _extract_zip(download, extract)
