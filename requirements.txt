@@ -1,2 +1,6 @@
-# Runtime dependencies.
-# None yet: this version is standard library only. Content parsing will pin PyYAML here.
+# Runtime dependencies (mirrors pyproject [project.dependencies]).
+ruamel.yaml>=0.18
+markdown-it-py>=3
+tree-sitter>=0.23
+tree-sitter-bash>=0.23
+packaging>=23
