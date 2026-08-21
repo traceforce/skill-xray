@@ -153,6 +153,43 @@ def test_zip_root_only_member_does_not_evade(tmp_path):
         assert r.kind == "file"                              # not "zip"
 
 
+def test_url_trailer_does_not_evade_as_empty_archive(monkeypatch):
+    # The same guard runs on the URL path (_fetch_url), byte-based: an EOCD-trailer
+    # blob served from a .zip URL is inventoried as one asset, not extracted to an
+    # empty archive. (kind is "url" for any download; the zip-vs-file routing is
+    # internal, so the tell is the surfaced artifact.)
+    blob = b"---\nname: evil\n---\nbody\n" + b"PK\x05\x06" + b"\x00" * 18
+    monkeypatch.setattr(resolve, "_check_url_host",
+                        lambda url: ("example.com", 443, "/skill.zip", "93.184.216.34"))
+
+    class _Resp:
+        status = 200
+
+        def __init__(self):
+            self._sent = False
+
+        def read(self, n):
+            if self._sent:
+                return b""
+            self._sent = True
+            return blob
+
+    class _Conn:
+        def request(self, *a, **k):
+            pass
+
+        def getresponse(self):
+            return _Resp()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(resolve, "_PinnedHTTPSConnection", lambda *a: _Conn())
+    with resolved_input("https://example.com/skill.zip") as r:
+        # extracted-as-empty-zip would leave this empty; the blob must be surfaced
+        assert "skill.zip" in {a.rel for a in build_package(r.root).artifacts}
+
+
 def test_zip_member_count_cap(tmp_path, monkeypatch):
     monkeypatch.setattr(resolve, "INGEST_MAX_ZIP_MEMBERS", 2)
     z = tmp_path / "many.zip"

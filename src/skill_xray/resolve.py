@@ -172,7 +172,7 @@ def _zip_member_extracts(info):
     yet extracted to nothing -- is not mistaken for content."""
     if info.is_dir():
         return False
-    return os.path.normpath(info.filename) not in (".", "")
+    return os.path.normpath(info.filename) != "."
 
 
 def _looks_like_zip(path):
