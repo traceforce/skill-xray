@@ -15,11 +15,8 @@ import os
 import sys
 
 from . import __version__
-from .findings import findings_to_dicts
 from .ingest import build_ledger, build_package, discover_skill_packages
-from .parse import parse_package
 from .resolve import IngestLimitExceededError, UnsafeInputError, resolved_input
-from .scan import scan
 
 
 def _artifact_rows(pkg):
@@ -49,20 +46,6 @@ def _print_one(pkg, ledger):
     for e in ledger["exceptions"]:
         if e["path"] not in art_rels:   # directory-level skips: pruned dirs, symlinks, junctions
             sys.stdout.write("  SKIP  %-40s %s\n" % (_display(e["path"]), e["reasonCode"]))
-
-
-def _print_findings(pkg, findings) -> None:
-    sys.stdout.write("package: %s\n" % _display(pkg.name))
-    if not findings:
-        sys.stdout.write("  no findings\n")
-        return
-    for f in findings:
-        loc = ""
-        if f.line is not None:
-            loc = "  L%d" % f.line
-        sys.stdout.write("  [%-8s] %-8s %-20s %s: %s%s\n" % (
-            f.severity.upper(), f.vector or "-", f.rule, _display(f.path),
-            _display(f.message), loc))
 
 
 def _scan_known(as_json) -> int:
@@ -98,8 +81,6 @@ def main(argv=None) -> int:
                     help="a directory, file, .zip, https URL, or https git repository")
     ap.add_argument("--scan-known-skills", action="store_true",
                     help="walk every package under the known agent skill roots")
-    ap.add_argument("--analyze", action="store_true",
-                    help="run the detection engines and report findings instead of the inventory")
     ap.add_argument("--json", action="store_true", help="emit the inventory as JSON")
     ap.add_argument("--version", action="version", version="skill-xray %s" % __version__)
     args = ap.parse_args(argv)
@@ -117,17 +98,7 @@ def main(argv=None) -> int:
             pkg = build_package(r.root)
             pkg.name = r.name          # friendly name; the root may be a temp dir
             ledger = build_ledger(pkg)
-            if args.analyze:
-                findings = scan(parse_package(pkg))
-                if args.json:
-                    sys.stdout.write(json.dumps({
-                        "package": pkg.name, "identity": pkg.identity,
-                        "source": args.package, "kind": r.kind,
-                        "findings": findings_to_dicts(findings), "ledger": ledger,
-                    }, indent=2) + "\n")
-                else:
-                    _print_findings(pkg, findings)
-            elif args.json:
+            if args.json:
                 sys.stdout.write(json.dumps({
                     "package": pkg.name, "identity": pkg.identity,
                     "source": args.package, "kind": r.kind,
