@@ -25,6 +25,7 @@ import contextlib
 import http.client
 import ipaddress
 import os
+import re
 import shutil
 import socket
 import stat
@@ -32,6 +33,7 @@ import subprocess
 import tarfile
 import tempfile
 import time
+import unicodedata
 import urllib.parse
 import zipfile
 
@@ -236,13 +238,33 @@ def _extract_zip(zip_path, dest):
     members, and more than INGEST_MAX_BYTES of actually-extracted bytes."""
     dest_real = os.path.realpath(dest)
     written = 0
+    seen = set()
+    files = set()
     with zipfile.ZipFile(zip_path) as zf:
         infos = zf.infolist()
         if len(infos) > INGEST_MAX_ZIP_MEMBERS:
             raise IngestLimitExceededError(
                 "zip has %d members (max %d)" % (len(infos), INGEST_MAX_ZIP_MEMBERS))
         for info in infos:
-            out = os.path.realpath(os.path.join(dest, info.filename))
+            raw = unicodedata.normalize("NFC", info.filename.replace("\\", "/"))
+            if raw.startswith("/") or re.match(r"^[A-Za-z]:", raw):
+                raise UnsafeInputError("zip member uses an absolute path: %s" % info.filename)
+            parts = [part for part in raw.split("/") if part not in ("", ".")]
+            if any(part == ".." for part in parts):
+                raise UnsafeInputError("zip member escapes the extract dir: %s" % info.filename)
+            if not parts:
+                continue
+            portable = tuple(part.rstrip(" .").casefold() for part in parts)
+            if any(not part or ":" in part for part in portable):
+                raise UnsafeInputError("zip member has a non-portable path: %s" % info.filename)
+            key = "/".join(portable)
+            parents = {"/".join(portable[:i]) for i in range(1, len(portable))}
+            if key in seen or parents & files:
+                raise UnsafeInputError("zip has colliding member paths: %s" % info.filename)
+            seen.add(key)
+            if not info.is_dir():
+                files.add(key)
+            out = os.path.realpath(os.path.join(dest, *parts))
             if out != dest_real and not out.startswith(dest_real + os.sep):
                 raise UnsafeInputError("zip member escapes the extract dir: %s" % info.filename)
             if out == dest_real:

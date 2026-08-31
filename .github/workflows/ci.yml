@@ -30,6 +30,8 @@ jobs:
           pip install -e .
       - name: Smoke
         run: skill-xray --version
+      - name: Install pinned OpenGrep
+        run: skill-xray --install-opengrep
       - name: Lint
         run: python -m ruff check .
       - name: Dead-symbol guard
