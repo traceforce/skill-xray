@@ -34,7 +34,7 @@ def check(
             executable=executable,
             runner=opengrep_runner,
             code_units=code_units,
-            languages=("python",),
+            languages=("python", "shell"),
         ))
     except Exception as exc:
         findings.append(Finding(
