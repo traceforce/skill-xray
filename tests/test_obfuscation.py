@@ -213,6 +213,50 @@ def test_pure_cyrillic_is_not_a_homoglyph(make_package):
     assert "SXV-015" not in _vectors(f)
 
 
+def test_all_confusable_cyrillic_word_in_native_prose_is_not_a_spoof(make_package):
+    # Every letter in "сос" folds to ASCII, but the surrounding Cyrillic proves language context.
+    f = _run(make_package, {"SKILL.md": "Русский текст сос рядом\n"})
+    assert "SXV-015" not in _vectors(f)
+
+
+def test_isolated_whole_script_spoof_in_latin_context_still_fires(make_package):
+    assert _by_vector(
+        _run(make_package, {"SKILL.md": "Open раураӏ to continue.\n"}), "SXV-015")
+
+
+def test_native_script_heading_uses_nearby_prose_context(make_package):
+    body = "Русский текст находится рядом.\n\nНомер\n"
+    assert "SXV-015" not in _vectors(_run(make_package, {"SKILL.md": body}))
+
+
+def test_latin_line_spoof_survives_nearby_native_prose(make_package):
+    body = "Русский текст находится рядом.\n\nOpen раураӏ to continue.\n"
+    assert _by_vector(_run(make_package, {"SKILL.md": body}), "SXV-015")
+
+
+def test_whole_script_spoof_in_code_still_fires(make_package):
+    assert _by_vector(
+        _run(make_package, {"SKILL.md": _CLEAN_MANIFEST,
+                            "run.py": "label = 'раураӏ'  # Русский текст\n"}),
+        "SXV-015")
+
+
+def test_native_language_only_string_line_in_code_is_not_a_spoof(make_package):
+    files = {"SKILL.md": _CLEAN_MANIFEST,
+             "run.py": "items = [\n    'Русский текст',\n    'Что самое важное?',\n]\n"}
+    assert "SXV-015" not in _vectors(_run(make_package, files))
+
+
+def test_whole_script_spoof_in_governed_native_prose_still_fires(make_package):
+    body = "---\nname: раураӏ Русский текст\ndescription: test\n---\n"
+    assert _by_vector(_run(make_package, {"SKILL.md": body}), "SXV-015")
+
+
+def test_whole_script_domain_in_native_prose_still_fires(make_package):
+    assert _by_vector(
+        _run(make_package, {"SKILL.md": "Русский текст раураӏ.com рядом\n"}), "SXV-015")
+
+
 def test_pure_greek_is_not_a_homoglyph(make_package):
     f = _run(make_package, {"SKILL.md": "καλημέρα\n"})
     assert "SXV-015" not in _vectors(f)
@@ -226,6 +270,20 @@ def test_cjk_text_is_silent(make_package):
 def test_accented_latin_is_not_mixed_script(make_package):
     f = _run(make_package, {"SKILL.md": "café naïve résumé\n"})
     assert "SXV-015" not in _vectors(f)
+
+
+def test_slash_delimited_ipa_in_prose_is_not_a_homoglyph(make_package):
+    f = _run(make_package, {"SKILL.md": "The vowel sounds are /iː/, /eɪ/, and /ɪ/.\n"})
+    assert "SXV-015" not in _vectors(f)
+
+
+def test_spoof_only_latin_outside_ipa_context_still_fires(make_package):
+    assert _by_vector(_run(make_package, {"SKILL.md": "Use admɪn to continue.\n"}), "SXV-015")
+
+
+def test_slash_delimited_spoof_only_latin_in_code_still_fires(make_package):
+    files = {"SKILL.md": _CLEAN_MANIFEST, "run.py": "value = '/admɪn/'\n"}
+    assert _by_vector(_run(make_package, files), "SXV-015")
 
 
 def test_column_points_at_the_codepoint(make_package):

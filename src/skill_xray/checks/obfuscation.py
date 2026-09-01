@@ -756,7 +756,7 @@ def _is_compat_spoof_letter(ch):
         and unicodedata.category(ch).startswith("L")
 
 
-def _scan_homoglyph(line, lineno, rel, key, out):
+def _scan_homoglyph(line, lineno, rel, key, out, is_code=False, nearby_native_scripts=frozenset()):
     """Flag tokens that mix scripts where the non-Latin characters are Latin confusables, plus
     whole-script (all-confusable) and compatibility (fullwidth/math NFKC) spoofs."""
     token, start, emitted = [], 0, 0
@@ -812,10 +812,27 @@ def _scan_homoglyph(line, lineno, rel, key, out):
         normalized = "".join(_CONFUSABLES.get(c, c) for c in text)
         sub_scripts = {_script_of(c) for _, c in subs}
 
-        # Whole-script spoofs require every non-Latin letter to be Latin-confusable.
+        # Whole-script spoofs require every non-Latin letter to be Latin-confusable.  In prose,
+        # an otherwise native-script line is stronger evidence of ordinary language than of an
+        # ASCII impersonation: words such as Cyrillic "сос" happen to consist entirely of Latin
+        # look-alikes.  Keep the detector strict in governed metadata, domains, mixed-language
+        # code lines, and Latin-context prose where an isolated whole-script token is suspicious.
         if "LATIN" not in scripts and len(scripts) == 1:
             if all(c in _CONFUSABLES for c in letters) \
                     and _folds_to_word(normalized):
+                script = next(iter(scripts))
+                native_context = sum(
+                    1 for c in line
+                    if _script_of(c) == script and c not in _CONFUSABLES
+                ) >= 2
+                line_scripts = {_script_of(c) for c in line
+                                if unicodedata.category(c).startswith("L")}
+                native_context = native_context or (
+                    line_scripts == {script} and script in nearby_native_scripts)
+                safe_language_context = not is_code or line_scripts == {script}
+                if key not in _GOVERNED_KEYS and safe_language_context \
+                        and not domain_like and native_context:
+                    return
                 emit(text, normalized, sorted(scripts), subs, col, container, component_offset)
             return
 
@@ -824,6 +841,12 @@ def _scan_homoglyph(line, lineno, rel, key, out):
             hidden = [(i, c) for i, c in subs if _is_spoof_only_latin(c)]
             if (hidden and any(ord(c) <= 0x7F for c in letters)
                     and _folds_to_word(normalized)):
+                start = col - 1
+                slash_delimited = start > 0 and line[start - 1] == "/" \
+                    and start + len(text) < len(line) and line[start + len(text)] == "/"
+                if key not in _GOVERNED_KEYS and not is_code \
+                        and not domain_like and slash_delimited:
+                    return
                 emit(text, normalized, ["LATIN"], hidden, col, container, component_offset)
             return
 
@@ -894,7 +917,14 @@ def _check_unicode(p, out):
             continue
         line_out = []
         _scan_invisible(line, n, p.rel, line_out, is_code)
-        _scan_homoglyph(line, n, p.rel, keymap.get(n, ""), line_out)
+        nearby = "\n".join(lines[max(0, n - 3):n - 1] + lines[n:min(len(lines), n + 2)])
+        nearby_native_scripts = {
+            script for script in {"CYRILLIC", "GREEK"}
+            if sum(1 for c in nearby
+                   if _script_of(c) == script and c not in _CONFUSABLES) >= 2
+        }
+        _scan_homoglyph(line, n, p.rel, keymap.get(n, ""), line_out, is_code,
+                        nearby_native_scripts)
         for f in line_out:
             # Cap during construction by vector, rule, AND severity, so a pad of cheap-critical
             # findings on one rule cannot crowd out a different critical rule on the same line.
