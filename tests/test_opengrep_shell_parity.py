@@ -33,7 +33,7 @@ def _live_executable():
 
 def test_shell_contract_has_unique_shell_only_cases():
     cases = _contract()
-    assert len(cases) == 57
+    assert len(cases) == 91
     assert len({case["name"] for case in cases}) == len(cases)
     assert {case["ext"] for case in cases} <= {"", "sh"}
 

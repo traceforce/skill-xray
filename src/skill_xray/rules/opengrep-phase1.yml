@@ -467,8 +467,8 @@ rules:
       skill_xray_severity: high
     patterns:
       - pattern-either:
-          - pattern: $FETCH ... $URL ... | $ENV $SH ...
-          - pattern: $FETCH ... $URL ... | $ENV $ASSIGN ... $SH ...
+          - pattern: $FETCH ... $URL ... | $ENV $ASSIGN ... $SH
+          - pattern: $FETCH ... $URL ... | $ENV $ASSIGN ... $SH -s ...
       - pattern-not: $FETCH ... -o $URL ... | ...
       - pattern-not: $FETCH ... --output $URL ... | ...
       - pattern-not: $FETCH ... -O $URL ... | ...
@@ -483,6 +483,32 @@ rules:
       - metavariable-regex:
           metavariable: $ASSIGN
           regex: '^[A-Za-z_][A-Za-z0-9_]*=.*$'
+      - metavariable-regex:
+          metavariable: $ENV
+          regex: '^(?:/usr/bin/)?env$'
+      - metavariable-regex:
+          metavariable: $SH
+          regex: '^(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash|fish)$'
+
+  - id: skill-xray.shell-fetch-pipe-env-no-assignment-exec
+    languages: [bash]
+    message: Remote fetch is piped through env into a shell interpreter.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: $FETCH ... $URL ... | $ENV $SH
+          - pattern: $FETCH ... $URL ... | $ENV $SH -s ...
+      - pattern-not-regex: '(?i)(?:^|[ \t])(?:-o|--output(?:-document)?|-O)(?:=)?[ \t]*(?!-(?:[ \t]|$)|/dev/stdout(?:[ \t]|$))\S+'
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
       - metavariable-regex:
           metavariable: $ENV
           regex: '^(?:/usr/bin/)?env$'
@@ -519,6 +545,24 @@ rules:
       - metavariable-regex:
           metavariable: $SH
           regex: '^(?:sh|bash|zsh|ksh|dash|fish)$'
+
+  - id: skill-xray.shell-fetch-special-stdin-exec
+    languages: [bash]
+    message: Remote input is executed through a shell stdin construct.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern: $FETCH ... $URL ...
+      - pattern-regex: '(?m)^[ \t]*(?:(?:curl|wget|aria2c|http|httpie)[^\n|]*(?:https?|ftp)://[^\n|]+\|[ \t]*(?:(?:/usr/bin/)?env(?:[ \t]+[A-Za-z_][A-Za-z0-9_]*=[^ \t]+)*[ \t]+)?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash|fish)(?:(?:[ \t]+-[abefhkmptuvxsBCHP]+)+|[ \t]+-[abefhkmptuvxsBCHP]*o[ \t]+(?:allexport|errexit|errtrace|functrace|hashall|ignoreeof|keyword|monitor|noclobber|noexec|noglob|nolog|notify|nounset|onecmd|physical|pipefail|posix|privileged|verbose|vi|xtrace))[ \t]*|(?:source|\.)[ \t]+<\((?:curl|wget|aria2c|http|httpie)[^\n)]*(?:https?|ftp)://[^\n)]+\))[ \t]*(?:[#;]|$)'
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:https?|ftp)://'
 
   - id: skill-xray.shell-fetch-alias-pipe-exec
     languages: [bash]
@@ -584,6 +628,17 @@ rules:
       - metavariable-regex:
           metavariable: $URL
           regex: '(?i)^(?:https?|ftp)://'
+      - pattern-not: pip install ... -f $URL ...
+      - pattern-not: pip install ... --find-links $URL ...
+      - pattern-not: pip install ... --index-url $URL ...
+      - pattern-not: pip install ... --extra-index-url $URL ...
+      - pattern-not: pip3 install ... -f $URL ...
+      - pattern-not: pip3 install ... --find-links $URL ...
+      - pattern-not: pip3 install ... --index-url $URL ...
+      - pattern-not: pip3 install ... --extra-index-url $URL ...
+      - pattern-not: uv pip install ... --index-url $URL ...
+      - pattern-not: uv pip install ... --extra-index-url $URL ...
+      - pattern-not: npm install ... --registry $URL ...
 
   - id: skill-xray.shell-staged-curl-exec
     languages: [bash]
@@ -650,7 +705,29 @@ rules:
           regex: '^(?:python|python3)$'
       - metavariable-regex:
           metavariable: $BODY
-          regex: '(?is)(?:.*exec\s*\(\s*(?:(?:sys\.)?stdin\.read\s*\(\s*\)|open\s*\(\s*(?:0|["'']/dev/stdin["''])\s*\)\.read\s*\(\s*\)|input\s*\(\s*\)|os\.read\s*\(\s*0\s*,[^)]*\))\s*\).*|.*(?P<STDIN_VAR>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:(?:sys\.)?stdin\.read\s*\(\s*\)|open\s*\(\s*(?:0|["'']/dev/stdin["''])\s*\)\.read\s*\(\s*\)|input\s*\(\s*\)|os\.read\s*\(\s*0\s*,[^)]*\))\s*;(?:(?!(?P=STDIN_VAR)\s*=).)*exec\s*\(\s*(?P=STDIN_VAR)\s*\).*)'
+          regex: '(?is)^\s*(?:["'']|\$["''])?\s*(?:(?:import\s+sys|from\s+sys\s+import\s+stdin)\s*(?:;|\\n|\n)\s*)?(?:(?:exec|eval)\s*\(\s*(?:(?:sys\.)?stdin\.read\s*\(\s*\)|open\s*\(\s*(?:0|["'']/dev/stdin["''])\s*\)\.read\s*\(\s*\)|input\s*\(\s*\)|os\.read\s*\(\s*0\s*,[^)]*\))\s*\)|(?P<STDIN_VAR>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:(?:sys\.)?stdin\.read\s*\(\s*\)|open\s*\(\s*(?:0|["'']/dev/stdin["''])\s*\)\.read\s*\(\s*\)|input\s*\(\s*\)|os\.read\s*\(\s*0\s*,[^)]*\))\s*(?:;|\\n|\n)\s*(?:(?!(?P=STDIN_VAR)\s*=).)*(?:exec|eval)\s*\(\s*(?P=STDIN_VAR)\s*\))\s*["'']?\s*$'
+
+  - id: skill-xray.shell-fetch-python-stdin-exec
+    languages: [bash]
+    message: Remote input is executed as a Python program from standard input.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: $FETCH ... $URL ... | $PY
+          - pattern: $FETCH ... $URL ... | $PY -
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
+      - metavariable-regex:
+          metavariable: $PY
+          regex: '^(?:(?:/usr)?/bin/)?(?:python|python3)$'
 
   - id: skill-xray.shell-staged-curl-direct-exec
     languages: [bash]

@@ -913,9 +913,9 @@ def test_missing_and_oversized_reports_are_not_clean(make_package, monkeypatch):
 def test_bundled_rules_are_valid_yaml_and_mapped():
     document = YAML(typ="safe").load(_RULES.read_text(encoding="utf-8"))
     rules = document["rules"]
-    assert len(rules) == len({rule["id"] for rule in rules}) == 36
+    assert len(rules) == len({rule["id"] for rule in rules}) == 39
     assert sum(rule["languages"] == ["python"] for rule in rules) == 13
-    assert sum(rule["languages"] == ["bash"] for rule in rules) == 23
+    assert sum(rule["languages"] == ["bash"] for rule in rules) == 26
     assert {rule["metadata"]["skill_xray_vector"] for rule in rules} == {
         "SXV-008", "SXV-009", "SXV-010", "SXV-018", "SXV-019", "SXV-020",
         "SXV-021", "SXV-022", "SXV-023", "SXV-024", "SXV-025", "SXV-026",
