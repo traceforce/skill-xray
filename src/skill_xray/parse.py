@@ -60,10 +60,13 @@ class Preproc:
 
 @dataclass
 class Markdown:
-    """Line-anchored markdown structure: links, fenced/indented code, preproc, has_html."""
+    """Line-anchored markdown: links, fenced/indented code, prose and reference-definition source
+    spans (so a prose check can skip code without reconstructing Markdown), preproc, has_html."""
 
     links: list = field(default_factory=list)
     fences: list = field(default_factory=list)
+    prose_spans: list = field(default_factory=list)
+    reference_spans: list = field(default_factory=list)
     preproc: list = field(default_factory=list)
     has_html: bool = False
 
@@ -117,8 +120,9 @@ def _body_and_offset(text):
 def parse_markdown(text, line_offset=0):
     """Markdown -> (Markdown, err), lines offset to the file (indented code kept too)."""
     text = _norm_newlines(text)                 # normalize breaks so line counts match
+    env = {}
     try:
-        tokens = _MD.parse(text)
+        tokens = _MD.parse(text, env)
     except (RecursionError, MemoryError) as exc:
         return None, type(exc).__name__.lower()
     md = Markdown()
@@ -131,8 +135,18 @@ def parse_markdown(text, line_offset=0):
                 md.preproc.append(Preproc("fenced", tok.content, line, runs=True))
         elif tok.type == "html_block":
             md.has_html = True
+            if tok.map:
+                md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
         elif tok.type == "inline":
+            if tok.map:
+                md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
             _scan_inline(tok, line, md)
+    # A CommonMark link reference definition (`[label]: url "title"`) emits no token, so its title
+    # text lands in no prose span; keep its source span so a prose check still scans that title.
+    for ref in (env.get("references") or {}).values():
+        span = ref.get("map")
+        if span:
+            md.reference_spans.append((span[0] + 1 + line_offset, span[1] + line_offset))
     # inline !`cmd` is substituted by the harness on RAW text (before markdown, even inside a
     # fence, ignoring backslash escapes), so scan the source, not markdown-it's normalized tokens.
     pos, ln = 0, 1 + line_offset
@@ -443,6 +457,7 @@ class ParsedArtifact:
         self.raw = getattr(art, "raw", None)
         self.frontmatter = None
         self.frontmatter_key_lines = {}
+        self.frontmatter_end_line = None
         self.grants = None
         self.markdown = None
         self.py_tree = None
@@ -548,6 +563,9 @@ def _parse_one(art, p):
     # newline, which otherwise desyncs shell node line numbers from the text a check indexes).
     if kind in _MARKDOWN_KINDS:
         if kind != "doc":          # doc = README/LICENSE class (§5): body only, grants inert
+            _lines, has_open, fm_end = _fm_bounds(text)
+            if has_open and fm_end is not None:
+                p.frontmatter_end_line = fm_end + 1
             fm, key_lines, err = parse_frontmatter(text)
             p.frontmatter, p.frontmatter_key_lines = fm, key_lines
             if err:
