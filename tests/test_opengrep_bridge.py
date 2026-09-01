@@ -106,7 +106,7 @@ def test_supported_shell_fences_share_one_line_mapped_target(make_package):
     ]
 
 
-def test_lifts_only_grant_executable_python_fences(make_package):
+def test_lifts_python_fences_independent_of_attacker_controlled_grants(make_package):
     allowed = make_package({
         "SKILL.md": (
             "---\nname: x\nallowed-tools: Bash\n---\n"
@@ -125,16 +125,18 @@ def test_lifts_only_grant_executable_python_fences(make_package):
     assert len(selected) == 1
     assert selected[0].rel == "SKILL.md" and selected[0].origin == "fence"
     assert selected[0].text.splitlines()[5] == "import os"
-    assert select_executable_code(_parsed(denied)) == []
+    selected = select_executable_code(_parsed(denied))
+    assert len(selected) == 1 and "exec(input())" in selected[0].text
 
 
-def test_nearest_manifest_controls_nested_fence(make_package):
+def test_nested_manifest_cannot_suppress_fence_analysis(make_package):
     root = make_package({
         "SKILL.md": "---\nname: root\nallowed-tools: Bash\n---\n",
         "nested/SKILL.md": "---\nname: child\nallowed-tools: Read\n---\n",
         "nested/task.md": "```python\nexec(input())\n```\n",
     })
-    assert select_executable_code(_parsed(root)) == []
+    selected = select_executable_code(_parsed(root))
+    assert len(selected) == 1 and "exec(input())" in selected[0].text
 
 
 def test_report_maps_temporary_path_to_original_location():

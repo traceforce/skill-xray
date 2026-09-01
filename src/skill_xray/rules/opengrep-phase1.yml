@@ -65,12 +65,6 @@ rules:
       - pattern: $OUT = shlex.quote($IN)
         from: $IN
         to: $OUT
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $DICT[$KEY]
-          - metavariable-regex:
-              metavariable: $KEY
-              regex: '^[A-Za-z_][A-Za-z0-9_]*$'
     pattern-sinks:
       - patterns:
           - pattern: shlex.quote($COMMAND)
@@ -340,11 +334,6 @@ rules:
               metavariable: $METHOD
               regex: ^(?:get|post|put|head|request)$
     pattern-sanitizers:
-      - patterns:
-          - pattern: $DICT[$KEY]
-          - metavariable-regex:
-              metavariable: $KEY
-              regex: '^[A-Za-z_][A-Za-z0-9_]*$'
       - pattern-either:
           - pattern: $RESPONSE.status_code
           - pattern: $RESPONSE.ok
@@ -424,6 +413,12 @@ rules:
               metavariable: $SHELL
               regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
           - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $ALIAS($COMMAND)
+          - pattern-inside: |
+              $ALIAS = os.system
+              ...
+          - focus-metavariable: $COMMAND
 
   - id: skill-xray.python-decoded-payload-execution
     languages: [python]
@@ -461,12 +456,44 @@ rules:
               - pattern: eval($COMMAND, ...)
               - pattern: os.system($COMMAND)
               - pattern: os.popen($COMMAND, ...)
+              - pattern: builtins.exec($COMMAND, ...)
+              - pattern: builtins.eval($COMMAND, ...)
           - focus-metavariable: $COMMAND
       - patterns:
           - pattern: subprocess.$METHOD($COMMAND, ..., shell=$SHELL, ...)
           - metavariable-regex:
               metavariable: $METHOD
               regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:getoutput|getstatusoutput)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $ALIAS($COMMAND)
+          - pattern-inside: |
+              $ALIAS = os.system
+              ...
           - focus-metavariable: $COMMAND
 
   - id: skill-xray.python-remote-file-execution
@@ -510,7 +537,7 @@ rules:
 
   - id: skill-xray.python-staging-host
     languages: [python]
-    message: Executable Python code fetches from an anonymous or replaceable file host.
+    message: Executable Python code communicates with an anonymous or replaceable staging host.
     severity: ERROR
     metadata:
       skill_xray_vector: SXV-020
@@ -563,7 +590,7 @@ rules:
           - pattern: Path($PATH).read_bytes(...)
       - metavariable-regex:
           metavariable: $PATH
-          regex: '(?i).*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?!\.pub)|\.aws/credentials|authorized_keys|\.netrc|\.git-credentials|\.docker/config\.json|\.kube/config).*'
+          regex: '(?i).*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?!\.pub)|\.aws/credentials|\.netrc|\.git-credentials|\.docker/config\.json|\.kube/config).*'
 
   - id: skill-xray.python-cloud-upload
     languages: [python]
@@ -579,7 +606,6 @@ rules:
       - pattern: $CLIENT.upload_fileobj(...)
       - pattern: $CLIENT.upload_blob(...)
       - pattern: $CLIENT.blob(...).upload(...)
-      - pattern: $CLIENT.bucket(...).blob(...)
 
   - id: skill-xray.python-home-enumeration
     languages: [python]
@@ -595,7 +621,6 @@ rules:
       - pattern: os.walk(Path.home(), ...)
       - pattern: Path.home().glob(...)
       - pattern: Path.home().rglob(...)
-      - pattern: Path.home().iterdir(...)
       - patterns:
           - pattern: glob.$METHOD($PATH, ...)
           - metavariable-regex:
@@ -674,6 +699,8 @@ rules:
               regex: '^(?:0|1|2)$'
       - patterns:
           - pattern-inside: |
+              $SOCKET = socket.socket(...)
+              ...
               $SOCKET.connect(...)
               ...
           - pattern: pty.spawn(...)

@@ -61,7 +61,7 @@ _VECTORS = {
                 "tier": "T2", "cwe": ["CWE-494", "CWE-829"]},
     "SXV-019": {"title": "Encoded payload decoded directly into an interpreter",
                 "tier": "T2", "cwe": ["CWE-506"]},
-    "SXV-020": {"title": "Executable payload staged on an anonymous file drop",
+    "SXV-020": {"title": "Anonymous or replaceable staging-host communication",
                 "tier": "T2", "cwe": ["CWE-829"]},
     "SXV-021": {"title": "Cloud instance-metadata access from a skill script",
                 "tier": "T2", "cwe": ["CWE-918", "CWE-522"]},

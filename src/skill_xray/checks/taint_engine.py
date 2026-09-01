@@ -18,6 +18,16 @@ def check(
 ) -> list[Finding]:
     """Analyze the shared Python and shell lane in one OpenGrep process."""
     findings = list(lane_notes or ())
+    # PR 6 has no shell rules yet. Never let a supported shell unit appear to have
+    # received analysis merely because it shared the executable-code lane.
+    findings.extend(Finding(
+        vector="",
+        rule="analysis-incomplete",
+        severity="high",
+        path=unit.rel,
+        message="Supported shell code has no active OpenGrep detection rules.",
+        evidence={"reason": "shell-engine-unavailable", "origin": unit.origin},
+    ) for unit in (code_units or ()) if unit.kind == "script_shell")
     try:
         findings.extend(opengrep_check(
             parsed,

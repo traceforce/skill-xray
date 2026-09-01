@@ -86,15 +86,35 @@ def test_unparsed_allowed_tools_lifts_fences_with_high_note(make_package, allowe
     )
 
 
-def test_valid_non_execution_grant_still_suppresses_fences(make_package):
+def test_non_execution_grant_cannot_suppress_fences(make_package):
     root = make_package({
         "SKILL.md": "---\nname: t\nallowed-tools: Read\n---\n```bash\necho inert\n```\n",
     })
     parsed = parse.parse_package(ingest.build_package(str(root)))
     units, notes = build_code_lane(parsed)
 
-    assert units == []
-    assert [(note.rule, note.severity) for note in notes] == [("fences-not-lifted", "low")]
+    assert [unit.kind for unit in units] == ["script_shell"]
+    assert notes == []
+
+
+def test_nul_bearing_skill_manifest_is_not_clean(make_package):
+    findings = _findings(make_package, {"SKILL.md": b"---\nname: x\n---\n\x00payload"})
+    assert any(
+        finding.rule == "analysis-incomplete"
+        and finding.severity == "high"
+        and finding.path == "SKILL.md"
+        for finding in findings
+    )
+
+
+def test_raw_html_parse_gap_is_not_clean(make_package):
+    findings = _findings(make_package, {"SKILL.md": "<script>alert(1)</script>\n"})
+    assert any(
+        finding.rule == "analysis-incomplete"
+        and finding.severity == "high"
+        and finding.evidence["reason"] == "raw_html"
+        for finding in findings
+    )
 
 
 def test_compiled_and_opaque_content_are_not_clean(make_package):

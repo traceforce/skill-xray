@@ -38,7 +38,7 @@
 {"name":"test_dict_constant_key_carries_taint","code":"import os, sys\nd = {'cmd': sys.argv[1]}\nos.system(d['cmd'])\n","vector":"SXV-008","count":1}
 {"name":"test_dict_get_constant_key_carries_taint","code":"import os, sys\nd = {'cmd': sys.argv[1]}\nos.system(d.get('cmd'))\n","vector":"SXV-008","count":1}
 {"name":"test_dict_untainted_key_stays_clean","code":"import os, sys\nd = {'safe': 'ls', 'u': sys.argv[1]}\nos.system(d['safe'])\n","vector":null,"count":0}
-{"name":"test_dict_dynamic_key_stays_clean","code":"import os, sys\nd = {'cmd': sys.argv[1]}\nk = 'cmd'\nos.system(d[k])\n","vector":null,"count":0}
+{"name":"test_tainted_dict_dynamic_key_fires","code":"import os, sys\nd = {'cmd': sys.argv[1]}\nk = 'cmd'\nos.system(d[k])\n","vector":"SXV-008","count":1}
 {"name":"test_json_network_index_is_remote_dropper","code":"import os, requests\ndata = requests.get('http://127.0.0.1/x').json()\nos.system(data['cmd'])\n","vector":"SXV-018","count":1}
 {"name":"test_starred_splat_argument_propagates","code":"import os, sys\ndef run(x):\n    os.system(x)\nrun(*[sys.argv[1]])\n","vector":"SXV-008","count":1}
 {"name":"test_positional_only_param_binds","code":"import os, sys\ndef run(cmd, /):\n    os.system(cmd)\nrun(sys.argv[1])\n","vector":"SXV-008","count":1}

@@ -15,6 +15,7 @@ _LOW_PARSE = {
     "grants_unparsed_shape", "markdown_parse_error", "requirement_unparsed",
     "unmodeled_content", "unsupported_markup",
 }
+_LOW_STATIC = {"excluded_dir"}
 _HIGH_STATIC = {
     "bundled_dir", "file_changed", "not_regular_file", "reparse_point", "shipped_compiled",
     "symlink",
@@ -25,13 +26,13 @@ _HIGH_STATIC = {
 
 
 def _static_severity(reason: str, kind: str | None) -> str | None:
-    if reason == "excluded_dir":
+    if reason in _LOW_STATIC:
         return "low"
     if reason.startswith(("unreadable:", "walk_error:")):
         return "high"
-    if reason == "binary_content" and kind and kind.startswith("script_"):
-        return "high"
-    return "high" if reason in _HIGH_STATIC else None
+    if reason == "binary_content" and kind == "asset":
+        return None
+    return "high"
 
 
 def check(parsed) -> list[Finding]:
@@ -47,9 +48,7 @@ def check(parsed) -> list[Finding]:
             continue
         seen.add(key)
         if phase == "parse":
-            severity = "high" if reason in _HIGH_PARSE else (
-                "low" if reason in _LOW_PARSE else None
-            )
+            severity = "low" if reason in _LOW_PARSE else "high"
         else:
             artifact = by_rel.get(path)
             severity = _static_severity(reason, artifact.kind if artifact else None)

@@ -9,7 +9,6 @@ from ..findings import Finding
 from ..parse import MAX_PY_CHARS
 from ._pyast import parse as parse_python
 
-_BASH_TOOLS = {"Bash", "Shell", "Terminal", "Execute"}
 _FENCE_LANG = {
     "bash": ("shell", "bash"), "sh": ("shell", "sh"),
     "shell": ("shell", "sh"), "zsh": ("shell", "zsh"),
@@ -60,19 +59,13 @@ def _governing_manifest(index, rel: str):
         directory = _parent(directory)
 
 
-def _grants_allow_execution(index, rel: str) -> bool | None:
+def _grants_are_unparsed(index, rel: str) -> bool:
     manifest = _governing_manifest(index, rel)
     if manifest is None:
-        return True
-    grants = manifest.grants or []
-    if any(grant.tool in _BASH_TOOLS and grant.broad and not grant.allowed for grant in grants):
         return False
-    if "allowed-tools" not in (manifest.frontmatter or {}):
-        return True
-    if (("grants_unparsed_shape", "allowed-tools") in manifest.diagnostics
-            or any(grant.allowed and not grant.parsed for grant in grants)):
-        return None
-    return any(grant.tool in _BASH_TOOLS and grant.allowed for grant in grants)
+    grants = manifest.grants or []
+    return (("grants_unparsed_shape", "allowed-tools") in manifest.diagnostics
+            or any(grant.allowed and not grant.parsed for grant in grants))
 
 
 def _fence_lang(info: str):
@@ -184,8 +177,7 @@ def build_code_lane(parsed) -> tuple[list[CodeUnit], list[Finding]]:
         executable_fences = any(
             _fence_lang(info) for info, _content, _line in artifact.markdown.fences
         )
-        execution_allowed = _grants_allow_execution(manifests, artifact.rel)
-        if execution_allowed is None and executable_fences:
+        if _grants_are_unparsed(manifests, artifact.rel) and executable_fences:
             notes.append(Finding(
                 vector="",
                 rule="analysis-incomplete",
@@ -195,17 +187,6 @@ def build_code_lane(parsed) -> tuple[list[CodeUnit], list[Finding]]:
                          "allowed-tools value could not be parsed"),
                 evidence={"reason": "allowed-tools-unparsed", "origin": "fence"},
             ))
-        elif not execution_allowed:
-            if executable_fences:
-                notes.append(Finding(
-                    vector="",
-                    rule="fences-not-lifted",
-                    severity="low",
-                    path=artifact.rel,
-                    message=("executable fences in %s were not analysed: the governing skill "
-                             "manifest grants no shell tool (or denies it)" % artifact.rel),
-                ))
-            continue
         for info, content, marker_line in artifact.markdown.fences:
             classified = _fence_lang(info)
             if (classified and classified[0] == "shell"
