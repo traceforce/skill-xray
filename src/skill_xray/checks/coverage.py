@@ -4,27 +4,12 @@ from __future__ import annotations
 
 from ..findings import Finding
 
-_HIGH_PARSE = {
-    "memoryerror", "parse_budget_exceeded", "parse_crash", "python_oversize",
-    "python_syntax_error", "python_too_complex", "recursionerror", "shell_error_region",
-    "shell_too_complex",
-    "unsupported_language",
-}
 _LOW_PARSE = {
     "config_parse_error", "dep_manifest_unparsed", "frontmatter_parse_error",
     "grants_unparsed_shape", "markdown_parse_error", "requirement_unparsed",
     "unmodeled_content", "unsupported_markup",
 }
 _LOW_STATIC = {"excluded_dir"}
-_HIGH_STATIC = {
-    "bundled_dir", "file_changed", "not_regular_file", "reparse_point", "shipped_compiled",
-    "symlink",
-    "portable_path_collision", "total_budget_exhausted", "too_large", "unreadable",
-    "undecodable_text",
-    "unreviewable_content", "walk_truncated",
-}
-
-
 def _static_severity(reason: str, kind: str | None) -> str | None:
     if reason in _LOW_STATIC:
         return "low"

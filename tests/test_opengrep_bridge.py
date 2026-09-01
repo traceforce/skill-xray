@@ -418,6 +418,24 @@ def test_subprocess_shell_boolean_expression(shell, retained):
     assert bool(findings) is retained
 
 
+def test_dynamic_subprocess_shell_is_fail_visible_without_false_vector():
+    target = SelectedCode(
+        "run.py",
+        "import subprocess\nflag = unknown()\nsubprocess.run(input(), shell=flag)\n",
+        "file",
+    )
+    result = _taint_result(3, "SXV-008", "input()", 3)
+
+    findings = findings_from_report(
+        {"results": [result], "errors": []}, {"0000.py": target},
+    )
+
+    assert [(finding.vector, finding.rule, finding.severity) for finding in findings] == [
+        ("", "analysis-incomplete", "high"),
+    ]
+    assert findings[0].evidence["reason"] == "dynamic-subprocess-shell"
+
+
 @pytest.mark.parametrize(("text", "source_line", "sink_line"), [
     (
         "import os, sys\ncmd = 'safe'\nif mode:\n    cmd = sys.argv[1]\n"

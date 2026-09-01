@@ -11,7 +11,6 @@ rules:
     options:
       max_match_per_file: 1000
       taint_intrafile: true
-      taint_assume_safe_functions: true
       taint_assume_safe_indexes: true
     pattern-sources:
       - pattern-either:
@@ -151,7 +150,7 @@ rules:
 
   - id: skill-xray.python-local-helper-command-injection
     languages: [python]
-    message: Untrusted local input reaches a command sink through a local helper.
+    message: Untrusted local input reaches a Python command-execution sink.
     severity: ERROR
     metadata:
       skill_xray_vector: SXV-008
@@ -260,7 +259,6 @@ rules:
     options:
       max_match_per_file: 1000
       taint_intrafile: true
-      taint_assume_safe_functions: true
       taint_assume_safe_indexes: true
     pattern-sources:
       - exact: true
@@ -431,7 +429,6 @@ rules:
       skill_xray_severity: high
     options:
       taint_intrafile: true
-      taint_assume_safe_functions: true
     pattern-sources:
       - exact: true
         patterns:
@@ -488,6 +485,39 @@ rules:
           - metavariable-regex:
               metavariable: $METHOD
               regex: '^(?:getoutput|getstatusoutput)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - pattern-inside: |
+              from subprocess import *
+              ...
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD([$SHELL, "-c", $COMMAND, ...], ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern-either:
+              - pattern: os.execl($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execlp($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execle($SHELL, $ARGV0, "-c", $COMMAND, ..., $ENV)
+              - pattern: os.execv($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execvp($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execve($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.execvpe($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.posix_spawn($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+              - pattern: os.posix_spawnp($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
           - focus-metavariable: $COMMAND
       - patterns:
           - pattern: $ALIAS($COMMAND)

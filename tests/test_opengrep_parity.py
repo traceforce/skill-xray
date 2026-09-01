@@ -72,7 +72,11 @@ def test_live_opengrep_matches_frozen_python_contract(make_package):
                    if case.name == "test_base64_remote_dropper_fires")
     expected[(overlap, "SXV-019")] = 1
     findings = opengrep_check(parsed, executable=executable, timeout=90)
-    assert not [finding for finding in findings if not finding.vector]
+    gaps = [finding for finding in findings if not finding.vector]
+    assert len(gaps) == 18
+    assert {finding.evidence.get("reason") for finding in gaps} == {
+        "dynamic-subprocess-shell",
+    }
     actual = _actual(findings)
     assert actual == expected
 
@@ -178,13 +182,53 @@ def test_live_decoded_payload_sink_parity(make_package):
             "launch = os.system\nlaunch = lambda value: value\n"
             "launch(base64.b64decode(input()))\n"
         ),
+        "wildcard.py": (
+            "import base64\nfrom subprocess import *\n"
+            "run(base64.b64decode(input()), shell=True)\n"
+        ),
+        "shell_list.py": (
+            "import base64, subprocess\n"
+            "subprocess.run(['/bin/sh', '-c', base64.b64decode(input())])\n"
+        ),
+        "execv.py": (
+            "import base64, os\n"
+            "os.execv('/bin/sh', ['sh', '-c', base64.b64decode(input())])\n"
+        ),
     }
     parsed = parse.parse_package(ingest.build_package(str(make_package(files))))
 
     findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
     paths = {finding.path for finding in findings if finding.vector == "SXV-019"}
 
-    assert paths == {"alias.py", "builtins_exec.py", "kwargs.py"}
+    assert paths == {
+        "alias.py", "builtins_exec.py", "execv.py", "kwargs.py", "shell_list.py",
+        "wildcard.py",
+    }
+
+
+def test_live_native_argument_propagation_closes_common_wrapper_bypasses(make_package):
+    files = {
+        "join.py": "import os, sys\nos.system(' '.join(sys.argv[1:]))\n",
+        "format.py": "import os, sys\nos.system('gzip {}'.format(sys.argv[1]))\n",
+        "path_join.py": (
+            "import os, sys\nos.system('rm -rf ' + os.path.join('/tmp', sys.argv[1]))\n"
+        ),
+        "str.py": "import os, sys\nos.system('echo ' + str(sys.argv[1]))\n",
+        "decompress.py": (
+            "import base64, zlib\n"
+            "exec(zlib.decompress(base64.b64decode(input())))\n"
+        ),
+    }
+    parsed = parse.parse_package(ingest.build_package(str(make_package(files))))
+
+    findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
+
+    assert {finding.path for finding in findings if finding.vector == "SXV-008"} == {
+        "decompress.py", "format.py", "join.py", "path_join.py", "str.py",
+    }
+    assert {finding.path for finding in findings if finding.vector == "SXV-019"} == {
+        "decompress.py",
+    }
 
 
 def test_live_opengrep_keeps_four_incomplete_analysis_contracts_visible(make_package):
