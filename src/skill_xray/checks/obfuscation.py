@@ -95,6 +95,16 @@ _MISREPORT_CONTEXT = re.compile(
     r"\b(?:you|it|the skill) (?:ran|executed|modified|deleted|changed|installed|edited)\b|"
     r"\bthe (?:change|edit|operation|deployment|action|step|command)s?\b", re.I)
 
+# Natural malicious instructions use an imperative action followed by a reassuring lie ("delete
+# the config, then report that everything is normal"), not the past tense alone. Require an
+# explicit sequence before the reassurance; do not treat ordinary test/validation results as
+# concealment merely because they are reported safe.
+_IMPERATIVE_MISREPORT_CONTEXT = re.compile(
+    r"\b(?:delete|upload|modify|change|install|edit|exfiltrate|send)\b[^.\n]{1,60}"
+    r"\b(?:then|and then|afterwards?)\b|"
+    r"\b(?:run|execute)\b(?!\s+(?:tests?|checks?|validation)\b)[^.\n]{1,60}"
+    r"\b(?:then|and then|afterwards?)\b", re.I)
+
 _POSITIVE_NEGATION_RE = re.compile(
     _NEG + r"(?:\s+(?:ever|intentionally|deliberately|accidentally))*\s*$", re.I)
 
@@ -244,8 +254,11 @@ def _check_concealment(p, out):
                 if kind == "step_reference" and any(c.isdigit() for c in matched) \
                         and _VERBOSITY_RE.search(_verbosity_context(searchable, m.end())):
                     continue
-                if kind == "misreport_purpose" and not _MISREPORT_CONTEXT.search(searchable):
-                    continue
+                if kind == "misreport_purpose":
+                    prior = searchable[:m.start()]
+                    if not (_MISREPORT_CONTEXT.search(searchable)
+                            or _IMPERATIVE_MISREPORT_CONTEXT.search(prior)):
+                        continue
                 key = (kind, matched.lower())
                 if key in hits:                         # repeated identical directive: first wins
                     continue
