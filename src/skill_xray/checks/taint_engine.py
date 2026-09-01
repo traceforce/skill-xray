@@ -18,8 +18,8 @@ def check(
 ) -> list[Finding]:
     """Analyze the shared Python and shell lane in one OpenGrep process."""
     findings = list(lane_notes or ())
-    # PR 6 has no shell rules yet. Never let a supported shell unit appear to have
-    # received analysis merely because it shared the executable-code lane.
+    # No shell rules are configured in this engine. Never let a supported shell unit
+    # appear to have received analysis merely because it shared the executable-code lane.
     findings.extend(Finding(
         vector="",
         rule="analysis-incomplete",

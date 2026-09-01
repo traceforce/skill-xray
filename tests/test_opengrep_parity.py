@@ -48,8 +48,7 @@ def _live_executable():
 def test_frozen_python_contract_has_expected_shape():
     cases = _contract()
     positives = sum(case.vector is not None for case in cases)
-    # A variable key does not sanitize a tainted container; the reviewed contract therefore has
-    # one more positive than the original frozen expectations.
+    # Dynamic indexes and explicit dynamic shell settings retain taint unless proven safe.
     assert (len(cases), positives, len(cases) - positives) == (258, 135, 123)
     assert len({case.name for case in cases}) == len(cases)
 
@@ -62,6 +61,9 @@ def test_live_opengrep_matches_frozen_python_contract(make_package):
         "%03d_%s.py" % (index, case.name.removeprefix("test_")): case.code
         for index, case in enumerate(cases)
     }
+    paths_by_name = {
+        case.name: path for path, case in zip(files, cases, strict=True)
+    }
     parsed = parse.parse_package(ingest.build_package(str(make_package(files))))
     expected = Counter({
         (path, case.vector): case.count
@@ -73,19 +75,19 @@ def test_live_opengrep_matches_frozen_python_contract(make_package):
     expected[(overlap, "SXV-019")] = 1
     findings = opengrep_check(parsed, executable=executable, timeout=90)
     gaps = [finding for finding in findings if not finding.vector]
+    expected_gap_names = {
+        "test_shadowed_dict_constructor_does_not_create_shell_proof",
+        "test_local_kwargs_parameter_shadows_truthy_global",
+        "kwargs-clean-2",
+        *("mapping-update-False-%d-%d" % (index, index + 48) for index in range(7)),
+        "test_dict_get_invalid_arity_is_clean",
+        "test_dict_get_eager_side_effect_is_not_static_proof",
+    }
     assert {
         (finding.path, finding.evidence.get("reason")) for finding in gaps
     } == {
-        ("160_shadowed_dict_constructor_does_not_create_shell_proof.py",
-         "dynamic-subprocess-kwargs"),
-        ("161_local_kwargs_parameter_shadows_truthy_global.py",
-         "dynamic-subprocess-kwargs"),
-        ("199_kwargs-clean-2.py", "dynamic-subprocess-kwargs"),
-        *(("%03d_mapping-update-False-%d-%d.py" % (index, index - 216, index - 168),
-           "dynamic-subprocess-kwargs") for index in range(216, 223)),
-        ("231_dict_get_invalid_arity_is_clean.py", "dynamic-subprocess-kwargs"),
-        ("232_dict_get_eager_side_effect_is_not_static_proof.py",
-         "dynamic-subprocess-kwargs"),
+        (paths_by_name[name], "dynamic-subprocess-kwargs")
+        for name in expected_gap_names
     }
     actual = _actual(findings)
     assert actual == expected
@@ -131,7 +133,7 @@ def test_live_lambda_sink_survives_production_coordinator(make_package):
     } == {("lambda.py", "SXV-008"), ("direct.py", "SXV-008")}
 
 
-def test_live_static_rules_reject_handle_and_non_socket_false_positives(make_package):
+def test_live_static_rules_reject_known_false_positives(make_package):
     files = {
         "gcs_download.py": (
             "from google.cloud import storage\n"

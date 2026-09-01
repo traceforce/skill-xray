@@ -170,20 +170,27 @@ def test_unmapped_rule_and_engine_error_are_visible():
 
 
 def test_reject_only_postfilter_work_is_bounded_per_target(monkeypatch):
-    calls = 0
+    calls = shell_calls = 0
 
     def validate(*_args, **_kwargs):
         nonlocal calls
         calls += 1
         return False
 
+    def shell_status(*_args, **_kwargs):
+        nonlocal shell_calls
+        shell_calls += 1
+        return True, False
+
     monkeypatch.setattr(opengrep_bridge, "_python_definite_false_positive", validate)
+    monkeypatch.setattr(opengrep_bridge, "_subprocess_shell_status", shell_status)
     report = {"results": [_result(line=line) for line in range(1, 1001)], "errors": []}
     target = SelectedCode("run.py", "pass\n" * 1000, "file")
 
     findings = findings_from_report(report, {"0000.py": target})
 
     assert calls == opengrep_bridge._MAX_POSTFILTERS_PER_TARGET
+    assert shell_calls == opengrep_bridge._MAX_POSTFILTERS_PER_TARGET
     assert len(findings) == 1000
     assert any(
         finding.evidence.get("postfilter") == "retained-after-validation-budget"
@@ -471,8 +478,9 @@ def test_dynamic_shell_policy_is_invariant_across_postfilter_budget():
     assert all(finding.vector == "SXV-008" for finding in findings)
     assert all(
         finding.evidence["shell_validation"] == "dynamic-explicit-shell-retained"
-        for finding in findings
+        for finding in findings[:32]
     )
+    assert findings[32].evidence["postfilter"] == "retained-after-validation-budget"
 
 
 @pytest.mark.parametrize(("text", "source_line", "sink_line"), [

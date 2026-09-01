@@ -1378,36 +1378,37 @@ def findings_from_report(
             count = postfilter_counts.get(target_name, 0)
             postfilter_counts[target_name] = count + 1
             postfilter_skipped = count >= _MAX_POSTFILTERS_PER_TARGET
-            if target_name not in python_trees:
-                try:
-                    python_trees[target_name] = parse_python(target.text)
-                except (SyntaxError, ValueError, RecursionError, MemoryError):
-                    python_trees[target_name] = None
-            tree = python_trees[target_name]
-            shell_status, explicit_shell = _subprocess_shell_status(
-                tree, line, location["start"].get("col"),
-            ) if tree else (True, False)
-            if shell_status is False:
-                continue
-            dynamic_explicit_shell = shell_status is None and explicit_shell
-            if shell_status is None and not explicit_shell:
-                findings.append(Finding(
-                    vector="",
-                    rule="analysis-incomplete",
-                    severity="high",
-                    path=target.rel,
-                    line=line,
-                    message=("A tainted subprocess flow uses unresolved keyword arguments; "
-                             "execution eligibility could not be proven."),
-                    evidence={
-                        "engine": "opengrep",
-                        "reason": "dynamic-subprocess-kwargs",
-                        "origin": target.origin,
-                    },
-                ))
-                continue
+            dynamic_explicit_shell = False
             # After the reject-only validation budget, retain engine findings.
             if not postfilter_skipped:
+                if target_name not in python_trees:
+                    try:
+                        python_trees[target_name] = parse_python(target.text)
+                    except (SyntaxError, ValueError, RecursionError, MemoryError):
+                        python_trees[target_name] = None
+                tree = python_trees[target_name]
+                shell_status, explicit_shell = _subprocess_shell_status(
+                    tree, line, location["start"].get("col"),
+                ) if tree else (True, False)
+                if shell_status is False:
+                    continue
+                dynamic_explicit_shell = shell_status is None and explicit_shell
+                if shell_status is None and not explicit_shell:
+                    findings.append(Finding(
+                        vector="",
+                        rule="analysis-incomplete",
+                        severity="high",
+                        path=target.rel,
+                        line=line,
+                        message=("A tainted subprocess flow uses unresolved keyword arguments; "
+                                 "execution eligibility could not be proven."),
+                        evidence={
+                            "engine": "opengrep",
+                            "reason": "dynamic-subprocess-kwargs",
+                            "origin": target.origin,
+                        },
+                    ))
+                    continue
                 if _python_definite_false_positive(
                     extra, target_name, target, vector, line,
                     location["start"].get("col"), python_trees,

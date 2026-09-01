@@ -10,6 +10,8 @@ _LOW_PARSE = {
     "unmodeled_content", "unsupported_markup",
 }
 _LOW_STATIC = {"excluded_dir"}
+
+
 def _static_severity(reason: str, kind: str | None) -> str | None:
     if reason in _LOW_STATIC:
         return "low"
