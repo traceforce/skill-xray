@@ -483,6 +483,51 @@ def test_dynamic_shell_policy_is_invariant_across_postfilter_budget():
     assert findings[32].evidence["postfilter"] == "retained-after-validation-budget"
 
 
+def test_proven_false_shell_is_rejected_until_validation_budget():
+    text = "import subprocess\n" + "".join(
+        "subprocess.run(input(), shell=False)\n" for _ in range(33)
+    )
+    target = SelectedCode("run.py", text, "file")
+    report = {
+        "results": [
+            _taint_result(line, "SXV-008", "input()", line)
+            for line in range(2, 35)
+        ],
+        "errors": [],
+    }
+
+    findings = findings_from_report(report, {"0000.py": target})
+
+    assert len(findings) == 1
+    assert findings[0].line == 34 and findings[0].vector == "SXV-008"
+    assert findings[0].evidence["postfilter"] == "retained-after-validation-budget"
+
+
+def test_opaque_kwargs_is_gap_until_validation_budget_then_retained():
+    text = "import subprocess\n" + "".join(
+        "subprocess.run(input(), **options())\n" for _ in range(33)
+    )
+    target = SelectedCode("run.py", text, "file")
+    report = {
+        "results": [
+            _taint_result(line, "SXV-008", "input()", line)
+            for line in range(2, 35)
+        ],
+        "errors": [],
+    }
+
+    findings = findings_from_report(report, {"0000.py": target})
+
+    gaps = [finding for finding in findings if not finding.vector]
+    retained = [finding for finding in findings if finding.vector]
+    assert len(gaps) == 32
+    assert all(
+        finding.evidence["reason"] == "dynamic-subprocess-kwargs" for finding in gaps
+    )
+    assert len(retained) == 1 and retained[0].line == 34
+    assert retained[0].evidence["postfilter"] == "retained-after-validation-budget"
+
+
 @pytest.mark.parametrize(("text", "source_line", "sink_line"), [
     (
         "import os, sys\ncmd = 'safe'\nif mode:\n    cmd = sys.argv[1]\n"
