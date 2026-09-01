@@ -1,5 +1,4 @@
-"""Instruction-lane text attacks over the IR's markdown/raw text (ported engine_exfil,
-engine_directives, engine_hiddencomment).
+"""Instruction-lane text attacks over the IR's markdown/raw text.
 
 Three engines that all read the instruction lane -- artifacts whose kind is skill_manifest,
 instruction, or agent_identity and whose text is present (README/doc and configs are out of
@@ -48,7 +47,8 @@ def _html_comments(text):
         if start < 0:
             return
         end = text.find("-->", start + 4)
-        if end < 0:
+        if end < 0:                              # unterminated: CommonMark hides it to end-of-file
+            yield start, text[start + 4:]
             return
         yield start, text[start + 4:end]
         cursor = end + 3
@@ -140,12 +140,18 @@ _DEFENSIVE_RE = re.compile(
     r"mitigat\w*|red[- ]?team\w*)\b[^.;\n]{0,100}\b(?:prompt injection|jailbreaks?|"
     r"instruction injection|credential[- ]exfil(?:tration)?|exfiltration|remote (?:content|"
     r"instructions?)|malicious (?:skill|prompt|instruction|directive|payload)|unsafe "
-    r"(?:prompt|instruction|directive|payload)|attack(?:s|er)?|abuse)\b[^.;\n]*$|"
+    r"(?:prompt|instruction|directive|payload)|attack(?:s|er)?|abuse|"
+    # framing that DESCRIBES an injection rather than naming it: "flags any document/input/prompt
+    # that tells/instructs the model to ...", so a scanner SKILL.md does not report itself
+    r"(?:untrusted |malicious |hostile |any )*(?:document|input|prompt|instruction|text|"
+    r"content|message|payload|file|skill)s?\s+(?:that|which)\s+"
+    r"(?:tells?|instructs?|asks?|directs?|tries?|attempts?|says?|orders?|commands?))\b[^.;\n]*$|"
     r"\b(?:is an? (?:example|attempt|indicator) of|do not follow|never comply with)\b[^.;\n]*$",
     re.I)
 _DEFENSIVE_DETAIL_RE = re.compile(
     r"\b(?:such as|for example|the following|following|(?:skills?|prompts?|instructions?|"
-    r"payloads?|jailbreaks?|prompt injection|remote instructions?|attacks?|abuse) that|"
+    r"payloads?|jailbreaks?|prompt injection|remote instructions?|attacks?|abuse|documents?|"
+    r"inputs?|texts?|contents?|messages?|files?) (?:that|which)|"
     r"is an? (?:example|indicator) of|do not follow|never comply with)\b", re.I)
 
 
@@ -214,9 +220,12 @@ def _vartokens(s):
 
 _EGRESS_URL_RE = re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
 _EGRESS_VERB_RE = re.compile(
-    r"\bPOST(?:ing|ed)?\b|--data-binary|--data\b|-d @|\bupload(?:s|ing)?\b|"
-    r"\bexfiltrat|\bsend (?:it|them|the (?:contents|payload|snapshot))\b|"
-    r"\bcurl -X POST\b", re.I)
+    r"\bPOST(?:ing|ed)?\b|\bPUT(?:ting)?\b|--data-binary|--data\b|-d @|"
+    r"\bcurl\b[^\n]*\s-T\b|\bupload(?:s|ing)?\b|\bexfiltrat|\bcurl -X POST\b|"
+    # the sending verbs the negation list already knows, so a finding can be raised on the same
+    # vocabulary it is suppressed on (send/transmit/share/forward/leak/email/push/deliver/relay)
+    r"\b(?:send|transmit|share|forward|leak|email|mail|push|deliver|relay)\b"
+    r"[^.\n]{0,30}?\b(?:it|them|its?|the(?:ir)?|to|with|at)\b", re.I)
 # Bare GET exfiltration is handled separately and requires a secret-linked URL token.
 _FETCH_VERB_RE = re.compile(
     r"\bcurl\b|\bwget\b|\bfetch\b|\bInvoke-WebRequest\b|\bInvoke-RestMethod\b|"
@@ -232,6 +241,11 @@ _LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s)")
 
 _BASH_TOOLS = {"Bash", "Shell", "Terminal", "Execute"}
 _NETWORK_TOOLS = {"WebFetch", "WebSearch"}
+# Agent tools that genuinely cannot reach the network. Anything else -- an MCP tool, Task (which
+# spawns a subagent with its own tools), or an unrecognised name -- fails OPEN as network-capable,
+# the way an undeclared manifest does, rather than silently switching the credential detector off.
+_LOCAL_ONLY_TOOLS = {"Read", "Write", "Edit", "MultiEdit", "NotebookEdit",
+                     "Glob", "Grep", "LS", "TodoWrite", "NotebookRead"}
 _NETWORK_SINGLE = {"curl", "wget", "nc", "ncat", "socat", "ssh", "scp", "sftp",
                    "http", "httpie", "python", "python3", "node", "npx", "perl", "ruby",
                    "git", "gh", "hub", "pip", "pip3", "pipx", "poetry", "uv", "npm", "yarn",
@@ -273,8 +287,8 @@ def _reaches_network(grant):
     """Reconstruct monolith Grant.reaches_network from the IR's data-only Grant."""
     if grant.tool in _NETWORK_TOOLS:
         return True
-    if grant.tool not in _BASH_TOOLS:               # only bash-family execution reaches out
-        return False
+    if grant.tool not in _BASH_TOOLS:               # non-bash: known-local tools cannot reach out,
+        return grant.tool not in _LOCAL_ONLY_TOOLS   # MCP / Task / unrecognised fail open
     command, tokens = _grant_tokens(grant.pattern)
     if grant.pattern is None or command in ("", "*", "**"):   # wildcard bash -> anything
         return True
@@ -284,6 +298,14 @@ def _reaches_network(grant):
     if cmd0 in _NETWORK_SINGLE:
         return True
     return cmd0 not in _LOCAL_ONLY_CMDS
+
+
+def _reach_is_fail_open(grant):
+    """True when a grant counts as network-capable ONLY by the fail-open rule (an unrecognized
+    non-bash tool), not a proven reach (WebFetch/WebSearch or a bash network command). Used to
+    grade SXV-011 severity: an unproven reach must not assert certainty at critical."""
+    return (grant.tool not in _NETWORK_TOOLS and grant.tool not in _BASH_TOOLS
+            and grant.tool not in _LOCAL_ONLY_TOOLS)
 
 
 def _is_table_row(raw):
@@ -312,6 +334,7 @@ _RI_OBEYNOUN = (r"instructions?|directions?|steps?|commands?|orders?|directives?
 _RI_STRONGNOUN = (r"instructions?|directions?|commands?|orders?|directives?|"
                   r"playbooks?|rulesets?")
 _RI_FOLLOWVERB = r"follow|obey|comply with|adhere to|execute|run|carry out|apply|act on|perform"
+_RI_FOLLOWVERB_RE = re.compile(r"\b(?:" + _RI_FOLLOWVERB + r")\b", re.I)
 _RI_PIPE_RE = re.compile(
     r"\b(?:curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n|]*\|\s*(?:ba|z)?sh\b", re.I)
 _RI_PROSE_PIPE_RE = re.compile(
@@ -390,12 +413,35 @@ _RI_HARDEXEC_RE = re.compile(
     r"\b(?:do|run)\s+(?:exactly\s+)?(?:what|whatever)\b[^.\n]{0,48}"
     r"\b(?:says?|returns?|contains?)\b", re.I)
 _RI_WINDOW = 2              # SXV-041: lines each side searched for the remote-source signal
+_RI_WRAP_MAX = 8            # max lines a soft-wrapped directive may span (keeps the join linear)
 # This omits the shared example regex's ambiguous bare "read" token.
 _RI_EXAMPLE_INTRO_RE = re.compile(
     r"\b(?:such as|e\.?g\.?|i\.?e\.?|for example|for instance|for reference|"
     r"an example|example of|a sample|looks? like|like this|as shown(?: below)?|"
     r"shown below|the one (?:below|above)|might (?:say|write|include|contain))\b\s*:?|"
     r":\s*[\"']", re.I)
+# Clause/sequence breaks: a frame before one of these governs an EARLIER step, not this directive.
+_RI_SEQ_BREAK_RE = re.compile(r"[;,]|\.\s|\bthen\b", re.I)
+# A remote-follow is STRONGLY characterized when it names an obey-noun or ties to the remote's
+# returned content; a bare "follow the steps at <url>" doc pointer is weak. Graded on the matched
+# text, not the rule, because "follow the instructions it contains" and "follow the steps at ..."
+# share one rule but need opposite treatment under an earlier-step benign frame.
+_RI_STRONG_FOLLOW_RE = re.compile(
+    r"\b(?:instructions?|directions?|directives?|commands?|orders?|playbooks?|rulesets?)\b|"
+    r"\b(?:it|they)\s+(?:contains?|returns?|lists?|provides?|says?|includes?|holds?|"
+    r"specif\w+|prescribes?|spells?|dictates?|states?)\b|"
+    r"\b(?:returned|provided|listed|contained|specified)\s+(?:by|in|at)\b|"
+    # download-a-remote-script-and-run-it is unambiguous RCE, never a doc pointer
+    r"\b(?:run|source|exec(?:ute)?)\s+it\b", re.I)
+
+
+def _ri_governing_prefix(before):
+    """`before` truncated at the last clause/sequence break, so a benign frame in an earlier step
+    ('See the docs, then fetch ... and follow it') does not rescue the directive in this step."""
+    last = 0
+    for m in _RI_SEQ_BREAK_RE.finditer(before):
+        last = m.end()
+    return before[last:]
 
 
 def _strip_urls(s):
@@ -649,8 +695,7 @@ def _directive_findings(art):
                     continue
                 before = raw[:m.start()]
                 described = _EXAMPLE_INTRO_RE.search(before) or intro_prev
-                if vid != "SXV-028":
-                    described = described or _is_defensive_frame(before)
+                described = described or _is_defensive_frame(before)
                 if described:
                     continue
                 if vid == "SXV-029" and _ANTIREFUSAL_BENIGN_RE.search(raw):
@@ -677,6 +722,21 @@ def _directive_findings(art):
     return out
 
 
+def _ri_join_wrap(raws, n, in_fence):
+    """Flatten ONLY a genuine soft-wrap: continuation lines of the same sentence. Stops at a
+    sentence terminator, a blank/fenced line, a new list item, or a table row -- so a directive
+    that wraps across a line break matches, while two separate sentences/steps do not merge."""
+    parts = [raws[n - 1]]
+    j = n
+    while (j < len(raws) and raws[j].strip() and (j + 1) not in in_fence
+           and not _LIST_ITEM_RE.match(raws[j]) and not _is_table_row(raws[j])
+           and not parts[-1].rstrip().endswith((".", "!", "?", ":", ";"))
+           and j - n < _RI_WRAP_MAX):
+        parts.append(raws[j])
+        j += 1
+    return _flatten_prose("\n".join(parts), n) if len(parts) > 1 else raws[n - 1]
+
+
 def _remote_instr_findings(art):
     """SXV-041: the instruction lane directs the agent to fetch remote content and follow it as
     instructions (progressive disclosure). Fires only when the fetched content is characterised
@@ -687,11 +747,7 @@ def _remote_instr_findings(art):
     in_fence, _open = _fenced_lines(art.markdown, raws)
     fired = set()
     total = 0
-    last_nonblank = ""
     for n, raw in enumerate(raws, 1):
-        prev_nonblank = last_nonblank
-        if raw.strip():
-            last_nonblank = raw
         if n in in_fence or n in fired:         # a fenced install one-liner is an example
             continue
         lo = max(0, n - 1 - _RI_WINDOW)
@@ -699,17 +755,33 @@ def _remote_instr_findings(art):
         ctx = "\n".join(raws[lo:hi])            # the matched line plus +/- _RI_WINDOW lines
         sline = _strip_urls(raw)                # rules match on URL-stripped text (spans + words)
         hit = _ri_match(sline, raw, ctx)
+        # Only when a directive plausibly STARTS on this line (a fetch/follow cue) do we retry on
+        # the soft-wrap join, so an unrelated earlier line is never merged into a later directive.
+        if hit is None and (_RI_FETCHVERB_RE.search(raw) or _RI_FOLLOWVERB_RE.search(raw)):
+            joined = _ri_join_wrap(raws, n, in_fence)   # the directive may wrap onto the next line,
+            if joined != raw:                           # retry the follow match on the join but
+                sjoined = _strip_urls(joined)           # keep the URL/pipe gate on THIS line so a
+                jhit = _ri_match(sjoined, raw, ctx)     # next line's URL is not the remote source;
+                # accept only when the directive STARTS on this line, else the continuation line
+                # fires natively (no duplicate, correct location)
+                if jhit is not None and jhit[1] <= len(_strip_urls(raw).strip()) + 1:
+                    sline, hit = sjoined, jhit
         if hit is None:
             continue
         matched, col = hit
         prose = _strip_urls(ctx)
         before = sline[: max(0, col - 1)]
-        # Framing must precede the remote-follow cue.
-        if _is_defensive_frame(before) or _RI_EXAMPLE_INTRO_RE.search(before) \
-                or _RI_EXAMPLE_INTRO_RE.search(_strip_urls(prev_nonblank)):
+        # A defensive frame ("we detect X that then tells the agent to ...") is a governing clause
+        # scoping the whole sentence across sequence breaks, so it is matched on the full prefix.
+        if _is_defensive_frame(before):
             continue
-        benign_frame = (before + matched).strip()
-        if _RI_BENIGN_RE.search(benign_frame) and not _RI_HARDEXEC_RE.search(prose):
+        # A weak lead ("For example, ... then <directive>") does NOT rescue a STRONGLY characterized
+        # remote-follow/RCE; it still suppresses a weak "follow the steps at <docs-url>" pointer.
+        strong = bool(_RI_STRONG_FOLLOW_RE.search(matched))
+        scope = _ri_governing_prefix(before) if strong else before
+        if _RI_EXAMPLE_INTRO_RE.search(scope):
+            continue
+        if _RI_BENIGN_RE.search(scope + matched) and not _RI_HARDEXEC_RE.search(prose):
             continue
         fired.add(n)
         total += 1
@@ -799,7 +871,9 @@ _CRED_AUTH_VALUE_RE = re.compile(
 _CRED_BARE_NETRC_RE = re.compile(r"--netrc\b(?!-file)", re.I)
 _CRED_AUTH_PROSE_RE = re.compile(
     r"\b(?:auth(?:enticate)?(?:\s+\w+){0,2}\s+(?:from|with|using)|log\s?in(?:\s+\w+){0,2}\s+"
-    r"(?:from|with)|registry auth|credentials?\s+(?:for|from))\b", re.I)
+    r"(?:from|with)|registry auth|credentials?\s+(?:for|from)|"
+    r"(?:with|using)\s+(?:the\s+|your\s+)?(?:token|credential|key|secret|password|api\s+key)s?)\b",
+    re.I)
 _CRED_PAYLOAD_FLAG_RE = re.compile(
     r"(?:-d|--data(?:-binary|-raw|-urlencode)?|-T|--upload-file|-F|--form)\s*@?\s*$", re.I)
 # A credential governed by an egress verb is payload, not authentication input.
@@ -828,6 +902,20 @@ def _cred_is_auth_input(raw, cred):
     direct_auth_value = bool(_CRED_AUTH_VALUE_RE.search(before))
     default_netrc = cred.lower().endswith(".netrc") and _CRED_BARE_NETRC_RE.search(raw)
     return bool(direct_auth_value or default_netrc or _CRED_AUTH_PROSE_RE.search(before))
+
+
+def _egress_backref(egress_text):
+    """A credential NOUN on the send line links a split read only as a PAYLOAD back-reference: a
+    reference NOT itself governed by using/with/via (which would make it the auth for the send). So
+    'Upload X using the credentials' does not drag in an unrelated credential path, while
+    'upload the key' / 'POST the credentials' still link the read that produced it. A bare pronoun
+    object ('upload it') is deliberately NOT a backref: it would fire on ordinary publish/deploy
+    docs that name an auth store, and anaphora cannot tell payload-it from package-it."""
+    for m in _CRED_BACKREF_RE.finditer(egress_text):
+        pre = egress_text[max(0, m.start() - 14):m.start()]
+        if not re.search(r"\b(?:using|with|via)\s+(?:the\s+|your\s+|its\s+)?$", pre, re.I):
+            return True
+    return False
 
 
 def _get_exfil_egresses(raws):
@@ -938,16 +1026,19 @@ def _exfil_findings(art, manifest_by_dir):
     # All egress paths share the governing manifest's network-reach gate.
     manifest = _governing_manifest(manifest_by_dir, art.rel)
     if manifest is None or "allowed-tools" not in (manifest.frontmatter or {}):
-        reaching = "undeclared_inherits_all"
+        reaching, proven_reach = "undeclared_inherits_all", True   # inherits Bash/WebFetch
     else:
         grants = manifest.grants or []
         bash_denied = any(g.tool in _BASH_TOOLS and g.broad and not g.allowed for g in grants)
         allowed = [g for g in grants if g.allowed
                    and not (bash_denied and g.tool in _BASH_TOOLS)]
-        net = sorted(g.raw for g in allowed if _reaches_network(g))
-        if not net:                             # declared, but nothing reaches the network
+        net_grants = [g for g in allowed if _reaches_network(g)]
+        if not net_grants:                      # declared, but nothing reaches the network
             return []
-        reaching = ", ".join(net)
+        reaching = ", ".join(sorted(g.raw for g in net_grants))
+        # A reach proven by a network tool or a bash network command is critical; a reach that
+        # holds ONLY by failing open on an unrecognized tool is unproven -> high, worded as such.
+        proven_reach = any(not _reach_is_fail_open(g) for g in net_grants)
 
     # Try every primary candidate so unrelated telemetry cannot shadow exfiltration.
     egress = None
@@ -955,7 +1046,7 @@ def _exfil_findings(art, manifest_by_dir):
     cred_hits = []
     for cand in _post_egresses(raws, art.markdown):
         egress_text = raws[cand["line"] - 1]
-        egress_backref = bool(_CRED_BACKREF_RE.search(egress_text))
+        egress_backref = _egress_backref(egress_text)
         egress_vars = _vartokens(egress_text) - _egress_host_tokens(cand["url"])
         hits = _collect_cred_hits(raws, in_fence, open_by_line, cand["line"],
                                   egress_vars, egress_backref)
@@ -978,7 +1069,7 @@ def _exfil_findings(art, manifest_by_dir):
         for cand in _nonhttp_egresses(raws):
             egress_text = raws[cand["line"] - 1]
             egress_vars = _vartokens(egress_text)
-            egress_backref = bool(_CRED_BACKREF_RE.search(egress_text))
+            egress_backref = _egress_backref(egress_text)
             hits = _collect_cred_hits(raws, in_fence, open_by_line, cand["line"],
                                       egress_vars, egress_backref)
             if hits:
@@ -994,12 +1085,14 @@ def _exfil_findings(art, manifest_by_dir):
     tokens = [{"kind": r["kind"], "line": r["line"], "text": r["text"]}
               for r in sorted(cred_hits, key=lambda x: (x["line"], x["col"]))]
     return [Finding(
-        vector="SXV-011", rule="cred-egress", severity="critical",
+        vector="SXV-011", rule="cred-egress",
+        severity="critical" if proven_reach else "high",
         path=art.rel, line=first["line"],
         message=("instruction lane directs the agent to read %d credential artifact "
-                 "reference(s) (%s) and send them to %s via %s; positive imperative polarity and "
-                 "the declared grant %s can reach the network"
-                 % (len(cred_hits), ", ".join(kinds), egress["url"], method.upper(), reaching)),
+                 "reference(s) (%s) and send them to %s via %s; positive imperative polarity and %s"
+                 % (len(cred_hits), ", ".join(kinds), egress["url"], method.upper(),
+                    "the declared grant %s can reach the network" % reaching if proven_reach
+                    else "network reach unproven (fail-open on unrecognized grant %s)" % reaching)),
         evidence={"credential_tokens": tokens, "egress_target": egress["url"],
                   "egress_line": egress["line"], "egress_method": method,
                   "polarity": "positive",
@@ -1062,9 +1155,9 @@ def _cap_findings(findings):
 def check(parsed) -> list:
     """Run the three instruction-lane engines over every instruction-lane artifact (and any
     doc/other artifact an instruction-lane file references) and return SXV-011/027/028/029/030/031
-    findings (plus SXV-041 remote instruction loading). Per-artifact isolated: a pathological
-    artifact records a scoped error and the scan moves on, so it can never drop another
-    artifact's findings."""
+    findings (plus SXV-041 remote instruction loading). Per-engine and per-artifact isolated: a
+    crashing engine records a scoped high check-error and the others still run, so a crash in a
+    cheap engine can never drop the critical credential finding."""
     manifest_by_dir = {}
     for p in parsed.artifacts:
         if p.kind == "skill_manifest":
@@ -1075,13 +1168,15 @@ def check(parsed) -> list:
     for p in parsed.artifacts:
         if p.text is None or (p.kind not in _LANE_KINDS and p.rel not in lifted):
             continue
-        try:
-            out.extend(_hidden_comment_findings(p))
-            out.extend(_directive_findings(p))
-            out.extend(_remote_instr_findings(p))
-            out.extend(_exfil_findings(p, manifest_by_dir))
-        except Exception as exc:                # a poisoned artifact must not abort the scan
-            out.append(Finding(
-                vector="", rule="check-error", severity="low", path=p.rel,
-                message="instruction_exfil skipped %s: %s" % (p.rel, type(exc).__name__)))
+        # Each engine is isolated: a crash in one (e.g. a cheap text engine) must not stop the
+        # others, above all the critical credential-egress engine. Skipped analysis reads as a
+        # high check-error, never as clean.
+        for engine in (_hidden_comment_findings, _directive_findings, _remote_instr_findings,
+                       lambda a: _exfil_findings(a, manifest_by_dir)):
+            try:
+                out.extend(engine(p))
+            except Exception as exc:            # a poisoned artifact must not abort the scan
+                out.append(Finding(
+                    vector="", rule="check-error", severity="high", path=p.rel,
+                    message="instruction_exfil skipped %s: %s" % (p.rel, type(exc).__name__)))
     return _cap_findings(out)
