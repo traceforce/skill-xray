@@ -164,6 +164,13 @@ _ANTIREFUSAL_BENIGN_RE = re.compile(
     r"\b(?:the|this|that|our|a|an|it|its|they|their)\s+\w+\s+"
     r"(?:will|would|does|can|shall|may)\s+never\s+refuse\b|"
     r"\bno disclaimers?\s+(?:or|and|,)\s*(?:no\s+)?(?:warrant|liabilit|guarantee)", re.I)
+# A prohibition on an attack action is defensive guidance, not the attack.  Keep this
+# action-specific: ``never refuse`` is itself an anti-refusal directive and must still fire.
+_NEGATED_ATTACK_ACTION_RE = re.compile(
+    r"\b(?:do not|don'?t|never|must not|must never|cannot|can'?t|will not|won'?t|"
+    r"should not|shouldn'?t)\s+(?:ever\s+|attempt to\s+|try to\s+)*"
+    r"(?:ignore|disregard|override|overrule|supersede|bypass|circumvent|disable|"
+    r"skip|omit|remove|drop|strip|enable|activate)\b", re.I)
 # Example framing must precede the directive.
 _EXAMPLE_INTRO_RE = re.compile(
     r"\b(?:such as|e\.?g\.?|i\.?e\.?|for example|for instance|a typical|an example|"
@@ -697,6 +704,9 @@ def _directive_findings(art):
                 described = _EXAMPLE_INTRO_RE.search(before) or intro_prev
                 described = described or _is_defensive_frame(before)
                 if described:
+                    continue
+                context = raw[max(0, m.start() - 48):m.end()]
+                if _NEGATED_ATTACK_ACTION_RE.search(context):
                     continue
                 if vid == "SXV-029" and _ANTIREFUSAL_BENIGN_RE.search(raw):
                     continue                    # 3rd-person 'X will never refuse' / license copy
