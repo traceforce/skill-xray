@@ -148,6 +148,7 @@ def test_live_static_rules_reject_known_false_positives(make_package):
         ),
         "home_listing.py": "from pathlib import Path\nitems = list(Path.home().iterdir())\n",
         "authorized_keys_write.py": "open('/home/user/.ssh/authorized_keys', 'w').write('key')\n",
+        "credential_write.py": "open('/home/user/.aws/credentials', 'w').write('safe')\n",
     }
     parsed = parse.parse_package(ingest.build_package(str(make_package(files))))
 

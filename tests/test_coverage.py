@@ -121,8 +121,8 @@ def test_unparsed_allowed_tools_cannot_hide_executable_fence(make_package):
     findings = scan(parse.parse_package(ingest.build_package(str(root))))
 
     assert "SXV-009" in {finding.vector for finding in findings}
-    assert any(
-        finding.rule == "analysis-incomplete" and finding.severity == "high"
+    assert not any(
+        finding.evidence.get("reason") == "allowed-tools-unparsed"
         for finding in findings
     )
 

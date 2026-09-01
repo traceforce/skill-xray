@@ -430,6 +430,7 @@ rules:
       - pattern-either:
           - pattern: $FETCH ... $URL ... | $SH
           - pattern: $FETCH ... $URL ... | $SH -s
+          - pattern: $FETCH ... $URL ... | $SH -s ...
           - pattern: $FETCH ... $URL ... | $SH -e
           - pattern: $FETCH ... $URL ... | $SH /dev/stdin
           - pattern: $FETCH ... $URL ... | sudo $SH
@@ -454,7 +455,7 @@ rules:
           regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
       - metavariable-regex:
           metavariable: $SH
-          regex: '^(?:sh|bash|zsh|ksh|dash|fish)$'
+          regex: '^(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash|fish)$'
 
   - id: skill-xray.shell-fetch-pipe-env-exec
     languages: [bash]
@@ -465,7 +466,9 @@ rules:
       skill_xray_rule: opengrep-shell-fetch-pipe-exec
       skill_xray_severity: high
     patterns:
-      - pattern: $FETCH ... $URL ... | env $ASSIGN $SH
+      - pattern-either:
+          - pattern: $FETCH ... $URL ... | $ENV $SH ...
+          - pattern: $FETCH ... $URL ... | $ENV $ASSIGN ... $SH ...
       - pattern-not: $FETCH ... -o $URL ... | ...
       - pattern-not: $FETCH ... --output $URL ... | ...
       - pattern-not: $FETCH ... -O $URL ... | ...
@@ -481,8 +484,11 @@ rules:
           metavariable: $ASSIGN
           regex: '^[A-Za-z_][A-Za-z0-9_]*=.*$'
       - metavariable-regex:
+          metavariable: $ENV
+          regex: '^(?:/usr/bin/)?env$'
+      - metavariable-regex:
           metavariable: $SH
-          regex: '^(?:sh|bash|zsh|ksh|dash|fish)$'
+          regex: '^(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash|fish)$'
 
   - id: skill-xray.shell-fetch-pipe-timeout-exec
     languages: [bash]
@@ -568,13 +574,13 @@ rules:
       skill_xray_severity: high
     patterns:
       - pattern-either:
-          - pattern: pip install $URL
-          - pattern: pip3 install $URL
-          - pattern: pipx install $URL
-          - pattern: uv pip install $URL
-          - pattern: npm install $URL
-          - pattern: yarn add $URL
-          - pattern: gem install $URL
+          - pattern: pip install ... $URL ...
+          - pattern: pip3 install ... $URL ...
+          - pattern: pipx install ... $URL ...
+          - pattern: uv pip install ... $URL ...
+          - pattern: npm install ... $URL ...
+          - pattern: yarn add ... $URL ...
+          - pattern: gem install ... $URL ...
       - metavariable-regex:
           metavariable: $URL
           regex: '(?i)^(?:https?|ftp)://'
@@ -644,7 +650,7 @@ rules:
           regex: '^(?:python|python3)$'
       - metavariable-regex:
           metavariable: $BODY
-          regex: '(?is).*exec\s*\(\s*(?:(?:sys\.)?stdin\.read\s*\(\s*\)|open\s*\(\s*(?:0|["'']/dev/stdin["''])\s*\)\.read\s*\(\s*\)|input\s*\(\s*\)|os\.read\s*\(\s*0\s*,[^)]*\))\s*\).*'
+          regex: '(?is)(?:.*exec\s*\(\s*(?:(?:sys\.)?stdin\.read\s*\(\s*\)|open\s*\(\s*(?:0|["'']/dev/stdin["''])\s*\)\.read\s*\(\s*\)|input\s*\(\s*\)|os\.read\s*\(\s*0\s*,[^)]*\))\s*\).*|.*(?P<STDIN_VAR>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:(?:sys\.)?stdin\.read\s*\(\s*\)|open\s*\(\s*(?:0|["'']/dev/stdin["''])\s*\)\.read\s*\(\s*\)|input\s*\(\s*\)|os\.read\s*\(\s*0\s*,[^)]*\))\s*;(?:(?!(?P=STDIN_VAR)\s*=).)*exec\s*\(\s*(?P=STDIN_VAR)\s*\).*)'
 
   - id: skill-xray.shell-staged-curl-direct-exec
     languages: [bash]
@@ -1026,7 +1032,14 @@ rules:
       skill_xray_severity: high
     patterns:
       - pattern-either:
-          - pattern: open($PATH, ...)
+          - pattern: open($PATH)
+          - patterns:
+              - pattern-either:
+                  - pattern: open($PATH, $MODE, ...)
+                  - pattern: open($PATH, mode=$MODE, ...)
+              - metavariable-regex:
+                  metavariable: $MODE
+                  regex: '(?i)^["'']?r[bt+]*["'']?$'
           - pattern: Path($PATH).read_text(...)
           - pattern: Path($PATH).read_bytes(...)
       - metavariable-regex:
