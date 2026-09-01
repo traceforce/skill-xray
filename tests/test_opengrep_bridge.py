@@ -418,7 +418,7 @@ def test_subprocess_shell_boolean_expression(shell, retained):
     assert bool(findings) is retained
 
 
-def test_dynamic_subprocess_shell_is_fail_visible_without_false_vector():
+def test_explicit_dynamic_subprocess_shell_retains_vector():
     target = SelectedCode(
         "run.py",
         "import subprocess\nflag = unknown()\nsubprocess.run(input(), shell=flag)\n",
@@ -430,10 +430,49 @@ def test_dynamic_subprocess_shell_is_fail_visible_without_false_vector():
         {"results": [result], "errors": []}, {"0000.py": target},
     )
 
+    assert [(finding.vector, finding.rule) for finding in findings] == [
+        ("SXV-008", "opengrep-python-command-injection"),
+    ]
+    assert findings[0].evidence["shell_validation"] == "dynamic-explicit-shell-retained"
+
+
+def test_unresolved_subprocess_kwargs_is_fail_visible_without_false_vector():
+    target = SelectedCode(
+        "run.py", "import subprocess\nsubprocess.run(input(), **options())\n", "file",
+    )
+    result = _taint_result(2, "SXV-008", "input()", 2)
+
+    findings = findings_from_report(
+        {"results": [result], "errors": []}, {"0000.py": target},
+    )
+
     assert [(finding.vector, finding.rule, finding.severity) for finding in findings] == [
         ("", "analysis-incomplete", "high"),
     ]
-    assert findings[0].evidence["reason"] == "dynamic-subprocess-shell"
+    assert findings[0].evidence["reason"] == "dynamic-subprocess-kwargs"
+
+
+def test_dynamic_shell_policy_is_invariant_across_postfilter_budget():
+    text = "import subprocess\n" + "".join(
+        "subprocess.run(input(), shell=unknown())\n" for _ in range(33)
+    )
+    target = SelectedCode("run.py", text, "file")
+    report = {
+        "results": [
+            _taint_result(line, "SXV-008", "input()", line)
+            for line in range(2, 35)
+        ],
+        "errors": [],
+    }
+
+    findings = findings_from_report(report, {"0000.py": target})
+
+    assert len(findings) == 33
+    assert all(finding.vector == "SXV-008" for finding in findings)
+    assert all(
+        finding.evidence["shell_validation"] == "dynamic-explicit-shell-retained"
+        for finding in findings
+    )
 
 
 @pytest.mark.parametrize(("text", "source_line", "sink_line"), [

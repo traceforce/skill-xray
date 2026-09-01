@@ -50,14 +50,14 @@ def test_frozen_python_contract_has_expected_shape():
     positives = sum(case.vector is not None for case in cases)
     # A variable key does not sanitize a tainted container; the reviewed contract therefore has
     # one more positive than the original frozen expectations.
-    assert (len(cases), positives, len(cases) - positives) == (258, 130, 128)
+    assert (len(cases), positives, len(cases) - positives) == (258, 135, 123)
     assert len({case.name for case in cases}) == len(cases)
 
 
 def test_live_opengrep_matches_frozen_python_contract(make_package):
     executable = _live_executable()
     cases = _contract()
-    assert (len(cases), sum(case.vector is not None for case in cases)) == (258, 130)
+    assert (len(cases), sum(case.vector is not None for case in cases)) == (258, 135)
     files = {
         "%03d_%s.py" % (index, case.name.removeprefix("test_")): case.code
         for index, case in enumerate(cases)
@@ -73,9 +73,19 @@ def test_live_opengrep_matches_frozen_python_contract(make_package):
     expected[(overlap, "SXV-019")] = 1
     findings = opengrep_check(parsed, executable=executable, timeout=90)
     gaps = [finding for finding in findings if not finding.vector]
-    assert len(gaps) == 18
-    assert {finding.evidence.get("reason") for finding in gaps} == {
-        "dynamic-subprocess-shell",
+    assert {
+        (finding.path, finding.evidence.get("reason")) for finding in gaps
+    } == {
+        ("160_shadowed_dict_constructor_does_not_create_shell_proof.py",
+         "dynamic-subprocess-kwargs"),
+        ("161_local_kwargs_parameter_shadows_truthy_global.py",
+         "dynamic-subprocess-kwargs"),
+        ("199_kwargs-clean-2.py", "dynamic-subprocess-kwargs"),
+        *(("%03d_mapping-update-False-%d-%d.py" % (index, index - 216, index - 168),
+           "dynamic-subprocess-kwargs") for index in range(216, 223)),
+        ("231_dict_get_invalid_arity_is_clean.py", "dynamic-subprocess-kwargs"),
+        ("232_dict_get_eager_side_effect_is_not_static_proof.py",
+         "dynamic-subprocess-kwargs"),
     }
     actual = _actual(findings)
     assert actual == expected
@@ -144,6 +154,20 @@ def test_live_static_rules_reject_handle_and_non_socket_false_positives(make_pac
     assert not [finding for finding in findings if finding.vector in {
         "SXV-023", "SXV-024", "SXV-025", "SXV-040",
     }]
+
+
+def test_live_cloud_upload_sink_positive(make_package):
+    code = (
+        "import boto3\n"
+        "client = boto3.client('s3')\n"
+        "client.upload_file('/tmp/report.txt', 'bucket', 'report.txt')\n"
+    )
+    parsed = parse.parse_package(ingest.build_package(str(make_package({"upload.py": code}))))
+
+    findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
+
+    assert [(finding.path, finding.vector) for finding in findings if finding.vector == "SXV-024"] \
+        == [("upload.py", "SXV-024")]
 
 
 def test_live_reverse_shell_pty_requires_a_constructed_socket(make_package):

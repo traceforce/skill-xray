@@ -37,37 +37,6 @@ class CodeUnit:
     dialect: str | None = None
 
 
-def _parent(rel: str) -> str:
-    return rel.rsplit("/", 1)[0] if "/" in rel else ""
-
-
-def _manifest_index(parsed):
-    index = {}
-    for artifact in parsed.artifacts:
-        if artifact.kind == "skill_manifest":
-            index.setdefault(_parent(artifact.rel), artifact)
-    return index
-
-
-def _governing_manifest(index, rel: str):
-    directory = _parent(rel)
-    while True:
-        if directory in index:
-            return index[directory]
-        if not directory:
-            return None
-        directory = _parent(directory)
-
-
-def _grants_are_unparsed(index, rel: str) -> bool:
-    manifest = _governing_manifest(index, rel)
-    if manifest is None:
-        return False
-    grants = manifest.grants or []
-    return (("grants_unparsed_shape", "allowed-tools") in manifest.diagnostics
-            or any(grant.allowed and not grant.parsed for grant in grants))
-
-
 def _fence_lang(info: str):
     parts = info.split()
     if not parts:
@@ -151,10 +120,9 @@ def _unsupported_shell(
 
 
 def build_code_lane(parsed) -> tuple[list[CodeUnit], list[Finding]]:
-    """Return real scripts, executable fences, and fail-visible grant notes."""
+    """Return real scripts, executable fences, and fail-visible coverage notes."""
     units = []
     notes = []
-    manifests = _manifest_index(parsed)
     for artifact in parsed.artifacts:
         if artifact.kind not in _SCRIPT_KINDS or artifact.text is None:
             continue
@@ -174,19 +142,6 @@ def build_code_lane(parsed) -> tuple[list[CodeUnit], list[Finding]]:
             continue
         if not artifact.markdown or not artifact.markdown.fences:
             continue
-        executable_fences = any(
-            _fence_lang(info) for info, _content, _line in artifact.markdown.fences
-        )
-        if _grants_are_unparsed(manifests, artifact.rel) and executable_fences:
-            notes.append(Finding(
-                vector="",
-                rule="analysis-incomplete",
-                severity="high",
-                path=artifact.rel,
-                message=("executable fences were analysed conservatively because the governing "
-                         "allowed-tools value could not be parsed"),
-                evidence={"reason": "allowed-tools-unparsed", "origin": "fence"},
-            ))
         for info, content, marker_line in artifact.markdown.fences:
             classified = _fence_lang(info)
             if (classified and classified[0] == "shell"

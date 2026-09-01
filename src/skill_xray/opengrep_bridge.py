@@ -415,7 +415,7 @@ def _contains_position(node, line: int, col: int | None) -> bool:
 
 def _subprocess_shell_status(
     tree: ast.Module, line: int, col: int | None,
-) -> bool | None:
+) -> tuple[bool | None, bool]:
     scopes = _scope_chain(tree, line, col)
     values = _static_values_at(tree, line, col)
     for node in ast.walk(scopes[-1]):
@@ -433,29 +433,31 @@ def _subprocess_shell_status(
             continue
         shell = next((item for item in node.keywords if item.arg == "shell"), None)
         if shell is not None:
+            if isinstance(shell.value, ast.Subscript):
+                owner = _static_value(shell.value.value, values)
+                key = _static_value(shell.value.slice, values)
+                if owner is not _UNKNOWN and key is not _UNKNOWN:
+                    try:
+                        owner[key]
+                    except (KeyError, IndexError, TypeError):
+                        return False, True
             value = _static_value(shell.value, values)
-            return None if value is _UNKNOWN else bool(value)
+            return (None if value is _UNKNOWN else bool(value)), True
         mappings = [
             _static_value(item.value, values)
             for item in node.keywords if item.arg is None
         ]
         if mappings:
             if any(mapping is _UNKNOWN for mapping in mappings):
-                return None
+                return None, False
             return any(
                 isinstance(mapping, dict)
                 and "shell" in mapping
                 and bool(mapping["shell"])
                 for mapping in mappings
-            )
-        return True
-    return True
-
-
-def _subprocess_shell_is_eligible(
-    tree: ast.Module, line: int, col: int | None,
-) -> bool:
-    return _subprocess_shell_status(tree, line, col) is True
+            ), False
+        return True, False
+    return True, False
 
 
 def _parents(tree: ast.Module):
@@ -1239,7 +1241,6 @@ def _command_import_hides_outer_source(
 def _python_definite_false_positive(
     extra: dict, target_name: str, target: SelectedCode, vector: str,
     line: int, col: int | None, trees: dict[str, ast.Module | None],
-    *, check_shell: bool = True,
 ) -> bool:
     if vector not in _PY_TAINT_VECTORS or target.suffix != ".py":
         return False
@@ -1258,7 +1259,6 @@ def _python_definite_false_positive(
             tree, source, source_col, vector, source_end, source_end_col
         )
         or _assigned_alias_is_invalid(extra, tree, line, col)
-        or (check_shell and not _subprocess_shell_is_eligible(tree, line, col))
         or _call_flow_is_impossible(tree, source, line, source_col)
         or _receiver_flow_is_impossible(tree, line)
         or _unawaited_async_flow(tree, source, line, source_col, col)
@@ -1378,40 +1378,40 @@ def findings_from_report(
             count = postfilter_counts.get(target_name, 0)
             postfilter_counts[target_name] = count + 1
             postfilter_skipped = count >= _MAX_POSTFILTERS_PER_TARGET
-            # ponytail: after the reject-only validation budget, retain engine findings.
+            if target_name not in python_trees:
+                try:
+                    python_trees[target_name] = parse_python(target.text)
+                except (SyntaxError, ValueError, RecursionError, MemoryError):
+                    python_trees[target_name] = None
+            tree = python_trees[target_name]
+            shell_status, explicit_shell = _subprocess_shell_status(
+                tree, line, location["start"].get("col"),
+            ) if tree else (True, False)
+            if shell_status is False:
+                continue
+            dynamic_explicit_shell = shell_status is None and explicit_shell
+            if shell_status is None and not explicit_shell:
+                findings.append(Finding(
+                    vector="",
+                    rule="analysis-incomplete",
+                    severity="high",
+                    path=target.rel,
+                    line=line,
+                    message=("A tainted subprocess flow uses unresolved keyword arguments; "
+                             "execution eligibility could not be proven."),
+                    evidence={
+                        "engine": "opengrep",
+                        "reason": "dynamic-subprocess-kwargs",
+                        "origin": target.origin,
+                    },
+                ))
+                continue
+            # After the reject-only validation budget, retain engine findings.
             if not postfilter_skipped:
-                if target_name not in python_trees:
-                    try:
-                        python_trees[target_name] = parse_python(target.text)
-                    except (SyntaxError, ValueError, RecursionError, MemoryError):
-                        python_trees[target_name] = None
-                tree = python_trees[target_name]
                 if _python_definite_false_positive(
                     extra, target_name, target, vector, line,
                     location["start"].get("col"), python_trees,
-                    check_shell=False,
                 ):
-                    continue
-                shell_status = _subprocess_shell_status(
-                    tree, line, location["start"].get("col"),
-                ) if tree else True
-                if shell_status is None:
-                    findings.append(Finding(
-                        vector="",
-                        rule="analysis-incomplete",
-                        severity="high",
-                        path=target.rel,
-                        line=line,
-                        message=("A tainted subprocess flow has a dynamic shell setting; "
-                                 "execution eligibility could not be proven."),
-                        evidence={
-                            "engine": "opengrep",
-                            "reason": "dynamic-subprocess-shell",
-                            "origin": target.origin,
-                        },
-                    ))
-                    continue
-                if shell_status is False:
                     continue
         evidence = {
             "engine": "opengrep",
@@ -1421,6 +1421,8 @@ def findings_from_report(
         }
         if postfilter_skipped:
             evidence["postfilter"] = "retained-after-validation-budget"
+        if needs_postfilter and dynamic_explicit_shell:
+            evidence["shell_validation"] = "dynamic-explicit-shell-retained"
         for source, destination in (
             (extra.get("fingerprint"), "fingerprint"),
             (metavars, "metavars"),
