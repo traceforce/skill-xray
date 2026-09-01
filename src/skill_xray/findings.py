@@ -97,9 +97,12 @@ _VECTORS = {
                 "tier": "T2", "cwe": ["CWE-506", "CWE-838"]},
     "SXV-037": {"title": "Unreferenced trailing bytes after a container's logical end",
                 "tier": "T2", "cwe": ["CWE-506"]},
-    "SXV-038": {"title": "Semantic prompt-injection or instruction-override in skill "
-                         "text (LLM-adjudicated)",
-                "tier": "T2", "cwe": ["CWE-77", "CWE-94"]},
+    "SXV-038": {"title": "Semantic prompt-injection, covert exfiltration, or user-manipulation "
+                         "in skill text (LLM-adjudicated)",
+                # CWE-1427 (prompt injection) anchors the instruction-override case; CWE-200 the
+                # exfiltration/user-manipulation one. NOT CWE-94: nothing here generates or runs
+                # code, so a code-injection tag would mis-route CWE-based triage.
+                "tier": "T2", "cwe": ["CWE-1427", "CWE-200"]},
     "SXV-039": {"title": "OS-level persistence write (shell-rc, cron, systemd, "
                          "autostart) with a remote-execution payload",
                 "tier": "T2", "cwe": ["CWE-506", "CWE-829"]},
