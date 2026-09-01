@@ -30,9 +30,15 @@ __all__ = ["adjudicate", "coverage_summary", "INSTRUCTION_KINDS"]
 # injection hidden there must be adjudicated too; it is checked LAST (lowest risk-order). Truly
 # generic files (kind `other`, e.g. a bare .txt) are out of the instruction surface by design.
 INSTRUCTION_KINDS = {"skill_manifest", "instruction", "agent_identity", "doc"}
+_CONFIG_KINDS = {"agent_config", "hooks_config", "mcp_config", "plugin_manifest",
+                 "app_manifest", "plugin_lock"}
+_PROMPT_KEYS = {"prompt", "systemprompt", "systemmessage", "instruction", "instructions",
+                "description"}
 # Risk-first, deterministic order so the scanned package cannot use file traversal order to push
 # a payload past the call budget: the governing manifest and identity files are checked first.
-_KIND_ORDER = {"skill_manifest": 0, "agent_identity": 1, "instruction": 2, "doc": 3}
+_KIND_ORDER = {"skill_manifest": 0, "agent_identity": 1, "instruction": 2,
+               "agent_config": 3, "hooks_config": 3, "mcp_config": 3,
+               "plugin_manifest": 3, "app_manifest": 3, "plugin_lock": 3, "doc": 4}
 _MAX_CHARS = 20000          # per-file text sent; a large SKILL.md is ~125 KB, this bounds cost
 _MAX_FILES = 25             # bound total calls per scan
 _MAX_PARSE_ATTEMPTS = 200   # bound raw_decode retries so a nested reply cannot recurse-DoS a scan
@@ -85,6 +91,42 @@ def _wrap(text, open_delim, close_delim):
     break out of the UNTRUSTED-DATA section) and report whether it was truncated to the budget."""
     truncated = len(text) > _MAX_CHARS
     return "%s\n%s\n%s" % (open_delim, text[:_MAX_CHARS], close_delim), truncated
+
+
+def _config_prompt_text(config):
+    """Return only natural-language fields an agent may obey from a parsed config.
+
+    Sending an entire agent/plugin/MCP config would disclose unrelated credentials and endpoints
+    to the configured provider. Walk the already-parsed structure and project only explicitly
+    prompt-bearing string fields; nested server/plugin entries are included without transmitting
+    sibling secrets.
+    """
+    if not isinstance(config, (dict, list)):
+        return None
+    found = []
+    stack = [config]
+    while stack:
+        value = stack.pop()
+        if isinstance(value, dict):
+            for key, child in reversed(list(value.items())):
+                normalized = "".join(ch for ch in str(key).lower() if ch.isalnum())
+                if normalized in _PROMPT_KEYS and isinstance(child, str) and child.strip():
+                    found.append("%s: %s" % (key, child))
+                elif isinstance(child, (dict, list)):
+                    stack.append(child)
+        elif isinstance(value, list):
+            stack.extend(reversed(value))
+    return "\n".join(found) or None
+
+
+def _target_text(p):
+    if p.text is None:
+        return None
+    if p.kind in INSTRUCTION_KINDS:
+        return p.text
+    if p.kind in _CONFIG_KINDS:
+        return _config_prompt_text(getattr(p, "config", None))
+    return None
 
 
 def _parse(resp):
@@ -158,9 +200,9 @@ def adjudicate(parsed, client, max_files=_MAX_FILES) -> list:
     out = []
     calls = 0
     targets = sorted(
-        (p for p in parsed.artifacts if p.text is not None and p.kind in INSTRUCTION_KINDS),
-        key=lambda p: (_KIND_ORDER.get(p.kind, 9), p.rel))
-    for idx, p in enumerate(targets):
+        ((p, text) for p in parsed.artifacts if (text := _target_text(p)) is not None),
+        key=lambda item: (_KIND_ORDER.get(item[0].kind, 9), item[0].rel))
+    for idx, (p, text) in enumerate(targets):
         if calls >= max_files:
             # This file AND every later target go unchecked; record the count so coverage does not
             # read one budget note as a single skip.
@@ -175,7 +217,7 @@ def adjudicate(parsed, client, max_files=_MAX_FILES) -> list:
         # UNTRUSTED-DATA section and inject instructions into the classifier.
         nonce = secrets.token_hex(8)
         open_delim, close_delim = "<<<SKILL_%s>>>" % nonce, "<<<END_%s>>>" % nonce
-        user, truncated = _wrap(p.text, open_delim, close_delim)
+        user, truncated = _wrap(text, open_delim, close_delim)
         try:
             reply = client.complete(_system(open_delim, close_delim), user)
         except LLMResponseError as exc:
@@ -234,7 +276,7 @@ def adjudicate(parsed, client, max_files=_MAX_FILES) -> list:
         quote = raw_quote[:160] if isinstance(raw_quote, str) else ""
         # Verify against the text the model ACTUALLY saw (the first _MAX_CHARS), not the full file:
         # a quote from the truncated tail was never sent, so it cannot be genuine evidence.
-        verified = bool(quote) and quote in p.text[:_MAX_CHARS]
+        verified = bool(quote) and quote in text[:_MAX_CHARS]
         raw_reason = verdict.get("reason")
         reason = raw_reason[:200] if isinstance(raw_reason, str) else ""
         out.append(Finding(
@@ -260,8 +302,7 @@ def coverage_summary(parsed, findings) -> dict:
     coverage: an LLM-skipped or truncated file must never read as fully covered. `skipped` sums the
     per-note unchecked counts (one budget/unavailable note stands for many files); `checked` is the
     eligible files that reached a usable verdict (benign, flagged, or truncated-partial)."""
-    eligible = sum(1 for p in parsed.artifacts
-                   if p.text is not None and p.kind in INSTRUCTION_KINDS)
+    eligible = sum(1 for p in parsed.artifacts if _target_text(p) is not None)
     truncated = sum(1 for f in findings if f.rule == "llm-truncated")
     flagged = sum(1 for f in findings if f.vector == "SXV-038")
     skipped = sum((f.evidence or {}).get("unchecked", 0)

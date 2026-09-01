@@ -105,12 +105,25 @@ class HTTPLLMClient(LLMClient):
         with self._opener.open(req, timeout=self.cfg.timeout) as resp:
             # urllib's default HTTPErrorProcessor raises HTTPError for every non-2xx (a refused 3xx
             # redirect included), so a returned resp is always 2xx.
-            read1 = getattr(resp, "read1", resp.read)
+            read1 = getattr(resp, "read1", None) or resp.read
             chunks, total = [], 0
             while total < _MAX_RESPONSE_BYTES:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("whole-request deadline exceeded")
+                # urllib wraps http.client.HTTPResponse differently across Python releases. Reach
+                # its standard-library socket when present and bound THIS blocking read to the
+                # remaining whole-call budget, rather than granting every read cfg.timeout again.
+                stream = getattr(resp, "fp", None)
+                raw = getattr(stream, "raw", None)
+                if raw is None:
+                    raw = getattr(getattr(stream, "fp", None), "raw", None)
+                sock = getattr(raw, "_sock", None)
+                if sock is not None:
+                    sock.settimeout(max(remaining, 0.001))
+                chunk = read1(min(_READ_CHUNK, _MAX_RESPONSE_BYTES - total))
                 if time.monotonic() > deadline:
                     raise TimeoutError("whole-request deadline exceeded")
-                chunk = read1(min(_READ_CHUNK, _MAX_RESPONSE_BYTES - total))
                 if not chunk:
                     break
                 chunks.append(chunk)

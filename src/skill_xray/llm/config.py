@@ -36,6 +36,20 @@ class LLMConfigError(Exception):
     """The LLM layer was asked for but is misconfigured (bad provider, missing key/url)."""
 
 
+def _validate_base_url(base_url, label):
+    try:
+        parts = urlsplit(base_url)
+        hostname = parts.hostname
+        port = parts.port  # property access validates non-numeric/out-of-range ports
+    except ValueError:
+        raise LLMConfigError("%s is not a valid URL" % label) from None
+    if (parts.scheme != "https" or not hostname or port == 0 or parts.username is not None
+            or parts.password is not None or "?" in base_url or "#" in base_url):
+        raise LLMConfigError(
+            "%s must be an https URL with a host, no userinfo, and no query/fragment" % label)
+    return base_url.rstrip("/")
+
+
 @dataclass(frozen=True)
 class LLMConfig:
     provider: str
@@ -55,19 +69,8 @@ class LLMConfig:
             raise LLMConfigError(
                 "LLMConfig.provider must be one of %s (got %r)"
                 % (", ".join(_PROVIDERS), self.provider))
-        try:
-            parts = urlsplit(self.base_url)
-        except ValueError:
-            raise LLMConfigError(
-                "LLMConfig.base_url is not a valid URL (got %r)" % self.base_url) from None
-        if (parts.scheme != "https" or not parts.netloc
-                or "?" in self.base_url or "#" in self.base_url):
-            # Test the RAW string for ?/#, not parts.query/fragment: a URL ending in a bare `?`
-            # or `#` parses to an EMPTY (falsy) query/fragment but still mangles the appended path.
-            raise LLMConfigError(
-                "LLMConfig.base_url must be an https URL with a host and no query/fragment "
-                "(got %r)" % self.base_url)
-        object.__setattr__(self, "base_url", self.base_url.rstrip("/"))   # normalise on a frozen dc
+        object.__setattr__(self, "base_url", _validate_base_url(
+            self.base_url, "LLMConfig.base_url"))
 
 
 def from_env(env=None):
@@ -85,18 +88,11 @@ def from_env(env=None):
     if not base_url:
         raise LLMConfigError(
             "openai-compatible needs SKILLXRAY_LLM_BASE_URL (the endpoint origin)")
-    try:
-        parts = urlsplit(base_url)
-    except ValueError:
-        raise LLMConfigError("SKILLXRAY_LLM_BASE_URL is not a valid URL") from None
     # Require https + a real host, and no query/fragment: a cleartext scheme would send the key
     # and text in the clear, `https://` alone has no host to reach, and a query/fragment would be
     # mangled when a path like /chat/completions is appended. Test the RAW string for ?/# so a URL
     # ending in a bare `?`/`#` (empty, falsy query/fragment, not stripped by rstrip) is also caught.
-    if parts.scheme != "https" or not parts.netloc or "?" in base_url or "#" in base_url:
-        raise LLMConfigError(
-            "SKILLXRAY_LLM_BASE_URL must be an https URL with a host and no query/fragment")
-    base_url = base_url.rstrip("/")
+    base_url = _validate_base_url(base_url, "SKILLXRAY_LLM_BASE_URL")
     api_key = (env.get("SKILLXRAY_LLM_API_KEY") or "").strip()
     if not api_key:
         # The vendor-var fallback (ANTHROPIC_API_KEY/OPENAI_API_KEY) is used ONLY when the
