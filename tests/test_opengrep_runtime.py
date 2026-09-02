@@ -149,7 +149,7 @@ def test_cli_forwards_explicit_binary(make_package, monkeypatch, capsys):
         str(root), "--analyze", "--json", "--opengrep-bin", "pinned-opengrep",
     ]) == 0
     output = capsys.readouterr().out
-    assert received == {"opengrep_executable": "pinned-opengrep"}
+    assert received == {"client": None, "opengrep_executable": "pinned-opengrep"}
     assert '"opengrepVersion": "1.29.0"' in output
     assert "taintEngine" not in output
 
@@ -165,7 +165,7 @@ def test_cli_defaults_to_the_single_enforced_policy(make_package, monkeypatch, c
     monkeypatch.setattr(cli, "scan", scan)
     assert cli.main([str(root), "--analyze", "--json"]) == 0
     output = capsys.readouterr().out
-    assert received == {"opengrep_executable": None}
+    assert received == {"client": None, "opengrep_executable": None}
     assert '"opengrepVersion": "1.29.0"' in output
     assert "taintEngine" not in output
 

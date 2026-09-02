@@ -17,6 +17,8 @@ import sys
 from . import __version__
 from .findings import findings_to_dicts
 from .ingest import build_ledger, build_package, discover_skill_packages
+from .llm import LLMConfigError, build_client, coverage_summary
+from .llm import from_env as llm_from_env
 from .opengrep_runtime import VERSION as OPENGREP_VERSION
 from .opengrep_runtime import OpenGrepRuntimeError, install_opengrep
 from .parse import parse_package
@@ -109,6 +111,11 @@ def main(argv=None) -> int:
                     help="run the detection engines and report findings instead of the inventory")
     ap.add_argument("--opengrep-bin", metavar="PATH",
                     help="explicit pinned OpenGrep binary for --analyze")
+    ap.add_argument("--llm", action="store_true",
+                    help="also run the opt-in LLM adjudication pass (semantic prompt injection). "
+                         "SENDS THE TEXT of the scanned skill files to the configured third-party "
+                         "LLM provider, so do not use it on confidential packages. Requires "
+                         "SKILLXRAY_LLM_PROVIDER and an API key in the environment")
     ap.add_argument("--install-opengrep", action="store_true",
                     help="download and verify the pinned OpenGrep runtime, then exit")
     ap.add_argument("--json", action="store_true", help="emit the inventory as JSON")
@@ -117,7 +124,7 @@ def main(argv=None) -> int:
 
     if args.install_opengrep:
         if (args.package or args.scan_known_skills or args.analyze
-                or args.json or args.opengrep_bin):
+                or args.json or args.opengrep_bin or args.llm):
             ap.error("--install-opengrep is a standalone action")
         try:
             installed = install_opengrep()
@@ -131,7 +138,7 @@ def main(argv=None) -> int:
     if args.scan_known_skills:
         if args.package:
             ap.error("--scan-known-skills takes no package argument")
-        if args.analyze or args.opengrep_bin:
+        if args.analyze or args.opengrep_bin or args.llm:
             ap.error("--scan-known-skills does not accept analysis options")
         return _scan_known(args.json)
 
@@ -141,18 +148,35 @@ def main(argv=None) -> int:
     if args.opengrep_bin and not args.analyze:
         ap.error("--opengrep-bin requires --analyze")
 
+    # Build the opt-in LLM client up front so a misconfiguration fails before the scan runs.
+    client = None
+    if args.llm:
+        if not args.analyze:
+            ap.error("--llm requires --analyze")
+        try:
+            cfg = llm_from_env()
+        except LLMConfigError as exc:
+            ap.error(str(exc))
+        if cfg is None:
+            ap.error("--llm needs SKILLXRAY_LLM_PROVIDER and an API key in the environment")
+        client = build_client(cfg)
+
     try:
         with resolved_input(args.package) as r:
             pkg = build_package(r.root)
             pkg.name = r.name          # friendly name; the root may be a temp dir
             ledger = build_ledger(pkg)
             if args.analyze:
+                parsed = parse_package(pkg)
                 findings = scan(
-                    parse_package(pkg),
+                    parsed,
+                    client=client,
                     opengrep_executable=args.opengrep_bin,
                 )
                 if args.json:
                     analysis = {"opengrepVersion": OPENGREP_VERSION}
+                    if client is not None:
+                        analysis["llmCoverage"] = coverage_summary(parsed, findings)
                     sys.stdout.write(json.dumps({
                         "package": pkg.name, "identity": pkg.identity,
                         "source": args.package, "kind": r.kind,
@@ -161,6 +185,13 @@ def main(argv=None) -> int:
                     }, indent=2) + "\n")
                 else:
                     _print_findings(pkg, findings)
+                    if client is not None:
+                        cov = coverage_summary(parsed, findings)
+                        sys.stdout.write(
+                            "  LLM adjudication: %d eligible, %d checked, %d truncated, "
+                            "%d skipped, %d errored, %d flagged\n" % (
+                                cov["eligible"], cov["checked"], cov["truncated"],
+                                cov["skipped"], cov["errored"], cov["flagged"]))
                 if any(
                     not finding.vector and finding.severity in {"critical", "high"}
                     for finding in findings
