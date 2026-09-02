@@ -9,7 +9,7 @@ library only, no network.
 The package may be malicious, so the walker:
   - does not follow a symlink or an NTFS junction out of the directory;
   - does not open a FIFO, device or socket;
-  - caps per-file size, file count and total bytes read;
+  - caps per-file size, directory/file count and total bytes read;
   - opens each file with O_NOFOLLOW and O_NONBLOCK where the platform provides
     them (POSIX), so a symlink or FIFO put in place after the walk cannot be
     followed or block the read; on Windows it relies on the walk-time lstat and
@@ -24,6 +24,7 @@ The package may be malicious, so the walker:
 
 from __future__ import annotations
 
+import collections
 import os
 import re
 import stat
@@ -73,8 +74,6 @@ ASSET_EXT = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2",
 ACTIVE_ASSET_EXT = {".svg", ".pdf"}
 NESTED_ARCHIVE_EXT = {".zip", ".gz", ".tar", ".tgz", ".whl", ".bz2", ".xz",
                       ".rar", ".7z"}
-# Everything read_text must not attempt to decode.
-BINARY_EXT = ASSET_EXT | ACTIVE_ASSET_EXT | NESTED_ARCHIVE_EXT
 
 # Build caches and VCS metadata that are not part of the shipped skill and are
 # coverage-benign. __pycache__ is deliberately absent: shipped .pyc is inventoried
@@ -127,8 +126,10 @@ IDENTITY_FILES = {
 
 MAX_FILE_BYTES = 1_048_576              # 1 MiB per file
 MAX_FILES = 5000                        # walk stops past this many files
+MAX_DIRS = 5000                         # walk visits at most this many directories
 AGGREGATE_MAX_BYTES = 256 * 1024 * 1024  # 256 MiB total read into memory
 MAX_DISCOVERY_DIRS = 20000              # --scan-known-skills visits at most this many dirs
+MAX_DISCOVERY_ENTRIES = 100000          # and inspects at most this many directory entries
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +148,10 @@ def _relpath(abspath: str, root: str) -> str:
     NFD-decomposed and Linux stores them NFC; without this, the same logical
     filename produces a different ledger key on each OS."""
     return unicodedata.normalize("NFC", posix(os.path.relpath(abspath, root)))
+
+
+def _portable_name(name: str) -> str:
+    return unicodedata.normalize("NFC", name).rstrip(" .").casefold()
 
 
 def install_identity(package_root: str) -> str:
@@ -168,24 +173,14 @@ def install_identity(package_root: str) -> str:
     return real or "/"                       # posix root survived the strip
 
 
-def read_text(path: str):
-    """Return (text, exception_reason, bytes_read). Never raises, never blocks.
+def read_bytes(path: str, limit: int | None = None, *, expected_stat=None):
+    """Return (raw bytes, failure, bytes read) without exceeding either byte limit.
 
-    Opens with O_NOFOLLOW and O_NONBLOCK where the platform has them (POSIX) so
-    that if the entry was replaced by a symlink or a FIFO between the walk's lstat
-    and this open, the open fails or fstat rejects it rather than reading outside
-    the package or waiting forever; on Windows the fstat regular-file check is the
-    backstop.
-    bytes_read is the number of bytes actually read from this fd, so the caller's
-    memory budget is charged for what was read, not a pre-read lstat size that a
-    TOCTOU swap could understate. The read itself is bounded to MAX_FILE_BYTES, so
-    a file that grows after fstat cannot be read unbounded into memory. A buffer
-    containing a NUL byte is treated as binary; a buffer that decodes as neither
-    UTF-8 nor CP-1252 is undecodable.
+    O_NOFOLLOW/O_NONBLOCK and fstat reject path swaps and special files where the
+    platform supports them. An expected walk-time stat identity also rejects a
+    regular-file replacement; the post-read size check catches a growing file.
     """
-    ext = os.path.splitext(path)[1].lower()
-    if ext in BINARY_EXT:
-        return None, "binary_content", 0
+    limit = MAX_FILE_BYTES if limit is None else max(0, min(limit, MAX_FILE_BYTES))
     flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
              | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
     try:
@@ -197,27 +192,38 @@ def read_text(path: str):
             st = os.fstat(fd)
             if not stat.S_ISREG(st.st_mode):
                 return None, "not_regular_file", 0
+            if expected_stat is not None and (
+                    stat.S_IFMT(st.st_mode) != stat.S_IFMT(expected_stat.st_mode)
+                    or (st.st_dev, st.st_ino) != (expected_stat.st_dev, expected_stat.st_ino)):
+                return None, "file_changed", 0
             if st.st_size > MAX_FILE_BYTES:
                 return None, "too_large", 0
-            # Bound the read itself: a file that grew after fstat cannot be read
-            # unbounded into memory. Read one byte past the cap to detect overflow.
-            raw = fh.read(MAX_FILE_BYTES + 1)
+            if st.st_size > limit:
+                return None, "total_budget_exhausted", 0
+            raw = fh.read(limit)
+            final_size = os.fstat(fd).st_size
         except OSError as exc:
             return None, "unreadable:%s" % type(exc).__name__, 0
-    # Bytes were read, so every outcome below charges the budget for len(raw),
-    # decoded or not: a package of undecodable or NUL-carrying files cannot read
-    # past the aggregate budget by simply failing to decode.
     nbytes = len(raw)
-    if nbytes > MAX_FILE_BYTES:
+    if final_size > MAX_FILE_BYTES:
         return None, "too_large", nbytes
+    if final_size > limit:
+        return None, "total_budget_exhausted", nbytes
+    return raw, None, nbytes
+
+
+def _decode(raw: bytes):
+    """Raw bytes -> (text|None, exception_reason|None). A buffer with a NUL byte is
+    treated as binary; a buffer that decodes as neither UTF-8 nor CP-1252 is
+    undecodable. Pure (no I/O), so the decode decision is testable off a byte string."""
     if b"\x00" in raw:
-        return None, "binary_content", nbytes
+        return None, "binary_content"
     for enc in ("utf-8-sig", "cp1252"):
         try:
-            return raw.decode(enc), None, nbytes
+            return raw.decode(enc), None
         except UnicodeDecodeError:
             continue
-    return None, "undecodable_text", nbytes
+    return None, "undecodable_text"
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +237,8 @@ class Artifact:
         self.kind = kind
         self.text = None
         self.exception = None
+        # Retained for byte-level checks; None means no successful bounded read.
+        self.raw = None
 
 
 class Package:
@@ -301,7 +309,8 @@ def _classify(filename: str):
         return "script_" + SCRIPT_EXT[ext], "script"
     if ext in COMPILED_EXT or _SO_VERSIONED.search(low):
         return COMPILED_EXT.get(ext, "native_code"), "compiled"
-    if low in ("requirements.txt", "package.json", "pyproject.toml", "setup.py"):
+    if low in ("package.json", "pyproject.toml") or (
+            low.endswith(".txt") and "requirements" in low):
         return "dep_manifest", "dependency_manifest"
     if ext in NESTED_ARCHIVE_EXT:
         return "nested_archive", "opaque"
@@ -312,27 +321,86 @@ def _classify(filename: str):
     return "other", "other"
 
 
+def _classify_shebang(text: str):
+    first = text.split("\n", 1)[0][:256]
+    match = re.match(
+        r"^#!\s*(?:\S*/env(?:\s+-S)?\s+|\S*/)?"
+        r"(python(?:\d+(?:\.\d+)*)?|bash|sh|zsh|dash|ksh|fish|"
+        r"pwsh|powershell|node|deno|bun|ruby|perl)(?:\s|$)",
+        first,
+        re.I,
+    )
+    if not match:
+        return None
+    name = match.group(1).lower()
+    if name.startswith("python"):
+        language = "python"
+    elif name in {"bash", "sh", "zsh", "dash", "ksh", "fish"}:
+        language = "shell"
+    elif name in {"pwsh", "powershell"}:
+        language = "powershell"
+    elif name in {"node", "deno", "bun"}:
+        language = "javascript"
+    else:
+        language = name
+    return "script_" + language, "script"
+
+
 def build_package(root: str) -> Package:
     """Walk the package and inventory every artifact. No parsing, no execution."""
     pkg = Package(root)
     walk_errors = []
 
-    def _on_error(exc):
-        # os.walk hides an unreadable directory by default; record it so a
-        # subtree we could not enter is visible rather than silently absent.
-        target = getattr(exc, "filename", None) or pkg.root
-        walk_errors.append(("walk_error:%s" % type(exc).__name__,
-                            _relpath(target, pkg.root)))
-
     seen = 0
+    seen_dirs = 0
+    pending = [pkg.root]
     total_read = 0
     truncated = False
-    for dirpath, dirnames, filenames in os.walk(pkg.root, onerror=_on_error):
+    dirs_truncated = False
+    while pending:
+        dirpath = pending.pop()
+        seen_dirs += 1
+        entries = []
+        files_here = dirs_here = 0
+        try:
+            with os.scandir(dirpath) as iterator:
+                for entry in iterator:
+                    try:
+                        is_dir = entry.is_dir(follow_symlinks=False)
+                    except OSError:
+                        is_dir = False
+                    files_here += not is_dir
+                    dirs_here += is_dir
+                    if seen + files_here > MAX_FILES:
+                        truncated = True
+                        break
+                    if seen_dirs + len(pending) + dirs_here > MAX_DIRS:
+                        dirs_truncated = True
+                        break
+                    entries.append((entry.name, is_dir))
+        except OSError as exc:
+            target = getattr(exc, "filename", None) or dirpath
+            walk_errors.append(("walk_error:%s" % type(exc).__name__,
+                                _relpath(target, pkg.root)))
+            continue
+        if truncated or dirs_truncated:
+            break
+
+        dirnames = [name for name, is_dir in entries if is_dir]
+        filenames = [name for name, is_dir in entries if not is_dir]
+        groups = collections.defaultdict(list)
+        for name in dirnames + filenames:
+            groups[_portable_name(name)].append(name)
+        collisions = {
+            name for group in groups.values() if len(group) > 1 for name in group
+        }
         kept = []
         for d in dirnames:
             dp = os.path.join(dirpath, d)
             drel = _relpath(dp, pkg.root)
-            if d in SKIP_DIRS:
+            if d in collisions:
+                _skip(pkg, "portable_path_collision", drel)
+            elif d in SKIP_DIRS:
                 _skip(pkg, "excluded_dir", drel)
             elif d in BUNDLED_DIRS:
                 _skip(pkg, "bundled_dir", drel)          # pruned, but lowers coverage
@@ -340,14 +408,18 @@ def build_package(root: str) -> Package:
                 _skip(pkg, "reparse_point", drel)
             else:
                 kept.append(d)
-        dirnames[:] = sorted(kept)
+        pending.extend(os.path.join(dirpath, name) for name in reversed(sorted(kept)))
         for fn in sorted(filenames):
-            if seen >= MAX_FILES:
-                truncated = True
-                break
             seen += 1
             ap = os.path.join(dirpath, fn)
             rel = _relpath(ap, pkg.root)
+            if fn in collisions:
+                kind, role = _classify(fn)
+                art = Artifact(rel, role, kind)
+                art.exception = "portable_path_collision"
+                _skip(pkg, "portable_path_collision", rel)
+                pkg.add(art)
+                continue
             try:
                 st = os.lstat(ap)
             except OSError as exc:
@@ -365,7 +437,22 @@ def build_package(root: str) -> Package:
                 continue
             kind, role = _classify(fn)
             art = Artifact(rel, role, kind)
-            if kind == "asset":
+            # One read serves decoding and byte checks and is charged to the hard cap.
+            read_reason = None
+            remaining = max(0, AGGREGATE_MAX_BYTES - total_read)
+            budget_hit = remaining == 0
+            if not budget_hit:
+                art.raw, read_reason, nbytes = read_bytes(
+                    ap, remaining, expected_stat=st,
+                )
+                total_read += nbytes
+            if budget_hit:
+                art.exception = "total_budget_exhausted"
+                _skip(pkg, "total_budget_exhausted", rel)
+            elif read_reason is not None:
+                art.exception = read_reason
+                _skip(pkg, read_reason, rel)
+            elif kind == "asset":
                 art.exception = "binary_content"
                 _skip(pkg, "binary_content", rel)
             elif role == "opaque":
@@ -376,20 +463,20 @@ def build_package(root: str) -> Package:
             elif role == "compiled":
                 art.exception = "shipped_compiled"
                 _skip(pkg, "shipped_compiled", rel)
-            elif total_read >= AGGREGATE_MAX_BYTES:
-                art.exception = "total_budget_exhausted"
-                _skip(pkg, "total_budget_exhausted", rel)
             else:
-                art.text, art.exception, nbytes = read_text(ap)
-                total_read += nbytes   # charge for bytes read, decoded or not
+                art.text, art.exception = _decode(art.raw)
                 if art.exception:
                     _skip(pkg, art.exception, rel)
+                elif art.kind == "other":
+                    classified = _classify_shebang(art.text)
+                    if classified:
+                        art.kind, art.role = classified
             pkg.add(art)
-        if truncated:
-            break
 
     if truncated:
         _skip(pkg, "walk_truncated", "(more than %d files)" % MAX_FILES)
+    if dirs_truncated:
+        _skip(pkg, "walk_truncated", "(more than %d directories)" % MAX_DIRS)
     for reason, rel in walk_errors:
         _skip(pkg, reason, rel)
     return pkg
@@ -422,6 +509,29 @@ _PKG_MARKERS = {".claude-plugin", ".codex-plugin",          # plugin root dirs
                 "plugin.json", ".mcp.json", "hooks.json"}    # plugin root files
 
 
+class _DiscoveryResult(list):
+    """List-compatible discovered paths plus fail-visible traversal gaps."""
+
+    def __init__(self, paths=(), ledger_exceptions=()):
+        super().__init__(paths)
+        self.ledger_exceptions = list(ledger_exceptions)
+
+
+def _discovery_truncated(exceptions, unit, limit):
+    exceptions.append({
+        "outcome": "skipped", "phase": "static", "reasonCode": "walk_truncated",
+        "path": "(more than %d discovery %s)" % (limit, unit),
+    })
+
+
+def _discovery_error(exceptions, exc, path):
+    exceptions.append({
+        "outcome": "skipped", "phase": "static",
+        "reasonCode": "walk_error:%s" % type(exc).__name__,
+        "path": posix(os.path.abspath(path)),
+    })
+
+
 def discover_skill_packages(roots=None):
     """Return the skill package roots found under the known skill roots. A root is a
     directory holding a SKILL.md or a plugin marker (_PKG_MARKERS); once found it is
@@ -429,54 +539,90 @@ def discover_skill_packages(roots=None):
     leaf skills/*/ dir -- and its nested skills are covered by build_package walking
     the whole root (which also sees the root's hooks.json/.mcp.json). A symlinked
     ROOT (a dotfiles setup, ~/.claude/skills/x -> ~/dotfiles/x) is followed, nested
-    symlinks are NOT, a hard directory budget stops a symlink pointing at "/" from
-    walking the whole filesystem, and a root reachable more than once is returned
-    once."""
+    symlinks are NOT, hard directory and entry budgets stop a symlink pointing at
+    "/" or one very wide directory from exhausting the scan, and a root reachable
+    more than once is returned once. The return value is a list subclass whose
+    ``ledger_exceptions`` uses the package-ledger shape when discovery truncates."""
     if roots is None:
         roots = KNOWN_SKILL_ROOTS
     found = {}
     seen = set()
-    budget = MAX_DISCOVERY_DIRS
+    exceptions = []
+    scanned_dirs = 0
+    seen_entries = 0
+    truncated = False
     for root in roots:
         base = os.path.abspath(os.path.expanduser(root))
-        if not os.path.isdir(base):
-            continue
-        # Walk real subtrees with followlinks=False (a nested symlink is never
-        # followed); additionally treat a top-level entry that is a symlink to a
-        # directory as its own package root to walk -- the dotfiles install.
-        starts = [base]
         try:
-            for e in os.scandir(base):
-                try:
-                    if e.is_symlink() and e.is_dir():
-                        starts.append(e.path)
-                except OSError:
-                    continue          # one broken/unreadable entry must not drop the root
-        except OSError:
-            pass                      # scandir itself failed: still walk base below
-        for start in starts:
-            for dirpath, dirnames, filenames in os.walk(start, followlinks=False):
-                budget -= 1
-                if budget < 0:                       # DoS backstop for a symlink to /
-                    return [found[k] for k in sorted(found)]
-                real = os.path.realpath(dirpath)
-                if real in seen:                     # loop / alias already walked
-                    dirnames[:] = []
-                    continue
-                seen.add(real)
-                # Case-sensitive on purpose, matching the walker: skipping
-                # "Node_Modules" case-insensitively would let a package hide code in
-                # a re-cased cache dir. Prune reparse points too: followlinks=False
-                # skips POSIX dir symlinks but STILL descends an NTFS junction, so
-                # without this a nested junction escapes the roots on Windows.
-                dirnames[:] = sorted(d for d in dirnames
-                                     if d not in SKIP_DIRS and d not in BUNDLED_DIRS
-                                     and not _is_reparse(os.path.join(dirpath, d)))
-                names = {f.lower() for f in filenames} | {d.lower() for d in dirnames}
-                if (_PKG_MARKERS & names) or "skill.md" in names:
-                    found[real] = dirpath
-                    dirnames[:] = []      # this is the package root; nested skills belong to it
-    return [found[k] for k in sorted(found)]
+            root_stat = os.stat(base)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            _discovery_error(exceptions, exc, base)
+            continue
+        if not stat.S_ISDIR(root_stat.st_mode):
+            continue
+        # Stream entries instead of os.walk(), which materializes every name in a
+        # wide directory before yielding and therefore cannot enforce this boundary.
+        pending = [(base, True)]
+        while pending:
+            dirpath, allow_root_links = pending.pop()
+            real = os.path.realpath(dirpath)
+            if real in seen:                         # loop / alias already walked
+                continue
+            if scanned_dirs >= MAX_DISCOVERY_DIRS:
+                _discovery_truncated(exceptions, "directories", MAX_DISCOVERY_DIRS)
+                truncated = True
+                break
+            seen.add(real)
+            scanned_dirs += 1
+            children = []
+            marker = False
+            entry_limit_hit = False
+            try:
+                with os.scandir(dirpath) as entries:
+                    for entry in entries:
+                        seen_entries += 1
+                        if seen_entries > MAX_DISCOVERY_ENTRIES:
+                            entry_limit_hit = True
+                            break
+                        low = entry.name.lower()
+                        try:
+                            is_link = entry.is_symlink()
+                            link_dir = is_link and entry.is_dir()
+                            is_dir = entry.is_dir(follow_symlinks=False)
+                            reparse = is_dir and _is_reparse(entry.path)
+                        except OSError as exc:
+                            _discovery_error(exceptions, exc, entry.path)
+                            continue
+                        if link_dir:
+                            if allow_root_links:       # direct dotfiles package link
+                                children.append((entry.path, False))
+                            continue                  # never follow a nested directory link
+                        if not is_dir:
+                            marker |= low == "skill.md" or low in _PKG_MARKERS
+                            continue
+                        if (entry.name in SKIP_DIRS or entry.name in BUNDLED_DIRS
+                                or reparse):
+                            continue
+                        marker |= low == "skill.md" or low in _PKG_MARKERS
+                        children.append((entry.path, False))
+            except OSError as exc:
+                _discovery_error(exceptions, exc, dirpath)
+                continue
+            if entry_limit_hit:
+                _discovery_truncated(
+                    exceptions, "entries", MAX_DISCOVERY_ENTRIES,
+                )
+                truncated = True
+                break
+            if marker:
+                found[real] = dirpath
+                continue                  # this package owns its nested skill directories
+            pending.extend(reversed(sorted(children)))
+        if truncated:
+            break
+    return _DiscoveryResult((found[k] for k in sorted(found)), exceptions)
 
 
 # ---------------------------------------------------------------------------
@@ -489,8 +635,7 @@ _BENIGN_LEDGER = {"excluded_dir"}
 
 
 def _role_counts(artifacts):
-    return {r: sum(1 for a in artifacts if a.role == r)
-            for r in sorted({a.role for a in artifacts})}
+    return dict(sorted(collections.Counter(a.role for a in artifacts).items()))
 
 
 def build_ledger(pkg: Package) -> dict:
@@ -509,9 +654,17 @@ def build_ledger(pkg: Package) -> dict:
     (symlink, junction, walk error, truncation) -- counts against coverage.
     """
     artifacts = pkg.artifacts
-    art_paths = {a.rel for a in artifacts}
-    pre_skips = [e for e in pkg.ledger_exceptions
-                 if e["path"] not in art_paths and e["reasonCode"] not in _BENIGN_LEDGER]
+    artifact_exceptions = collections.Counter(
+        (artifact.rel, artifact.exception)
+        for artifact in artifacts if artifact.exception is not None
+    )
+    pre_skips = []
+    for entry in pkg.ledger_exceptions:
+        key = entry["path"], entry["reasonCode"]
+        if artifact_exceptions[key]:
+            artifact_exceptions[key] -= 1
+        elif entry["reasonCode"] not in _BENIGN_LEDGER:
+            pre_skips.append(entry)
 
     analyzed = sum(1 for a in artifacts if a.exception is None)
     compiled = sorted(a.rel for a in artifacts if a.role == "compiled")
@@ -519,10 +672,19 @@ def build_ledger(pkg: Package) -> dict:
     opaque = sorted(a.rel for a in artifacts if a.role == "opaque")
     secrets = sorted(a.rel for a in artifacts if a.role == "secret")
     configs = sorted(a.rel for a in artifacts if a.role in ("config", "root_config"))
-    not_inspectable = sum(1 for a in artifacts if a.kind == "asset") + len(compiled)
-    failed = (sum(1 for a in artifacts
-                  if a.exception is not None and a.kind != "asset" and a.role != "compiled")
-              + len(pre_skips))
+    not_inspectable = sum(
+        (a.kind == "asset" and a.exception == "binary_content")
+        or (a.role == "compiled" and a.exception == "shipped_compiled")
+        for a in artifacts
+    )
+    failed = (sum(
+        a.exception is not None
+        and not (
+            (a.kind == "asset" and a.exception == "binary_content")
+            or (a.role == "compiled" and a.exception == "shipped_compiled")
+        )
+        for a in artifacts
+    ) + len(pre_skips))
     seen = analyzed + not_inspectable + failed
     denom = analyzed + failed
     return {

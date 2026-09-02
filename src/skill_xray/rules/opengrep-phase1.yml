@@ -1,0 +1,749 @@
+rules:
+  - id: skill-xray.python-local-command-injection
+    languages: [python]
+    mode: taint
+    message: Untrusted local input reaches a Python command-execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-008
+      skill_xray_rule: opengrep-python-command-injection
+      skill_xray_severity: critical
+    options:
+      max_match_per_file: 1000
+      taint_intrafile: true
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - pattern-either:
+          - pattern: input(...)
+          - pattern: raw_input(...)
+          - pattern: sys.argv[$INDEX]
+          - pattern: os.environ[$KEY]
+          - pattern: os.environ.get(...)
+          - pattern: os.getenv(...)
+          - pattern: sys.stdin.read(...)
+          - pattern: sys.stdin.readline(...)
+          - pattern: sys.stdin.readlines(...)
+          - pattern: sys.stdin.buffer.read(...)
+          - pattern: sys.stdin.buffer.readline(...)
+          - pattern: sys.stdin.buffer.readlines(...)
+      - exact: true
+        pattern: sys.stdin
+      - exact: true
+        pattern: sys.argv
+      - exact: true
+        pattern-either:
+          - pattern: sys.argv[$START:]
+          - pattern: sys.argv[$START:$END]
+      - exact: true
+        pattern: subprocess.list2cmdline(sys.argv)
+      - exact: true
+        pattern: yaml.safe_load(sys.stdin.read(...))
+      - exact: true
+        pattern: '" ".join($ITEM for $ITEM in sys.argv)'
+      - patterns:
+          - pattern: $ITEM
+          - pattern-inside: |
+              for $ITEM in sys.argv[$SLICE]:
+                ...
+      - patterns:
+          - pattern: shlex.quote($VALUE)
+          - pattern-inside: |
+              $VALUE = sys.argv[$INDEX]
+              ...
+      - patterns:
+          - pattern: $PARSER.parse_args(...)
+          - pattern-inside: |
+              $PARSER = argparse.ArgumentParser(...)
+              ...
+      - patterns:
+          - pattern: $PARSER.parse_known_args(...)
+          - pattern-inside: |
+              $PARSER = argparse.ArgumentParser(...)
+              ...
+    pattern-propagators:
+      - pattern: $OUT = shlex.quote($IN)
+        from: $IN
+        to: $OUT
+    pattern-sinks:
+      - patterns:
+          - pattern: shlex.quote($COMMAND)
+          - pattern-inside: os.system(...)
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern-either:
+              - pattern: os.system($COMMAND)
+              - pattern: os.popen($COMMAND, ...)
+              - pattern: eval($COMMAND, ...)
+              - pattern: exec($COMMAND, ...)
+              - pattern: builtins.eval($COMMAND, ...)
+              - pattern: builtins.exec($COMMAND, ...)
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - pattern-inside: |
+              from subprocess import *
+              ...
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getoutput|getstatusoutput)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD([$SHELL, "-c", $COMMAND, ...], ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern-either:
+              - pattern: os.execl($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execlp($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execle($SHELL, $ARGV0, "-c", $COMMAND, ..., $ENV)
+              - pattern: os.execv($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execvp($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execve($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.execvpe($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.posix_spawn($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+              - pattern: os.posix_spawnp($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $ALIAS($COMMAND)
+          - pattern-inside: |
+              $ALIAS = os.system
+              ...
+          - focus-metavariable: $COMMAND
+
+  - id: skill-xray.python-local-helper-command-injection
+    languages: [python]
+    message: Untrusted local input reaches a Python command-execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-008
+      skill_xray_rule: opengrep-python-command-injection
+      skill_xray_severity: critical
+    patterns:
+      - pattern-either:
+          - pattern: |
+              def $FUNC(...):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              if $CONDITION:
+                ...
+                $FUNC = $OTHER
+                ...
+              ...
+              $FUNC(..., $SOURCE, ...)
+          - pattern: |
+              def $FUNC(...):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              try:
+                ...
+              except $EXCEPTION:
+                ...
+                $FUNC = $OTHER
+                ...
+              ...
+              $FUNC(..., $SOURCE, ...)
+          - pattern: |
+              def $FUNC(...):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              $FUNC(..., $SOURCE, ...)
+              ...
+              def $FUNC(...):
+                ...
+          - pattern: |
+              def $FUNC(...):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              $FUNC(..., **{$KEY: $SOURCE}, ...)
+          - pattern: |
+              class $CLASS:
+                ...
+                def $METHOD(...):
+                  ...
+                  os.system($COMMAND)
+                  ...
+              ...
+              $CLASS().$METHOD(..., $SOURCE, ...)
+          - pattern: |
+              def $FUNC(..., **$KWARGS):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              $FUNC(..., cmd=$SOURCE, ...)
+          - pattern: |
+              def $FUNC(*, $PARAM, ...):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              $FUNC(..., $PARAM=$SOURCE, ...)
+          - pattern: |
+              class $CLASS:
+                ...
+                def $METHOD($RECEIVER, *, $PARAM, ...):
+                  ...
+                  os.system($COMMAND)
+                  ...
+              ...
+              $CLASS().$METHOD(..., $PARAM=$SOURCE, ...)
+      - metavariable-pattern:
+          metavariable: $SOURCE
+          patterns:
+            - pattern-either:
+                - pattern: input(...)
+                - pattern: raw_input(...)
+                - pattern: sys.argv[$INDEX]
+                - pattern: os.environ[$KEY]
+                - pattern: os.environ.get(...)
+                - pattern: os.getenv(...)
+                - pattern: sys.stdin.read(...)
+                - pattern: sys.stdin.readline(...)
+      - focus-metavariable: $COMMAND
+
+  - id: skill-xray.python-remote-payload-execution
+    languages: [python]
+    mode: taint
+    message: Network-controlled content reaches a Python execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-018
+      skill_xray_rule: opengrep-python-remote-execution
+      skill_xray_severity: critical
+    options:
+      max_match_per_file: 1000
+      taint_intrafile: true
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - exact: true
+        patterns:
+          - pattern: requests.$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(get|post|put|head|request)$
+      - exact: true
+        patterns:
+          - pattern: httpx.$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(get|post|put|head|request)$
+      - exact: true
+        pattern: urllib.request.urlopen(...)
+      - exact: true
+        patterns:
+          - pattern-either:
+              - pattern: urlopen(...)
+              - pattern: urlopen(...).read(...)
+          - pattern-inside: |
+              from urllib.request import urlopen
+              ...
+      - exact: true
+        patterns:
+          - pattern-either:
+              - pattern: $OPEN(...)
+              - pattern: $OPEN(...).read(...)
+          - pattern-inside: |
+              from urllib.request import urlopen as $OPEN
+              ...
+      - exact: true
+        pattern: urllib3.PoolManager(...).request(...)
+      - exact: true
+        patterns:
+          - pattern: requests.$METHOD(...).json(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(get|post|put|head|request)$
+      - exact: true
+        patterns:
+          - pattern: httpx.$METHOD(...).json(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(get|post|put|head|request)$
+      - exact: true
+        pattern: json.load(urllib.request.urlopen(...))
+      - exact: true
+        pattern: base64.b64decode(requests.$METHOD(...).text)
+      - exact: true
+        patterns:
+          - pattern: $RESPONSE.read(...).decode(...)
+          - pattern-inside: |
+              $RESPONSE = urllib.request.urlopen(...)
+              ...
+      - exact: true
+        patterns:
+          - pattern-either:
+              - pattern: $RESPONSE.content.decode(...)
+              - pattern: $RESPONSE.json(...)
+              - pattern: next($RESPONSE.iter_content(...)).decode(...)
+              - pattern: $RESPONSE.raw.read(...).decode(...)
+          - pattern-inside: |
+              $RESPONSE = $CLIENT.$METHOD(...)
+              ...
+          - metavariable-regex:
+              metavariable: $CLIENT
+              regex: ^(?:requests|httpx)$
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(?:get|post|put|head|request)$
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: $RESPONSE.status_code
+          - pattern: $RESPONSE.ok
+          - pattern: $RESPONSE.elapsed
+          - pattern: $RESPONSE.is_redirect
+          - pattern: $RESPONSE.is_permanent_redirect
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: os.system($COMMAND)
+              - pattern: os.popen($COMMAND, ...)
+              - pattern: eval($COMMAND, ...)
+              - pattern: exec($COMMAND, ...)
+              - pattern: builtins.eval($COMMAND, ...)
+              - pattern: builtins.exec($COMMAND, ...)
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - pattern-inside: |
+              from subprocess import *
+              ...
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getoutput|getstatusoutput)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD([$SHELL, "-c", $COMMAND, ...], ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern-either:
+              - pattern: os.execl($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execlp($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execle($SHELL, $ARGV0, "-c", $COMMAND, ..., $ENV)
+              - pattern: os.execv($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execvp($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execve($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.execvpe($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.posix_spawn($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+              - pattern: os.posix_spawnp($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $ALIAS($COMMAND)
+          - pattern-inside: |
+              $ALIAS = os.system
+              ...
+          - focus-metavariable: $COMMAND
+
+  - id: skill-xray.python-decoded-payload-execution
+    languages: [python]
+    mode: taint
+    message: Decoded content reaches a Python execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-019
+      skill_xray_rule: opengrep-python-decode-exec
+      skill_xray_severity: high
+    options:
+      taint_intrafile: true
+    pattern-sources:
+      - exact: true
+        patterns:
+          - pattern: base64.$DECODER(...)
+          - metavariable-regex:
+              metavariable: $DECODER
+              regex: '^(?:b64decode|standard_b64decode|urlsafe_b64decode|b32decode|b16decode|b85decode|a85decode|decodebytes)$'
+      - exact: true
+        patterns:
+          - pattern: binascii.$DECODER(...)
+          - metavariable-regex:
+              metavariable: $DECODER
+              regex: '^(?:a2b_base64|unhexlify|a2b_hex|a2b_qp|a2b_uu)$'
+      - exact: true
+        pattern-either:
+          - pattern: bytes.fromhex(...)
+          - pattern: bytearray.fromhex(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: exec($COMMAND, ...)
+              - pattern: eval($COMMAND, ...)
+              - pattern: os.system($COMMAND)
+              - pattern: os.popen($COMMAND, ...)
+              - pattern: builtins.exec($COMMAND, ...)
+              - pattern: builtins.eval($COMMAND, ...)
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:getoutput|getstatusoutput)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - pattern-inside: |
+              from subprocess import *
+              ...
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD([$SHELL, "-c", $COMMAND, ...], ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern-either:
+              - pattern: os.execl($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execlp($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execle($SHELL, $ARGV0, "-c", $COMMAND, ..., $ENV)
+              - pattern: os.execv($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execvp($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execve($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.execvpe($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.posix_spawn($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+              - pattern: os.posix_spawnp($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $ALIAS($COMMAND)
+          - pattern-inside: |
+              $ALIAS = os.system
+              ...
+          - focus-metavariable: $COMMAND
+
+  - id: skill-xray.python-remote-file-execution
+    languages: [python]
+    message: A remotely fetched file is written and then executed.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-018
+      skill_xray_rule: opengrep-python-remote-execution
+      skill_xray_severity: critical
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-inside: |
+                  $RESPONSE = $CLIENT.$METHOD(...)
+                  ...
+                  open($PATH, ...).write($RESPONSE.content)
+                  ...
+              - metavariable-regex:
+                  metavariable: $CLIENT
+                  regex: '^(?:requests|httpx)$'
+              - metavariable-regex:
+                  metavariable: $METHOD
+                  regex: '^(?:get|post|put|request)$'
+          - pattern-inside: |
+              $RESPONSE = urllib.request.urlopen(...)
+              ...
+              open($PATH, ...).write($RESPONSE.read())
+              ...
+      - pattern-either:
+          - patterns:
+              - pattern: subprocess.$EXEC([$INTERPRETER, ..., $PATH, ...], ...)
+              - metavariable-regex:
+                  metavariable: $EXEC
+                  regex: '^(?:run|call|check_call|check_output|Popen)$'
+              - metavariable-regex:
+                  metavariable: $INTERPRETER
+                  regex: '^["'']?(?:python(?:3)?|sh|bash|zsh|ksh|dash)["'']?$'
+          - pattern: runpy.run_path($PATH, ...)
+          - pattern: exec(open($PATH, ...).read(), ...)
+
+  - id: skill-xray.python-staging-host
+    languages: [python]
+    message: Executable Python code communicates with an anonymous or replaceable staging host.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-020
+      skill_xray_rule: opengrep-staging-host
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern: $CLIENT.$METHOD($URL, ...)
+              - metavariable-regex:
+                  metavariable: $METHOD
+                  regex: '^(?:get|post|put|request|urlretrieve)$'
+          - pattern: urllib.request.urlopen($URL, ...)
+          - pattern: urlopen($URL, ...)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i).*https?://(?:[^/@]+@)?(?:[^./]+\.)*(?:pastebin\.com|rentry\.co|glot\.io|cdn\.discordapp\.com|transfer\.sh|0x0\.st|termbin\.com|ix\.io|sprunge\.us|file\.io|gofile\.io|bashupload\.com|temp\.sh|paste\.ee|hastebin\.com|dpaste\.org|dpaste\.com|ngrok\.(?:io|app|dev)|ngrok-free\.(?:app|dev)|trycloudflare\.com|webhook\.site|requestbin\.net|oast\.fun|interact\.sh|tmpfiles\.org|catbox\.moe|uguu\.se|envs\.sh|oshi\.at|paste\.rs|controlc\.com|justpaste\.it|srv\.us|loca\.lt|serveo\.net|bore\.pub|pastes\.io|filebin\.net)\.?(?![A-Za-z0-9.-])(?::\d+)?(?:[/?#].*)?'
+
+  - id: skill-xray.python-cloud-metadata
+    languages: [python]
+    message: Python code accesses a cloud instance-metadata endpoint.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-021
+      skill_xray_rule: opengrep-cloud-metadata
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: $CLIENT.$METHOD($URL, ...)
+          - pattern: urlopen($URL, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: '^(?:get|post|put|request|open)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i).*(?:169\.254\.169\.254|169\.254\.170\.2|metadata\.google\.internal|computeMetadata/v1|/latest/meta-data|metadata\.azure\.com).*'
+
+  - id: skill-xray.python-credential-read
+    languages: [python]
+    message: Python code reads a private credential file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-023
+      skill_xray_rule: opengrep-credential-read
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: open($PATH, ...)
+          - pattern: Path($PATH).read_text(...)
+          - pattern: Path($PATH).read_bytes(...)
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '(?i).*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?!\.pub)|\.aws/credentials|\.netrc|\.git-credentials|\.docker/config\.json|\.kube/config).*'
+
+  - id: skill-xray.python-cloud-upload
+    languages: [python]
+    message: Python code invokes a cloud storage upload sink.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-024
+      skill_xray_rule: opengrep-cloud-upload
+      skill_xray_severity: medium
+    pattern-either:
+      - pattern: $CLIENT.put_object(...)
+      - pattern: $CLIENT.upload_file(...)
+      - pattern: $CLIENT.upload_fileobj(...)
+      - pattern: $CLIENT.upload_blob(...)
+      - pattern: $CLIENT.blob(...).upload(...)
+
+  - id: skill-xray.python-home-enumeration
+    languages: [python]
+    message: Python code recursively enumerates a home or credential directory.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-025
+      skill_xray_rule: opengrep-home-enumeration
+      skill_xray_severity: high
+    pattern-either:
+      - pattern: os.walk(os.path.expanduser("~"), ...)
+      - pattern: os.walk(os.path.expanduser('~'), ...)
+      - pattern: os.walk(Path.home(), ...)
+      - pattern: Path.home().glob(...)
+      - pattern: Path.home().rglob(...)
+      - patterns:
+          - pattern: glob.$METHOD($PATH, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:glob|iglob)$'
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:~|\.ssh|\.aws).*'
+
+  - id: skill-xray.python-environment-harvest
+    languages: [python]
+    message: Python code sends or encodes the whole process environment.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-026
+      skill_xray_rule: opengrep-environment-harvest
+      skill_xray_severity: high
+    pattern-either:
+      - pattern: requests.$METHOD(..., data=dict(os.environ), ...)
+      - pattern: requests.$METHOD(..., json=dict(os.environ), ...)
+      - pattern: httpx.$METHOD(..., data=dict(os.environ), ...)
+      - pattern: httpx.$METHOD(..., json=dict(os.environ), ...)
+      - pattern: $SOCKET.send(dict(os.environ), ...)
+      - patterns:
+          - pattern: base64.$METHOD(json.dumps(dict(os.environ)).encode(...), ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:b64encode|standard_b64encode|urlsafe_b64encode|b32encode|b16encode|b85encode|a85encode|encodebytes)$'
+
+  - id: skill-xray.python-agent-config-read
+    languages: [python]
+    message: Python code reads another agent's configuration directory.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-032
+      skill_xray_rule: opengrep-agent-config-read
+      skill_xray_severity: medium
+    patterns:
+      - pattern-either:
+          - pattern: open($PATH, ...)
+          - pattern: glob.$METHOD($PATH, ...)
+          - pattern: os.walk($PATH, ...)
+          - pattern: os.listdir($PATH, ...)
+          - pattern: Path($PATH).glob(...)
+          - pattern: Path($PATH).rglob(...)
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '(?i).*(?:\.claude/|\.gemini/|\.cursor/|\.codeium/|\.aider|\.continue/|\.config/github-copilot).*'
+
+  - id: skill-xray.python-reverse-shell
+    languages: [python]
+    message: Python code connects a socket to process standard I/O.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-040
+      skill_xray_rule: opengrep-reverse-shell
+      skill_xray_severity: critical
+    pattern-either:
+      - patterns:
+          - pattern-inside: |
+              $SOCKET = socket.socket(...)
+              ...
+              $SOCKET.connect(...)
+              ...
+          - pattern: os.dup2($SOCKET.fileno(), $FD)
+          - metavariable-regex:
+              metavariable: $FD
+              regex: '^(?:0|1|2)$'
+      - patterns:
+          - pattern-inside: |
+              $SOCKET = socket.create_connection(...)
+              ...
+          - pattern: os.dup2($SOCKET.fileno(), $FD)
+          - metavariable-regex:
+              metavariable: $FD
+              regex: '^(?:0|1|2)$'
+      - patterns:
+          - pattern-inside: |
+              $SOCKET = socket.socket(...)
+              ...
+              $SOCKET.connect(...)
+              ...
+          - pattern: pty.spawn(...)
+      - patterns:
+          - pattern-inside: |
+              $SOCKET = socket.socket(...)
+              ...
+              $SOCKET.connect(...)
+              ...
+          - pattern: subprocess.$METHOD([$SHELL, "-i"], ..., stdin=$SOCKET.fileno(), stdout=$SOCKET.fileno(), stderr=$SOCKET.fileno(), ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|Popen)$'
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '^["'']?(?:/usr)?/bin/(?:sh|bash|zsh|ksh|dash)["'']?$'

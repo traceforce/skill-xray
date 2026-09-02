@@ -55,6 +55,36 @@ def test_cli_scan_known_skills_flags_identity(make_package, monkeypatch, capsys)
     assert "identity=1" in capsys.readouterr().out
 
 
+def test_cli_scan_known_skills_fails_visible_when_discovery_truncates(
+        tmp_path, monkeypatch, capsys):
+    (tmp_path / "a" / "b").mkdir(parents=True)
+    monkeypatch.setattr(ingest, "KNOWN_SKILL_ROOTS", (str(tmp_path),))
+    monkeypatch.setattr(ingest, "MAX_DISCOVERY_DIRS", 1)
+
+    assert cli.main(["--scan-known-skills", "--json"]) == 2
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == []
+    assert "walk_truncated" in captured.err
+
+
+def test_cli_scan_known_skills_fails_visible_on_discovery_error(
+        tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(ingest, "KNOWN_SKILL_ROOTS", (str(tmp_path),))
+    real_scandir = ingest.os.scandir
+
+    def denied(path):
+        if str(path) == str(tmp_path):
+            raise PermissionError("denied")
+        return real_scandir(path)
+
+    monkeypatch.setattr(ingest.os, "scandir", denied)
+
+    assert cli.main(["--scan-known-skills", "--json"]) == 2
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == []
+    assert "walk_error:PermissionError" in captured.err
+
+
 def test_text_output_escapes_control_chars(make_package, capsys):
     # a member name carrying an escape/newline must not forge or hide inventory
     # lines in the human-readable output -- the one thing this tool must prevent.
@@ -89,3 +119,11 @@ def test_error_path_escapes_control_chars(capsys):
     # able to forge or hide lines there either.
     assert cli.main(["/nonexistent/ev\x1bil"]) == 2
     assert "\x1b" not in capsys.readouterr().err
+
+
+def test_analysis_does_not_call_unsupported_code_clean(make_package, capsys):
+    root = make_package({"run.ps1": "Invoke-Expression $args[0]\n"})
+    assert cli.main([str(root), "--analyze"]) == 2
+    output = capsys.readouterr().out
+    assert "analysis-incomplete" in output
+    assert "no findings" not in output

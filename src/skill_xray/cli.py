@@ -3,8 +3,8 @@
 
 The target may be a directory, a single file, a .zip, an https URL, or an https
 git repository; or use --scan-known-skills to walk every package under the
-locations the common agents load skills from. Exit is 0 on a successful walk and
-2 on bad usage or a refused/failed ingest.
+locations the common agents load skills from. Exit is 0 on a complete walk and
+2 on bad usage, a refused/failed ingest, or incomplete high-severity analysis.
 """
 
 from __future__ import annotations
@@ -15,8 +15,13 @@ import os
 import sys
 
 from . import __version__
+from .findings import findings_to_dicts
 from .ingest import build_ledger, build_package, discover_skill_packages
+from .opengrep_runtime import VERSION as OPENGREP_VERSION
+from .opengrep_runtime import OpenGrepRuntimeError, install_opengrep
+from .parse import parse_package
 from .resolve import IngestLimitExceededError, UnsafeInputError, resolved_input
+from .scan import scan
 
 
 def _artifact_rows(pkg):
@@ -48,6 +53,22 @@ def _print_one(pkg, ledger):
             sys.stdout.write("  SKIP  %-40s %s\n" % (_display(e["path"]), e["reasonCode"]))
 
 
+def _print_findings(pkg, findings) -> None:
+    sys.stdout.write("package: %s\n" % _display(pkg.name))
+    if not findings:
+        sys.stdout.write("  no findings\n")
+        return
+    for f in findings:
+        loc = ""
+        if f.line is not None:
+            loc = "  L%d" % f.line
+        elif f.offset is not None:
+            loc = "  @%d" % f.offset + ("+%d" % f.length if f.length is not None else "")
+        sys.stdout.write("  [%-8s] %-8s %-20s %s: %s%s\n" % (
+            f.severity.upper(), f.vector or "-", f.rule, _display(f.path),
+            _display(f.message), loc))
+
+
 def _scan_known(as_json) -> int:
     paths = discover_skill_packages()
     results = [(p, build_ledger(build_package(p))) for p in paths]
@@ -55,22 +76,25 @@ def _scan_known(as_json) -> int:
         sys.stdout.write(json.dumps(
             [{"package": os.path.basename(p), "path": p, "ledger": led}
              for p, led in results], indent=2) + "\n")
-        return 0
-    home = os.path.expanduser("~")
-    sys.stdout.write("discovered %d skill package(s) under the known roots\n" % len(results))
-    for p, led in results:
-        flag = ""
-        if led["shippedCompiledCode"]:
-            flag += "  compiled=%d" % len(led["shippedCompiledCode"])
-        if led["agentIdentityFiles"]:
-            flag += "  identity=%d" % len(led["agentIdentityFiles"])
-        # plugin layouts reuse folder names (access/configure), so show the path.
-        # Guard the prefix so "/home/al" does not abbreviate "/home/alice/x".
-        shown = ("~" + p[len(home):]) if (p == home or p.startswith(home + os.sep)) else p
-        sys.stdout.write("  seen=%-3d analyzed=%-3d cov=%5.1f%%%s  %s\n" % (
-            led["artifactsSeen"], led["artifactsAnalyzed"],
-            led["coveragePercent"], flag, _display(shown)))
-    return 0
+    else:
+        home = os.path.expanduser("~")
+        sys.stdout.write("discovered %d skill package(s) under the known roots\n" % len(results))
+        for p, led in results:
+            flag = ""
+            if led["shippedCompiledCode"]:
+                flag += "  compiled=%d" % len(led["shippedCompiledCode"])
+            if led["agentIdentityFiles"]:
+                flag += "  identity=%d" % len(led["agentIdentityFiles"])
+            # plugin layouts reuse folder names (access/configure), so show the path.
+            # Guard the prefix so "/home/al" does not abbreviate "/home/alice/x".
+            shown = ("~" + p[len(home):]) if (p == home or p.startswith(home + os.sep)) else p
+            sys.stdout.write("  seen=%-3d analyzed=%-3d cov=%5.1f%%%s  %s\n" % (
+                led["artifactsSeen"], led["artifactsAnalyzed"],
+                led["coveragePercent"], flag, _display(shown)))
+    for entry in paths.ledger_exceptions:
+        sys.stderr.write("skill discovery incomplete (%s): %s\n" % (
+            entry["reasonCode"], _display(entry["path"])))
+    return 2 if paths.ledger_exceptions else 0
 
 
 def main(argv=None) -> int:
@@ -81,24 +105,68 @@ def main(argv=None) -> int:
                     help="a directory, file, .zip, https URL, or https git repository")
     ap.add_argument("--scan-known-skills", action="store_true",
                     help="walk every package under the known agent skill roots")
+    ap.add_argument("--analyze", action="store_true",
+                    help="run the detection engines and report findings instead of the inventory")
+    ap.add_argument("--opengrep-bin", metavar="PATH",
+                    help="explicit pinned OpenGrep binary for --analyze")
+    ap.add_argument("--install-opengrep", action="store_true",
+                    help="download and verify the pinned OpenGrep runtime, then exit")
     ap.add_argument("--json", action="store_true", help="emit the inventory as JSON")
     ap.add_argument("--version", action="version", version="skill-xray %s" % __version__)
     args = ap.parse_args(argv)
 
+    if args.install_opengrep:
+        if (args.package or args.scan_known_skills or args.analyze
+                or args.json or args.opengrep_bin):
+            ap.error("--install-opengrep is a standalone action")
+        try:
+            installed = install_opengrep()
+        except OpenGrepRuntimeError as exc:
+            sys.stderr.write("cannot install OpenGrep: %s\n" % _display(str(exc)))
+            return 2
+        sys.stdout.write("installed OpenGrep %s at %s\n" % (
+            OPENGREP_VERSION, _display(str(installed))))
+        return 0
+
     if args.scan_known_skills:
         if args.package:
             ap.error("--scan-known-skills takes no package argument")
+        if args.analyze or args.opengrep_bin:
+            ap.error("--scan-known-skills does not accept analysis options")
         return _scan_known(args.json)
 
     if not args.package:
         ap.error("provide a package directory, or use --scan-known-skills")
+
+    if args.opengrep_bin and not args.analyze:
+        ap.error("--opengrep-bin requires --analyze")
 
     try:
         with resolved_input(args.package) as r:
             pkg = build_package(r.root)
             pkg.name = r.name          # friendly name; the root may be a temp dir
             ledger = build_ledger(pkg)
-            if args.json:
+            if args.analyze:
+                findings = scan(
+                    parse_package(pkg),
+                    opengrep_executable=args.opengrep_bin,
+                )
+                if args.json:
+                    analysis = {"opengrepVersion": OPENGREP_VERSION}
+                    sys.stdout.write(json.dumps({
+                        "package": pkg.name, "identity": pkg.identity,
+                        "source": args.package, "kind": r.kind,
+                        "analysis": analysis,
+                        "findings": findings_to_dicts(findings), "ledger": ledger,
+                    }, indent=2) + "\n")
+                else:
+                    _print_findings(pkg, findings)
+                if any(
+                    not finding.vector and finding.severity in {"critical", "high"}
+                    for finding in findings
+                ):
+                    return 2
+            elif args.json:
                 sys.stdout.write(json.dumps({
                     "package": pkg.name, "identity": pkg.identity,
                     "source": args.package, "kind": r.kind,

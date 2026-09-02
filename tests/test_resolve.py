@@ -217,6 +217,29 @@ def test_zip_slip_is_rejected(tmp_path):
             pass
 
 
+def test_zip_backslash_slip_is_rejected_portably(tmp_path):
+    z = tmp_path / "backslash-slip.zip"
+    _zip(z, {"..\\escape.txt": "pwned"})
+    with pytest.raises(UnsafeInputError):
+        with resolved_input(str(z)):
+            pass
+
+
+@pytest.mark.parametrize("names", [
+    ("Skill.md", "SKILL.md"),
+    ("caf\N{LATIN SMALL LETTER E WITH ACUTE}.md", "cafe\N{COMBINING ACUTE ACCENT}.md"),
+    ("name", "name."),
+])
+def test_zip_portable_path_collisions_are_rejected(tmp_path, names):
+    z = tmp_path / "collision.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr(names[0], "one")
+        zf.writestr(names[1], "two")
+    with pytest.raises(UnsafeInputError):
+        with resolved_input(str(z)):
+            pass
+
+
 def test_zip_symlink_member_is_rejected(tmp_path):
     z = tmp_path / "link.zip"
     with zipfile.ZipFile(z, "w") as zf:

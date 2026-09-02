@@ -12,6 +12,7 @@ from __future__ import annotations
 import ast
 import time
 import unicodedata
+import warnings
 
 import pytest
 
@@ -454,6 +455,22 @@ def test_python_oversize_flagged_not_parsed(make_package):
     a = _parsed(make_package, {"SKILL.md": _M, "scripts/big.py": big}).by_rel["scripts/big.py"]
     assert a.py_tree is None
     assert any(c == "python_oversize" for c, _ in a.diagnostics)
+
+
+def test_python_ast_depth_is_platform_independent(make_package):
+    bomb = "x = " + "+".join(['"a"'] * 3000) + "\n"
+    a = _parsed(make_package, {"SKILL.md": _M, "scripts/bomb.py": bomb}).by_rel[
+        "scripts/bomb.py"
+    ]
+    assert a.py_tree is None
+    assert any(c == "python_too_complex" for c, _ in a.diagnostics)
+
+
+def test_untrusted_python_syntax_warnings_do_not_escape(make_package):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _parsed(make_package, {"SKILL.md": _M, "scripts/warn.py": 'x = "\\W"\n'})
+    assert not [item for item in caught if issubclass(item.category, SyntaxWarning)]
 
 
 def test_diagnostics_mirrored_into_ledger(make_package):
