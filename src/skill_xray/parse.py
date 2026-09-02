@@ -65,6 +65,7 @@ class Markdown:
 
     links: list = field(default_factory=list)
     fences: list = field(default_factory=list)
+    code_spans: list = field(default_factory=list)
     prose_spans: list = field(default_factory=list)
     reference_spans: list = field(default_factory=list)
     preproc: list = field(default_factory=list)
@@ -131,6 +132,8 @@ def parse_markdown(text, line_offset=0):
         if tok.type in ("fence", "code_block"):
             info = tok.info.strip() if tok.type == "fence" else ""
             md.fences.append((info, tok.content, line))
+            if tok.map:
+                md.code_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
             if info.startswith("!"):
                 md.preproc.append(Preproc("fenced", tok.content, line, runs=True))
         elif tok.type == "html_block":
