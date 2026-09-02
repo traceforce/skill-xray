@@ -8,6 +8,7 @@ from __future__ import annotations
 from ..findings import Finding
 from . import (
     coverage,
+    obfuscation,
     taint_engine,
 )
 from .code_lane import build_code_lane
@@ -15,6 +16,7 @@ from .code_lane import build_code_lane
 # Registered checks, in a stable order. Each is a module-level check(parsed)->[Finding].
 _CHECKS = (
     coverage.check,
+    obfuscation.check,
     taint_engine.check,
 )
 
