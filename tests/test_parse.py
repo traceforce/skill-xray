@@ -175,6 +175,14 @@ def test_grants_comma_inside_parens_not_split():
     assert any(g.pattern == "a, b" for g in grants)
 
 
+def test_grants_space_separated_specifiers_are_independent():
+    grants = parse_grants({"allowed-tools": "Bash(curl:*) Bash(jq:*)"})
+    assert [(grant.tool, grant.pattern, grant.parsed) for grant in grants] == [
+        ("Bash", "curl:*", True),
+        ("Bash", "jq:*", True),
+    ]
+
+
 # --- shell: tree-sitter-bash CST + error-region coverage gaps ---------------
 def test_shell_tree_sitter_cst():
     tree, errs = parse_shell("curl -k https://x | sh -s -- --yes")

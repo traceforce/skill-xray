@@ -11,6 +11,7 @@ import io
 import json
 import posixpath
 import re
+import shlex
 import time
 import tomllib
 import unicodedata
@@ -665,15 +666,16 @@ def parse_frontmatter(text):
 
 
 def _split_grants(val):
-    """Split allowed-tools into specifiers (a list, or a comma string; commas in `(...)` stay)."""
+    """Split list, comma, or space-delimited grants without splitting patterns."""
     if isinstance(val, list):
         return [x.strip() for x in val if isinstance(x, str) and x.strip()]   # non-str: flag later
     if not isinstance(val, str):
         return []
     out, depth, cur = [], 0, ""
     for ch in val:
-        if ch == "," and depth == 0:
-            out.append(cur)
+        if depth == 0 and (ch == "," or ch.isspace()):
+            if cur.strip():
+                out.append(cur)
             cur = ""
             continue
         if ch == "(":
@@ -691,6 +693,11 @@ def parse_grants(frontmatter):
     for key, allowed in (("allowed-tools", True), ("disallowed-tools", False)):
         for spec in _split_grants((frontmatter or {}).get(key)):
             m = _GRANT_RE.match(spec)
+            try:
+                if m and m.group(2) is not None:
+                    shlex.split(m.group(2), posix=False)
+            except ValueError:
+                m = None
             if m:
                 grants.append(Grant(m.group(1), m.group(2), spec, allowed, m.group(2) is None))
             else:
@@ -1052,6 +1059,11 @@ def _parse_one(art, p):
                     bad_elem = isinstance(v, list) and not all(isinstance(x, str) for x in v)
                     if bad_shape or bad_elem:
                         p.diagnostics.append(("grants_unparsed_shape", gkey))
+                    allowed = gkey == "allowed-tools"
+                    if any(not grant.parsed and grant.allowed == allowed for grant in p.grants):
+                        diagnostic = ("grants_unparsed_shape", gkey)
+                        if diagnostic not in p.diagnostics:
+                            p.diagnostics.append(diagnostic)
         _parse_md(p, text, kind != "doc")      # a doc has no frontmatter to strip
     elif kind == "script_python":
         _parse_python(p, text)
