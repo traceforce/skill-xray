@@ -106,26 +106,21 @@ _FALLBACK_LINK_RE = re.compile(
 )
 
 
-def _without_blockquotes(line):
+def _blockquote_parts(line):
     position = 0
-    found = False
+    depth = 0
     while position < len(line):
-        start = position
         spaces = 0
         while position < len(line) and line[position] == " " and spaces < 3:
             position += 1
             spaces += 1
         if position >= len(line) or line[position] != ">":
-            if not found:
-                return line, 0
-            return line[position:], position
-        found = True
+            return (line, 0, 0) if depth == 0 else (line[position:], position, depth)
+        depth += 1
         position += 1
         if position < len(line) and line[position] in " \t":
             position += 1
-        if position == start:
-            break
-    return line[position:], position
+    return line[position:], position, depth
 
 
 def _has_table_pipe(line):
@@ -156,17 +151,18 @@ def _table_lines(lines):
     table = set()
     index = 1
     while index < len(lines):
-        line = _without_blockquotes(lines[index])[0]
-        header = _without_blockquotes(lines[index - 1])[0]
+        line, _line_prefix, line_depth = _blockquote_parts(lines[index])
+        header, _header_prefix, header_depth = _blockquote_parts(lines[index - 1])
         if (not _TABLE_DIVIDER_RE.match(line) or not _has_table_pipe(line)
-                or not _has_table_pipe(header)):
+                or not _has_table_pipe(header) or line_depth != header_depth):
             index += 1
             continue
         start = index - 1
         end = index
         while end + 1 < len(lines):
-            candidate = _without_blockquotes(lines[end + 1])[0]
-            if _BLOCK_OPENER_RE.match(candidate) or not _has_table_pipe(candidate):
+            candidate, _prefix, depth = _blockquote_parts(lines[end + 1])
+            if (depth != line_depth or _BLOCK_OPENER_RE.match(candidate)
+                    or not _has_table_pipe(candidate)):
                 break
             end += 1
         table.update(range(start, end + 1))
@@ -195,20 +191,52 @@ def _indented_code_lines(lines):
     return indented
 
 
+def _container_lines(lines):
+    list_indents = {}
+    prepared = []
+    for source in lines:
+        content, quote_prefix, depth = _blockquote_parts(source)
+        if not content.strip():
+            list_indents.pop(depth, None)
+            prepared.append((content, quote_prefix, (depth, 0)))
+            continue
+        item = _LIST_ITEM_RE.match(content)
+        if item:
+            list_indent = len(item.group(0))
+            list_indents[depth] = list_indent
+            prepared.append((
+                content[list_indent:], quote_prefix + list_indent, (depth, list_indent),
+            ))
+            continue
+        list_indent = list_indents.get(depth)
+        leading = len(content) - len(content.lstrip(" "))
+        if list_indent is not None and leading >= list_indent:
+            prepared.append((
+                content[list_indent:], quote_prefix + list_indent, (depth, list_indent),
+            ))
+        else:
+            if leading == 0:
+                list_indents.pop(depth, None)
+            prepared.append((content, quote_prefix, (depth, 0)))
+    return prepared
+
+
 def _fenced_lines(lines):
     fenced = set()
     fence = None
-    for index, source in enumerate(lines):
+    for index, (source, _prefix, container) in enumerate(_container_lines(lines)):
+        if fence is not None and container != fence[2]:
+            fence = None
         match = _FENCE_OPEN_RE.match(source)
         if fence is None:
             if match:
                 marker_run = match.group(2)
                 if marker_run[0] == "~" or "`" not in match.group(3):
-                    fence = marker_run[0], len(marker_run)
+                    fence = marker_run[0], len(marker_run), container
                     fenced.add(index)
             continue
         fenced.add(index)
-        marker, width = fence
+        marker, width, _container = fence
         stripped = source.lstrip(" ")
         indent = len(source) - len(stripped)
         if (indent <= 3
@@ -235,20 +263,23 @@ def _scan_fenced_preproc(text, line_offset=0):
                 column=column, info=info,
             ))
 
-    for index, source in enumerate(text.split("\n")):
+    prepared = _container_lines(text.split("\n"))
+    for index, (candidate, prefix, container) in enumerate(prepared):
         if active is not None:
-            marker, width, info, opener, column, content, container = active
-            candidate = _without_blockquotes(source)[0] if container else source
-            stripped = candidate.lstrip(" ")
-            indent = len(candidate) - len(stripped)
-            if (indent <= 3 and re.match(
-                    r"^(%s{%d,})[ \t]*$" % (re.escape(marker), width), stripped)):
+            marker, width, info, opener, column, content, active_container = active
+            if container != active_container:
                 finish(active)
                 active = None
             else:
-                content.append(candidate)
-            continue
-        candidate, prefix = _without_blockquotes(source)
+                stripped = candidate.lstrip(" ")
+                indent = len(candidate) - len(stripped)
+                if (indent <= 3 and re.match(
+                        r"^(%s{%d,})[ \t]*$" % (re.escape(marker), width), stripped)):
+                    finish(active)
+                    active = None
+                else:
+                    content.append(candidate)
+                continue
         match = _FENCE_OPEN_RE.match(candidate)
         if not match:
             continue
@@ -257,11 +288,34 @@ def _scan_fenced_preproc(text, line_offset=0):
             continue
         active = (
             marker_run[0], len(marker_run), match.group(3).strip(), index,
-            prefix + len(match.group(1)) + 1, [], bool(prefix),
+            prefix + len(match.group(1)) + 1, [], container,
         )
     if active is not None:
         finish(active)
     return tokens, total
+
+
+def _without_inline_code(line):
+    masked = list(line)
+    index = 0
+    while index < len(line):
+        if line[index] == "\\":
+            index += 2
+            continue
+        if line[index] != "`":
+            index += 1
+            continue
+        end = index + 1
+        while end < len(line) and line[end] == "`":
+            end += 1
+        marker = line[index:end]
+        close = line.find(marker, end)
+        if close < 0:
+            index = end
+            continue
+        masked[index:close + len(marker)] = " " * (close + len(marker) - index)
+        index = close + len(marker)
+    return "".join(masked)
 
 
 def _fallback_links(text, line_offset=0):
@@ -271,7 +325,7 @@ def _fallback_links(text, line_offset=0):
     for index, line in enumerate(lines):
         if index in excluded:
             continue
-        for match in _FALLBACK_LINK_RE.finditer(line):
+        for match in _FALLBACK_LINK_RE.finditer(_without_inline_code(line)):
             links.append((match.group(1), "", index + 1 + line_offset))
     return links
 
@@ -405,7 +459,7 @@ def parse_markdown(text, line_offset=0):
     md = Markdown()
     source_lines = text.split("\n")
     preproc_excluded = set()
-    inline_starts = set()
+    block_starts = set()
     for tok in tokens:
         line = (tok.map[0] + 1 + line_offset) if tok.map else 0
         if tok.type in ("fence", "code_block"):
@@ -430,10 +484,11 @@ def parse_markdown(text, line_offset=0):
             md.has_html = True
             if tok.map:
                 md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
+                block_starts.add(tok.map[0])
         elif tok.type == "inline":
             if tok.map:
                 md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
-                inline_starts.add(tok.map[0])
+                block_starts.add(tok.map[0])
             _scan_inline(tok, line, md)
         elif tok.type == "table_open" and tok.map:
             preproc_excluded.update(range(tok.map[0], tok.map[1]))
@@ -444,7 +499,7 @@ def parse_markdown(text, line_offset=0):
         if span:
             md.reference_spans.append((span[0] + 1 + line_offset, span[1] + line_offset))
     inline, total = _scan_inline_preproc(
-        text, line_offset, preproc_excluded, block_starts=inline_starts,
+        text, line_offset, preproc_excluded, block_starts=block_starts,
     )
     md.preproc.extend(inline)
     md.preproc_counts["inline"] = total
