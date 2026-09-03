@@ -94,7 +94,38 @@ def _scan_inline(inline, line, md):
 
 
 _FENCE_OPEN_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
-_TABLE_DIVIDER_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?(?:\s*\|\s*:?-{3,}:?)*\s*\|?\s*$")
+_TABLE_DIVIDER_RE = re.compile(
+    r"^\s*+\|?\s*+:?-{3,}:?(?:\s*+\|\s*+:?-{3,}:?)*\s*+\|?\s*+$"
+)
+_BLOCK_OPENER_RE = re.compile(
+    r"^ {0,3}(?:#{1,6}(?:[ \t]|$)|`{3,}|~{3,}|(?:[-+*]|\d+[.)])[ \t]+)"
+)
+_LIST_ITEM_RE = re.compile(r"^(\s*)(?:[-+*]|\d+[.)])([ \t]+)")
+_FALLBACK_LINK_RE = re.compile(
+    r"(?<!!)\[[^\]\n]{0,500}\]\(\s*<?([^\s)>]{1,1000})>?[^)\n]{0,1000}\)"
+)
+
+
+def _without_blockquotes(line):
+    position = 0
+    found = False
+    while position < len(line):
+        start = position
+        spaces = 0
+        while position < len(line) and line[position] == " " and spaces < 3:
+            position += 1
+            spaces += 1
+        if position >= len(line) or line[position] != ">":
+            if not found:
+                return line, 0
+            return line[position:], position
+        found = True
+        position += 1
+        if position < len(line) and line[position] in " \t":
+            position += 1
+        if position == start:
+            break
+    return line[position:], position
 
 
 def _has_table_pipe(line):
@@ -125,14 +156,18 @@ def _table_lines(lines):
     table = set()
     index = 1
     while index < len(lines):
-        line = lines[index]
+        line = _without_blockquotes(lines[index])[0]
+        header = _without_blockquotes(lines[index - 1])[0]
         if (not _TABLE_DIVIDER_RE.match(line) or not _has_table_pipe(line)
-                or not _has_table_pipe(lines[index - 1])):
+                or not _has_table_pipe(header)):
             index += 1
             continue
         start = index - 1
         end = index
-        while end + 1 < len(lines) and _has_table_pipe(lines[end + 1]):
+        while end + 1 < len(lines):
+            candidate = _without_blockquotes(lines[end + 1])[0]
+            if _BLOCK_OPENER_RE.match(candidate) or not _has_table_pipe(candidate):
+                break
             end += 1
         table.update(range(start, end + 1))
         index = end + 1
@@ -140,10 +175,24 @@ def _table_lines(lines):
 
 
 def _indented_code_lines(lines):
-    return {
-        index for index, line in enumerate(lines)
-        if line.startswith("\t") or len(line) - len(line.lstrip(" ")) >= 4
-    }
+    indented = set()
+    list_indent = None
+    for index, line in enumerate(lines):
+        if not line.strip():
+            list_indent = None
+            continue
+        item = _LIST_ITEM_RE.match(line)
+        if item:
+            list_indent = len(item.group(0))
+            continue
+        leading = len(line) - len(line.lstrip(" "))
+        if list_indent is not None and leading >= list_indent:
+            continue
+        if line.startswith("\t") or leading >= 4:
+            indented.add(index)
+        elif leading == 0:
+            list_indent = None
+    return indented
 
 
 def _fenced_lines(lines):
@@ -175,7 +224,7 @@ def _scan_fenced_preproc(text, line_offset=0):
 
     def finish(state):
         nonlocal total
-        marker, width, info, opener, column, content = state
+        marker, width, info, opener, column, content, _container = state
         code = "\n".join(content)
         if not info.startswith("!") or not code.strip():
             return
@@ -188,17 +237,19 @@ def _scan_fenced_preproc(text, line_offset=0):
 
     for index, source in enumerate(text.split("\n")):
         if active is not None:
-            marker, width, info, opener, column, content = active
-            stripped = source.lstrip(" ")
-            indent = len(source) - len(stripped)
+            marker, width, info, opener, column, content, container = active
+            candidate = _without_blockquotes(source)[0] if container else source
+            stripped = candidate.lstrip(" ")
+            indent = len(candidate) - len(stripped)
             if (indent <= 3 and re.match(
                     r"^(%s{%d,})[ \t]*$" % (re.escape(marker), width), stripped)):
                 finish(active)
                 active = None
             else:
-                content.append(source)
+                content.append(candidate)
             continue
-        match = _FENCE_OPEN_RE.match(source)
+        candidate, prefix = _without_blockquotes(source)
+        match = _FENCE_OPEN_RE.match(candidate)
         if not match:
             continue
         marker_run = match.group(2)
@@ -206,11 +257,23 @@ def _scan_fenced_preproc(text, line_offset=0):
             continue
         active = (
             marker_run[0], len(marker_run), match.group(3).strip(), index,
-            len(match.group(1)) + 1, [],
+            prefix + len(match.group(1)) + 1, [], bool(prefix),
         )
     if active is not None:
         finish(active)
     return tokens, total
+
+
+def _fallback_links(text, line_offset=0):
+    lines = text.split("\n")
+    excluded = _fenced_lines(lines) | _indented_code_lines(lines) | _table_lines(lines)
+    links = []
+    for index, line in enumerate(lines):
+        if index in excluded:
+            continue
+        for match in _FALLBACK_LINK_RE.finditer(line):
+            links.append((match.group(1), "", index + 1 + line_offset))
+    return links
 
 
 def _scan_inline_preproc(
@@ -689,6 +752,7 @@ class ParsedArtifact:
         self.frontmatter_end_line = None
         self.grants = None
         self.markdown = None
+        self.fallback_links = []
         self.preprocessing = []
         self.preprocessing_counts = {"inline": 0, "fenced": 0}
         self.py_tree = None
@@ -719,10 +783,11 @@ def _resolve_refs(pkg):
     """Resolve in-package markdown links to target artifacts (§1); ext/`../` drop, targets NFC."""
     refs = []
     for p in pkg.artifacts:
-        if p.markdown is None:
+        links = p.markdown.links if p.markdown is not None else p.fallback_links
+        if not links:
             continue
         base = p.rel.rsplit("/", 1)[0] if "/" in p.rel else ""
-        for href, _text, line in p.markdown.links:
+        for href, _text, line in links:
             target = href.split("#", 1)[0].split("?", 1)[0].strip()
             if not target or re.match(r"[a-z][a-z0-9+.-]*:", target, re.I):
                 continue                                   # empty/pure-fragment, or any URI scheme
@@ -769,6 +834,7 @@ def _parse_md(p, text, strip_fm=True):
     body, off = _body_and_offset(text) if strip_fm else (text, 0)
     p.markdown, mderr = parse_markdown(body, off)
     if p.markdown is None:
+        p.fallback_links = _fallback_links(body, off)
         if strip_fm and off:
             frontmatter = "\n".join(_norm_newlines(text).split("\n")[:off])
             fm_inline, fm_total = _scan_inline_preproc(

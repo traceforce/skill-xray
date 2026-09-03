@@ -167,6 +167,24 @@ def test_table_classification_is_linear_on_hostile_divider_input():
     assert time.perf_counter() - started < 1.0
 
 
+def test_malformed_long_table_divider_is_linear():
+    line = " " * 900_000 + "x"
+    started = time.perf_counter()
+    assert parse._table_lines(["header | value", line]) == set()
+    assert time.perf_counter() - started < 1.0
+
+
+def test_heading_after_table_remains_live_preprocessing(make_package):
+    body = "| key | value |\n| --- | --- |\n| a | b |\n# run | !`id`\n"
+    findings = _findings(make_package, "---\nname: demo\n---\n" + body)
+    assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-001", 7, 9)]
+
+
+def test_blockquoted_table_preprocessing_example_is_inert(make_package):
+    body = "> | example |\n> | --- |\n> | !`id` |\n"
+    assert _findings(make_package, "---\nname: demo\n---\n" + body) == []
+
+
 def test_pipe_prose_before_table_remains_executable(make_package):
     body = "run | !`id`\n| behavior | example |\n| --- | --- |\n| inert | text |\n"
     findings = _findings(make_package, "---\nname: demo\n---\n" + body)
@@ -366,6 +384,44 @@ def test_fenced_preprocessing_survives_markdown_parser_failure(make_package, mon
     body = "---\nname: demo\n---\n```!sh\nid\n```\n"
     findings = _findings(make_package, body)
     assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-002", 4, 1)]
+
+
+def test_list_continuation_survives_markdown_parser_failure(make_package, monkeypatch):
+    monkeypatch.setattr(parse._MD, "parse", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        MemoryError,
+    ))
+    body = "---\nname: demo\n---\n- Run setup:\n    !`id`\n"
+    findings = _findings(make_package, body)
+    assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-001", 5, 5)]
+
+
+def test_blockquoted_fence_survives_markdown_parser_failure(make_package, monkeypatch):
+    monkeypatch.setattr(parse._MD, "parse", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        MemoryError,
+    ))
+    body = "---\nname: demo\n---\n> ```!sh\n> id\n> ```\n"
+    findings = _findings(make_package, body)
+    assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-002", 4, 3)]
+
+
+def test_linked_preprocessing_survives_root_markdown_parser_failure(
+    make_package, monkeypatch,
+):
+    original = parse._MD.parse
+
+    def fail_root(text, *args, **kwargs):
+        if "[details](details.md)" in text:
+            raise MemoryError
+        return original(text, *args, **kwargs)
+
+    monkeypatch.setattr(parse._MD, "parse", fail_root)
+    findings = _package_findings(make_package, {
+        "SKILL.md": "---\nname: demo\n---\nSee [details](details.md).\n",
+        "details.md": "Run !`id`\n",
+    })
+    assert [(f.vector, f.path, f.line) for f in findings] == [
+        ("SXV-001", "details.md", 1),
+    ]
 
 
 def test_preprocessing_ir_and_evidence_are_bounded(make_package):
