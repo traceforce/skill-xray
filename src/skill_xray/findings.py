@@ -140,6 +140,7 @@ class Finding:
     offset: int | None = None
     length: int | None = None
     evidence: dict = field(default_factory=dict)
+    column: int | None = None
 
     def to_dict(self) -> dict:
         meta = vector_meta(self.vector)
@@ -147,6 +148,8 @@ class Finding:
              "path": self.path, "message": self.message}
         if self.line is not None:
             d["line"] = self.line
+        if self.column is not None:
+            d["column"] = self.column
         if self.offset is not None:
             d["offset"] = self.offset
         if self.length is not None:
@@ -163,6 +166,7 @@ class Finding:
 def _sort_key(f: Finding):
     return (SEVERITY_RANK.get(f.severity, 9), f.path, f.vector,
             f.line if f.line is not None else -1,
+            f.column if f.column is not None else -1,
             f.offset if f.offset is not None else -1, f.rule, f.message)
 
 
@@ -177,7 +181,7 @@ def dedupe_findings(findings) -> list:
     seen = set()
     out = []
     for f in sort_findings(findings):
-        key = (f.vector, f.path, f.line, f.offset, f.rule, f.message)
+        key = (f.vector, f.path, f.line, f.column, f.offset, f.rule, f.message)
         if key not in seen:
             seen.add(key)
             out.append(f)
