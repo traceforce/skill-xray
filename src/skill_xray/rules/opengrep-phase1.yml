@@ -1310,3 +1310,97 @@ rules:
           - metavariable-regex:
               metavariable: $SHELL
               regex: '^["'']?(?:/usr)?/bin/(?:sh|bash|zsh|ksh|dash)["'']?$'
+
+  - id: skill-xray.python-agent-identity-persistence
+    mode: taint
+    languages: [python]
+    message: Concealed or priority instructions are written to an agent identity file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-005
+      skill_xray_rule: opengrep-agent-identity-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH)
+              - pattern: Path($PATH).expanduser()
+              - pattern: os.path.expanduser($PATH)
+              - pattern: $BASE / $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:^["'']?|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)).*'
+
+  - id: skill-xray.python-agent-identity-persistence-assigned-content
+    mode: taint
+    languages: [python]
+    message: Concealed or priority instructions are written to an agent identity file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-005
+      skill_xray_rule: opengrep-agent-identity-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern: $VAR = $VALUE
+          - focus-metavariable: $VALUE
+          - metavariable-regex:
+              metavariable: $VALUE
+              regex: '(?is).*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)).*'
+    pattern-sinks:
+      - patterns:
+          - pattern-inside: |
+              $TARGET = $PATH
+              ...
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:^|[/\\]\s*["'']?)(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?\)?$'
+          - pattern: $TARGET.write_text($CONTENT, ...)
+      - patterns:
+          - pattern-inside: |
+              $TARGET = $PATH
+              ...
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:^|[/\\]\s*["'']?)(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?\)?$'
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
+
+  - id: skill-xray.shell-agent-identity-persistence
+    languages: [bash]
+    message: Concealed or priority instructions are written to an agent identity file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-005
+      skill_xray_rule: opengrep-agent-identity-persistence
+      skill_xray_severity: critical
+    patterns:
+      - pattern-either:
+          - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^>#\n]*(?:''[^''\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session))[^''\n]*''|"[^"\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session))[^"\n]*")[^>#\n]*>>?\s*[^\n]*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?(?:[\s;#]|$).*$'
+          - pattern-regex: '(?im)^\s*(?:echo|printf)\b(?=[^#;&|>\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)))[^#;&|>\n]*>>?\s*[^\n]*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?(?:[\s;#]|$).*$'
+
