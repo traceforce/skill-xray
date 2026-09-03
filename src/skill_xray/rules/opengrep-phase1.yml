@@ -1882,3 +1882,107 @@ rules:
       skill_xray_rule: opengrep-xdg-autostart-persistence
       skill_xray_severity: critical
     pattern-regex: '(?im)^[^\n]*Exec=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*(?:>>?|tee)[^\n]*\.config/autostart/[^ /]+\.desktop(?:[ \t]|$)'
+
+  - id: skill-xray.python-execution-capability
+    languages: [python]
+    message: Python code invokes a process or dynamic-code execution API.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: high
+      skill_xray_capability: execution
+    pattern-either:
+      - patterns:
+          - pattern: subprocess.$FUNC(...)
+          - metavariable-regex:
+              metavariable: $FUNC
+              regex: '^(?:run|call|check_call|check_output|Popen|getoutput|getstatusoutput)$'
+      - patterns:
+          - pattern: os.$FUNC(...)
+          - metavariable-regex:
+              metavariable: $FUNC
+              regex: '^(?:system|popen|spawnl|spawnle|spawnlp|spawnlpe|spawnv|spawnve|spawnvp|spawnvpe|execl|execle|execlp|execlpe|execv|execve|execvp|execvpe|posix_spawn|posix_spawnp)$'
+      - pattern: eval(...)
+      - pattern: exec(...)
+
+  - id: skill-xray.python-network-capability
+    languages: [python]
+    message: Python code invokes a network client API.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: high
+      skill_xray_capability: network
+    pattern-either:
+      - patterns:
+          - pattern: requests.$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request)$'
+      - patterns:
+          - pattern: httpx.$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request|stream)$'
+      - pattern: urllib.request.urlopen(...)
+      - pattern: urllib.request.urlretrieve(...)
+      - pattern: socket.create_connection(...)
+      - patterns:
+          - pattern: requests.Session(...).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request)$'
+      - patterns:
+          - pattern: httpx.$CLIENT(...).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $CLIENT
+              regex: '^(?:AsyncClient|Client)$'
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request|stream)$'
+      - patterns:
+          - pattern: $SESSION.$METHOD(...)
+          - pattern-inside: |
+              $SESSION = $LIB.$CLIENT(...)
+              ...
+          - metavariable-regex:
+              metavariable: $LIB
+              regex: '^(?:httpx|requests)$'
+          - metavariable-regex:
+              metavariable: $CLIENT
+              regex: '^(?:AsyncClient|Client|Session)$'
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request|stream)$'
+
+  - id: skill-xray.shell-network-capability
+    languages: [bash]
+    message: Shell code invokes a network client command.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: high
+      skill_xray_capability: network
+    patterns:
+      - pattern: $COMMAND ...
+      - metavariable-regex:
+          metavariable: $COMMAND
+          regex: '^(?:.*/)?(?:(?:aria2c|curl|http|httpie|nc|ncat|scp|sftp|socat|ssh|wget)|(?:curl|wget)\$(?:IFS|\{IFS\}).*)$'
+
+  - id: skill-xray.shell-execution-capability
+    languages: [bash]
+    message: Shell code invokes a dynamic command execution primitive.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: high
+      skill_xray_capability: execution
+    pattern-either:
+      - pattern: eval ...
+      - pattern: exec ...
+      - pattern: bash -c ...
+      - pattern: sh -c ...

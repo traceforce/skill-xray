@@ -74,6 +74,14 @@ _NETWORK_COMMANDS = {
 _NETWORK_ONLY_COMMANDS = {"aria2c", "curl", "http", "httpie", "scp", "sftp", "wget"}
 _REMOTE_COMMANDS = _NETWORK_ONLY_COMMANDS | {"ftp", "nc", "ncat", "socat", "ssh", "telnet"}
 _GIT_REMOTE_SUBCOMMANDS = {"clone", "fetch", "pull", "push", "remote", "submodule"}
+_NON_EXECUTION_COMMANDS = _NETWORK_ONLY_COMMANDS | {
+    "alias", "bg", "break", "cd", "chmod", "chown", "continue", "declare", "dirs",
+    "disown", "echo", "exit", "export", "false", "fg", "getopts", "hash", "help",
+    "history", "jobs", "local", "logout", "mapfile", "popd", "printf", "pushd", "pwd",
+    "read", "readarray", "readonly", "return", "set", "shift", "shopt", "suspend",
+    "test", "times", "true", "type", "typeset", "ulimit", "umask", "unalias", "unset",
+    "wait",
+}
 
 
 def _basename(token):
@@ -333,6 +341,34 @@ def _denial_covers(denial, grant):
         candidate = allowed[:-2].rstrip() if allowed.endswith(":*") else allowed
         return candidate == prefix or candidate.startswith(prefix + " ")
     return False
+
+
+def declared_capabilities(grants):
+    """Capabilities materially declared by effective allowed grants."""
+    values = list(grants or ())
+    denials = [grant for grant in values if not grant.allowed]
+    allowed = [
+        grant for grant in values
+        if grant.allowed and grant.parsed
+        and not any(_denial_covers(denial, grant) for denial in denials)
+    ]
+    execution = False
+    for grant in allowed:
+        if grant.tool not in _EXECUTION_TOOLS:
+            continue
+        command, tokens = _command_tokens(grant.pattern)
+        execution |= grant.pattern is None or command in {"", "*", "**"}
+        for segment in _segments(tokens):
+            effective = _effective_tokens(segment)[0] or segment
+            head = _basename(effective[0]) if effective else ""
+            execution |= bool(head and head not in _NON_EXECUTION_COMMANDS)
+    network = any(
+        _reaches_network(grant.tool, grant.pattern, _command_tokens(grant.pattern)[1])
+        for grant in allowed
+    )
+    return {capability for capability, present in (
+        ("execution", execution), ("network", network),
+    ) if present}
 
 
 def _expandable_substitution(value):

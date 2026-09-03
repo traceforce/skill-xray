@@ -27,7 +27,7 @@ from ruamel.yaml.constructor import DuplicateKeyError
 from ruamel.yaml.events import AliasEvent
 from tree_sitter import Language, Parser
 
-__all__ = ["Grant", "Preproc", "Markdown", "ParsedArtifact", "ParsedPackage",
+__all__ = ["Grant", "Preproc", "YamlTag", "Markdown", "ParsedArtifact", "ParsedPackage",
            "parse_package", "parse_markdown", "parse_frontmatter", "parse_grants",
            "parse_shell", "classify_manifest"]
 
@@ -611,29 +611,69 @@ def _plain(obj):
     return obj
 
 
+@dataclass(frozen=True)
+class YamlTag:
+    """A parser-proven unsafe construction tag in load-bearing frontmatter."""
+
+    tag: str
+    line: int
+    column: int
+
+
+def _dangerous_yaml_tag(tag):
+    return (
+        tag.startswith((
+            "tag:yaml.org,2002:python/object:",
+            "tag:yaml.org,2002:python/object/",
+        ))
+        or tag.startswith((
+            "!ruby/exception:", "!ruby/hash:", "!ruby/object:", "!ruby/struct:",
+            "tag:yaml.org,2002:ruby/exception:", "tag:yaml.org,2002:ruby/hash:",
+            "tag:yaml.org,2002:ruby/object:", "tag:yaml.org,2002:ruby/struct:",
+        ))
+        or tag in {
+            "tag:yaml.org,2002:javax.script.ScriptEngineManager",
+            "tag:yaml.org,2002:java.net.URLClassLoader",
+        }
+    )
+
+
 def _fm_load(block):
     """Refuse anchors/aliases/`!!python` tags via the event stream, then load -> (values,
     key_lines, error). Slow only on deep flow nesting, which the caller bounds by refusing a
     block whose flow-opener count exceeds _MAX_FM_FLOW before this runs."""
+    unsafe_tags = []
+    has_alias = False
     try:
         for ev in YAML(typ="rt").parse(io.StringIO(block)):   # events resolve nothing: bomb-safe
             if isinstance(ev, AliasEvent) or getattr(ev, "anchor", None) is not None:
-                return None, {}, "yaml_alias_budget"
-            if "python/" in str(getattr(ev, "tag", "")):      # !!python/* deserialization RCE
-                return None, {}, "yaml_unsafe_tag"
+                has_alias = True
+            tag = str(getattr(ev, "tag", "") or "")
+            mark = getattr(ev, "start_mark", None)
+            if tag and mark is not None and _dangerous_yaml_tag(tag):
+                unsafe_tags.append(YamlTag(tag, mark.line + 2, mark.column + 1))
+        if unsafe_tags:
+            return None, {}, "yaml_unsafe_tag", unsafe_tags
+        if has_alias:
+            return None, {}, "yaml_alias_budget", []
         data = YAML(typ="rt").load(io.StringIO(block))        # fresh loader per artifact: isolated
     except DuplicateKeyError:                                 # specific code before generic below
-        return None, {}, "yaml_duplicate_key"
+        return None, {}, "yaml_duplicate_key", unsafe_tags
     except Exception as exc:                                  # any hostile-YAML error, fail closed
+        if unsafe_tags:
+            return None, {}, "yaml_unsafe_tag", unsafe_tags
+        if has_alias:
+            return None, {}, "yaml_alias_budget", []
         mark = getattr(exc, "problem_mark", None)             # +2: block dropped the opening `---`
-        return None, {}, "yaml_error:line %d" % (mark.line + 2) if mark else "yaml_error"
+        error = "yaml_error:line %d" % (mark.line + 2) if mark else "yaml_error"
+        return None, {}, error, unsafe_tags
     if data is None:
-        return {}, {}, None
+        return {}, {}, None, []
     if not isinstance(data, dict):               # CommentedMap is a dict; a list/scalar is not
-        return None, {}, "frontmatter_not_a_mapping"
+        return None, {}, "frontmatter_not_a_mapping", []
     lc = getattr(data, "lc", None)               # .lc carries the real top-level key line
     key_lines = {str(k): lc.data[k][0] + 2 for k in data if lc and lc.data and k in lc.data}
-    return _plain(dict(data)), key_lines, None
+    return _plain(dict(data)), key_lines, None, []
 
 
 @dataclass
@@ -648,21 +688,27 @@ class Grant:
     parsed: bool = True
 
 
-def parse_frontmatter(text):
+def _parse_frontmatter_details(text):
     """Leading `--- ... ---` YAML block -> (values, key_lines, error). Anchors/aliases and unsafe
     tags are refused; a flow-nesting bomb (too many `[`/`{` for tiny metadata) is refused before the
     parser runs, so a deep-nest block cannot hang. Values are plain (no ruamel types)."""
     lines, has_open, end = _fm_bounds(text)
     if not has_open:
-        return None, {}, None
+        return None, {}, None, []
     if end is None:
-        return None, {}, "frontmatter_unterminated"
+        return None, {}, "frontmatter_unterminated", []
     block = "\n".join(lines[1:end])
     if len(block) > _MAX_FM_BYTES:
-        return None, {}, "frontmatter_too_large"
+        return None, {}, "frontmatter_too_large", []
     if block.count("[") + block.count("{") > _MAX_FM_FLOW:
-        return None, {}, "frontmatter_too_deep"    # flow-nesting bomb: refuse before parsing
+        return None, {}, "frontmatter_too_deep", []  # refuse before parsing
     return _fm_load(block)
+
+
+def parse_frontmatter(text):
+    """Public compatibility wrapper returning values, key locations and error."""
+    values, key_lines, error, _unsafe_tags = _parse_frontmatter_details(text)
+    return values, key_lines, error
 
 
 def _split_grants(val):
@@ -957,6 +1003,7 @@ class ParsedArtifact:
         self.frontmatter = None
         self.frontmatter_key_lines = {}
         self.frontmatter_end_line = None
+        self.unsafe_yaml_tags = []
         self.grants = None
         self.markdown = None
         self.fallback_links = []
@@ -1109,8 +1156,9 @@ def _parse_one(art, p):
             _lines, has_open, fm_end = _fm_bounds(text)
             if has_open and fm_end is not None:
                 p.frontmatter_end_line = fm_end + 1
-            fm, key_lines, err = parse_frontmatter(text)
+            fm, key_lines, err, unsafe_tags = _parse_frontmatter_details(text)
             p.frontmatter, p.frontmatter_key_lines = fm, key_lines
+            p.unsafe_yaml_tags = unsafe_tags
             if err:
                 p.diagnostics.append(("frontmatter_parse_error", err))
             if fm:

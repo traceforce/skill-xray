@@ -14,7 +14,13 @@ from pathlib import Path
 
 from .checks._pyast import dotted
 from .checks._pyast import parse as parse_python
-from .checks.code_lane import _SUPPORTED_SHELL_DIALECTS, build_code_lane
+from .checks.code_lane import (
+    _SUPPORTED_SHELL_DIALECTS,
+    _governing_manifest,
+    _manifest_index,
+    build_code_lane,
+)
+from .checks.grants import declared_capabilities
 from .findings import Finding, cap_findings, dedupe_findings, vector_registry
 from .opengrep_runtime import OpenGrepRuntimeError, resolve_opengrep
 
@@ -26,6 +32,8 @@ _MAX_POSTFILTERS_PER_TARGET = 32
 _PY_TAINT_VECTORS = {"SXV-008", "SXV-018", "SXV-019"}
 _PY_SINKS = {
     "os.system", "os.popen", "subprocess.run", "subprocess.call",
+    "os.execl", "os.execle", "os.execlp", "os.execlpe", "os.execv", "os.execve",
+    "os.execvp", "os.execvpe", "os.posix_spawn", "os.posix_spawnp",
     "subprocess.check_call", "subprocess.check_output", "subprocess.Popen",
     "subprocess.getoutput", "subprocess.getstatusoutput",
 }
@@ -992,7 +1000,9 @@ def _callable_identity(scopes, raw: str, line: int, col: int | None, seen=()):
     return None
 
 
-def _qualified_rebound(scopes, raw: str, line: int, col: int | None) -> bool:
+def _qualified_rebound(
+    scopes, raw: str, line: int, col: int | None, *, unknown_is_rebound=False,
+) -> bool:
     for scope in scopes:
         body = getattr(scope, "body", ())
         if not isinstance(body, list):
@@ -1028,7 +1038,7 @@ def _qualified_rebound(scopes, raw: str, line: int, col: int | None) -> bool:
                 ):
                     return True
                 # Unknown assignments are not proof that the source or sink disappeared.
-                return False
+                return unknown_is_rebound
     return False
 
 
@@ -1070,6 +1080,81 @@ def _sink_is_shadowed(tree: ast.Module, line: int, col: int | None) -> bool:
         ):
             return True
     return False
+
+
+def _network_capability_is_invalid(
+    tree: ast.Module, line: int, col: int | None,
+) -> bool:
+    """Reject a network-looking call unless its root is still bound to a known import."""
+    allowed = {
+        "requests.delete", "requests.get", "requests.head", "requests.options",
+        "requests.patch", "requests.post", "requests.put", "requests.request",
+        "httpx.delete", "httpx.get", "httpx.head", "httpx.options", "httpx.patch",
+        "httpx.post", "httpx.put", "httpx.request", "httpx.stream",
+        "urllib.request.urlopen", "urllib.request.urlretrieve",
+        "socket.create_connection",
+    }
+    scopes = _scope_chain(tree, line, col)
+
+    def canonical(raw, at_line=line, at_col=col):
+        name, separator, tail = raw.partition(".")
+        binding = _binding_at(scopes, name, at_line, at_col)
+        if not binding or binding[0] != "import":
+            return None
+        return binding[1] + (separator + tail if separator else "")
+
+    def assigned_constructor(name):
+        latest = None
+        for candidate in _scope_nodes(scopes[-1]):
+            if (isinstance(candidate, (ast.Assign, ast.AnnAssign))
+                    and _before(candidate, line, col)):
+                targets = (
+                    candidate.targets if isinstance(candidate, ast.Assign)
+                    else [candidate.target]
+                )
+                if any(_target_binds(target, name) for target in targets):
+                    if latest is None or candidate.lineno > latest.lineno:
+                        latest = candidate
+        value = latest.value if latest is not None else None
+        if not isinstance(value, ast.Call):
+            return None
+        return dotted(value.func), latest.lineno, latest.col_offset + 1
+
+    for node in ast.walk(scopes[-1]):
+        if not isinstance(node, ast.Call) or not _contains_position(node, line, col):
+            continue
+        raw = dotted(node.func)
+        resolved = canonical(raw) if raw else None
+        if resolved in allowed and not _qualified_rebound(scopes, raw, line, col):
+            return False
+        if not isinstance(node.func, ast.Attribute):
+            continue
+        owner = node.func.value
+        constructor = dotted(owner.func) if isinstance(owner, ast.Call) else None
+        constructor_line, constructor_col = line, col
+        if constructor is None and isinstance(owner, ast.Name):
+            assigned = assigned_constructor(owner.id)
+            if assigned is not None:
+                constructor, constructor_line, constructor_col = assigned
+        resolved_constructor = canonical(
+            constructor, constructor_line, constructor_col,
+        ) if constructor else None
+        if resolved_constructor in {
+            "httpx.AsyncClient", "httpx.Client", "requests.Session",
+        } and node.func.attr in {
+            "delete", "get", "head", "options", "patch", "post", "put", "request", "stream",
+        } and not _qualified_rebound(
+            scopes, constructor, constructor_line, constructor_col,
+            unknown_is_rebound=True,
+        ) and not (
+            resolved_constructor != constructor
+            and _qualified_rebound(
+                scopes, resolved_constructor, constructor_line, constructor_col,
+                unknown_is_rebound=True,
+            )
+        ):
+            return False
+    return True
 
 
 def _assigned_alias_is_invalid(extra: dict, tree: ast.Module, line: int, col: int | None):
@@ -1280,6 +1365,7 @@ def findings_from_report(
     report: dict,
     targets: dict[str, SelectedCode],
     *,
+    parsed=None,
     redactions=(),
 ) -> list[Finding]:
     """Translate OpenGrep's stable JSON result shape into native findings."""
@@ -1287,6 +1373,7 @@ def findings_from_report(
     python_trees: dict[str, ast.Module | None] = {}
     postfilter_counts: dict[str, int] = {}
     known_vectors = vector_registry()
+    manifests = _manifest_index(parsed) if parsed is not None else {}
     results = report.get("results", [])
     errors = report.get("errors", [])
     if not isinstance(results, list):
@@ -1331,6 +1418,7 @@ def findings_from_report(
         vector = metadata.get("skill_xray_vector")
         rule = metadata.get("skill_xray_rule")
         severity = metadata.get("skill_xray_severity")
+        capability = metadata.get("skill_xray_capability")
         if not isinstance(vector, str) or vector not in known_vectors or not isinstance(rule, str):
             findings.append(_coverage(
                 "opengrep-unmapped-rule",
@@ -1371,6 +1459,72 @@ def findings_from_report(
                 severity="high",
             ))
             metavars = None
+        manifest = None
+        declared = []
+        if capability is not None:
+            if capability not in {"execution", "network"} or parsed is None:
+                findings.append(_coverage(
+                    "opengrep-unmapped-rule",
+                    "OpenGrep capability observation has no valid correlation mapping.",
+                    path=target.rel, severity="high",
+                ))
+                continue
+            if target.suffix == ".py":
+                if target_name not in python_trees:
+                    artifact = parsed.by_rel.get(target.rel) if target.origin == "file" else None
+                    if artifact is not None:
+                        python_trees[target_name] = artifact.py_tree
+                    else:
+                        try:
+                            python_trees[target_name] = parse_python(target.text)
+                        except (SyntaxError, ValueError, RecursionError, MemoryError):
+                            python_trees[target_name] = None
+                tree = python_trees[target_name]
+                column = location["start"].get("col")
+                if tree is not None and (
+                    capability == "execution" and _sink_is_shadowed(tree, line, column)
+                    or capability == "network"
+                    and _network_capability_is_invalid(tree, line, column)
+                ):
+                    continue
+            manifest = _governing_manifest(manifests, target.rel)
+            if manifest is None:
+                continue
+            if any(code == "frontmatter_parse_error" for code, _detail in manifest.diagnostics):
+                findings.append(Finding(
+                    vector="", rule="analysis-incomplete", severity="high",
+                    path=target.rel,
+                    message=("observed %s capability could not be compared because the "
+                             "governing frontmatter is invalid" % capability),
+                    evidence={
+                        "phase": "correlation",
+                        "reason": "capability-declaration-unparsed",
+                        "manifest": manifest.rel,
+                        "observed_capability": capability,
+                    },
+                ))
+                continue
+            if "allowed-tools" not in (manifest.frontmatter or {}):
+                continue
+            grants = manifest.grants or []
+            if (("grants_unparsed_shape", "allowed-tools") in manifest.diagnostics
+                    or any(grant.allowed and not grant.parsed for grant in grants)):
+                findings.append(Finding(
+                    vector="", rule="analysis-incomplete", severity="high",
+                    path=target.rel,
+                    message=("observed %s capability could not be compared with the malformed "
+                             "governing declaration" % capability),
+                    evidence={
+                        "phase": "correlation",
+                        "reason": "capability-declaration-unparsed",
+                        "manifest": manifest.rel,
+                        "observed_capability": capability,
+                    },
+                ))
+                continue
+            if capability in declared_capabilities(grants):
+                continue
+            declared = sorted(grant.tool for grant in grants if grant.allowed and grant.tool)
         python_candidate = vector in _PY_TAINT_VECTORS and target.suffix == ".py"
         needs_postfilter = python_candidate and not malformed_metavars
         postfilter_skipped = False
@@ -1420,6 +1574,12 @@ def findings_from_report(
             "origin": target.origin,
             **location,
         }
+        if capability is not None:
+            evidence.update({
+                "understated_capability": capability,
+                "manifest": manifest.rel,
+                "declared_tools": declared or ["(none)"],
+            })
         if postfilter_skipped:
             evidence["postfilter"] = "retained-after-validation-budget"
         if needs_postfilter and dynamic_explicit_shell:
@@ -1437,7 +1597,13 @@ def findings_from_report(
             severity=severity,
             path=target.rel,
             line=line,
-            message=str(extra.get("message") or "OpenGrep detected a tainted flow.")[:800],
+            column=location["start"].get("col"),
+            message=(
+                "governing manifest %s does not declare observed %s capability"
+                % (manifest.rel, capability)
+                if capability is not None else
+                str(extra.get("message") or "OpenGrep detected a tainted flow.")[:800]
+            ),
             evidence=evidence,
         ))
 
@@ -1652,6 +1818,6 @@ def check(
             )]
         return cap_findings(
             findings_from_report(
-                report, targets, redactions=(root, rule_path, source_root)
+                report, targets, parsed=parsed, redactions=(root, rule_path, source_root)
             ) + _coverage_from_report(report, targets)
         )
