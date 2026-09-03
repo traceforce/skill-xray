@@ -113,6 +113,27 @@ def test_raw_html_parse_gap_is_not_clean(make_package):
     )
 
 
+def test_presentational_html_is_not_an_incomplete_analysis(make_package):
+    findings = _findings(make_package, {
+        "SKILL.md": '<p>Read <a href="reference.md">the reference</a>.</p>\n',
+        "reference.md": "# Safe reference\n",
+    })
+    assert not any(
+        finding.rule == "analysis-incomplete"
+        and finding.evidence.get("reason") == "raw_html"
+        for finding in findings
+    )
+
+
+def test_parsed_html_comment_is_not_an_incomplete_analysis(make_package):
+    findings = _findings(make_package, {"SKILL.md": "<!-- ordinary maintainer note -->\n"})
+    assert not any(
+        finding.rule == "analysis-incomplete"
+        and finding.evidence.get("reason") == "raw_html"
+        for finding in findings
+    )
+
+
 def test_unparsed_allowed_tools_cannot_hide_executable_fence(make_package):
     root = make_package({
         "SKILL.md": ("---\nname: t\nallowed-tools:\n  Bash: true\n---\n"
