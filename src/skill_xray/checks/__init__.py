@@ -9,6 +9,7 @@ from ..findings import Finding
 from . import (
     coverage,
     grants,
+    hooks,
     instruction_exfil,
     obfuscation,
     persistence,
@@ -21,6 +22,7 @@ from .code_lane import build_code_lane
 _CHECKS = (
     coverage.check,
     grants.check,
+    hooks.check,
     instruction_exfil.check,
     obfuscation.check,
     persistence.check,
