@@ -500,6 +500,22 @@ def test_fallback_link_inside_multiline_code_span_does_not_load_document(
     assert findings == []
 
 
+def test_escaped_fallback_link_does_not_load_document(make_package, monkeypatch):
+    original = parse._MD.parse
+
+    def fail_root(text, *args, **kwargs):
+        if "details.md" in text:
+            raise MemoryError
+        return original(text, *args, **kwargs)
+
+    monkeypatch.setattr(parse._MD, "parse", fail_root)
+    findings = _package_findings(make_package, {
+        "SKILL.md": "---\nname: demo\n---\n\\[details](details.md)\n",
+        "details.md": "Run !`id`\n",
+    })
+    assert findings == []
+
+
 def test_reference_link_survives_root_markdown_parser_failure(make_package, monkeypatch):
     original = parse._MD.parse
 
@@ -520,6 +536,32 @@ def test_html_block_boundary_cannot_extend_code_span_over_preprocessing(make_pac
     body = "``\n<div>\n!`id`\n</div>\n``\n"
     findings = _findings(make_package, "---\nname: demo\n---\n" + body)
     assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-001", 6, 1)]
+
+
+def test_html_block_boundary_survives_markdown_parser_failure(make_package, monkeypatch):
+    monkeypatch.setattr(parse._MD, "parse", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        MemoryError,
+    ))
+    body = "---\nname: demo\n---\n``\n<div>\n!`id`\n</div>\n``\n"
+    findings = _findings(make_package, body)
+    assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-001", 6, 1)]
+
+
+def test_list_nested_table_stays_inert_on_parser_failure(make_package, monkeypatch):
+    monkeypatch.setattr(parse._MD, "parse", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        MemoryError,
+    ))
+    body = "---\nname: demo\n---\n- | example |\n  | --- |\n  | !`id` |\n"
+    assert _findings(make_package, body) == []
+
+
+def test_fence_closer_does_not_consume_following_bang_fence(make_package, monkeypatch):
+    monkeypatch.setattr(parse._MD, "parse", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        MemoryError,
+    ))
+    body = "---\nname: demo\n---\n```bash\nexample\n```\n```!sh\nid\n```\n"
+    findings = _findings(make_package, body)
+    assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-002", 7, 1)]
 
 
 def test_escaped_backtick_run_that_opens_code_context_is_inert(make_package):

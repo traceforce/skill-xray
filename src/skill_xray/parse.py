@@ -100,6 +100,13 @@ _TABLE_DIVIDER_RE = re.compile(
 _BLOCK_OPENER_RE = re.compile(
     r"^ {0,3}(?:#{1,6}(?:[ \t]|$)|`{3,}|~{3,}|(?:[-+*]|\d+[.)])[ \t]+)"
 )
+_HTML_BLOCK_OPENER_RE = re.compile(
+    r"^ {0,3}(?:</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|"
+    r"col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|"
+    r"form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|"
+    r"menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|"
+    r"tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t>/]|$)|<!--|<\?|<![A-Z]|<!\[CDATA\[)"
+)
 _LIST_ITEM_RE = re.compile(r"^(\s*)(?:[-+*]|\d+[.)])([ \t]+)")
 _FALLBACK_LINK_RE = re.compile(
     r"(?<!!)\[[^\]\n]{0,500}\]\(\s*<?([^\s)>]{1,1000})>?[^)\n]{0,1000}\)"
@@ -171,20 +178,21 @@ def _table_cell_count(line):
 
 def _table_lines(lines):
     table = set()
+    prepared = _container_lines(lines)
     index = 1
     while index < len(lines):
-        line, _line_prefix, line_depth = _blockquote_parts(lines[index])
-        header, _header_prefix, header_depth = _blockquote_parts(lines[index - 1])
+        line, _line_prefix, line_container = prepared[index]
+        header, _header_prefix, header_container = prepared[index - 1]
         if (not _TABLE_DIVIDER_RE.match(line) or not _table_cell_count(line)
                 or _table_cell_count(line) != _table_cell_count(header)
-                or line_depth != header_depth):
+                or line_container != header_container):
             index += 1
             continue
         start = index - 1
         end = index
         while end + 1 < len(lines):
-            candidate, _prefix, depth = _blockquote_parts(lines[end + 1])
-            if (depth != line_depth or _BLOCK_OPENER_RE.match(candidate)
+            candidate, _prefix, container = prepared[end + 1]
+            if (container != line_container or _BLOCK_OPENER_RE.match(candidate)
                     or not _table_cell_count(candidate)):
                 break
             end += 1
@@ -238,7 +246,8 @@ def _fallback_block_starts(lines):
         raw, _quote_prefix, depth = _blockquote_parts(lines[index])
         if index and depth != previous_depth:
             starts.add(index)
-        if _LIST_ITEM_RE.match(raw) or _BLOCK_OPENER_RE.match(candidate):
+        if (_LIST_ITEM_RE.match(raw) or _BLOCK_OPENER_RE.match(candidate)
+                or _HTML_BLOCK_OPENER_RE.match(candidate)):
             starts.add(index)
         previous_depth = depth
     return starts
@@ -360,11 +369,13 @@ def _masked_fallback_lines(lines, excluded):
         if index in excluded or not line.strip():
             flush()
             continue
-        if block and _BLOCK_OPENER_RE.match(candidate):
+        if block and (_BLOCK_OPENER_RE.match(candidate)
+                      or _HTML_BLOCK_OPENER_RE.match(candidate)):
             flush()
         block.append(index)
     flush()
-    return masked
+    return [re.sub(r"(?<!\\)(?:\\\\)*\\\[", lambda match: " " * len(match.group(0)), line)
+            for line in masked]
 
 
 def _reference_label(value):
