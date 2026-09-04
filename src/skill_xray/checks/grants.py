@@ -27,7 +27,8 @@ _BROAD_COMMANDS = {
 }
 _INSTALLERS = {
     ("apk", "add"), ("apt", "install"), ("apt-get", "install"), ("brew", "install"),
-    ("cargo", "install"), ("dotnet", "tool"), ("gem", "install"),
+    ("cargo", "install"), ("dotnet", "tool", "install"),
+    ("dotnet", "tool", "restore"), ("dotnet", "tool", "update"), ("gem", "install"),
     ("go", "install"), ("npm", "ci"), ("npm", "i"), ("npm", "install"),
     ("pip", "install"),
     ("pip3", "install"), ("pnpm", "add"), ("uv", "add"),
@@ -40,7 +41,7 @@ _INSTALLER_VALUE_OPTIONS = {
     "pip": {"--proxy", "--python"}, "pip3": {"--proxy", "--python"},
 }
 _INTERPRETERS = {
-    "bash", "bun", "dash", "deno", "ksh", "node", "osascript", "perl", "php",
+    "bash", "bun", "dash", "deno", "fish", "ksh", "node", "osascript", "perl", "php",
     "cmd", "powershell", "pwsh", "py", "python", "python3", "ruby", "sh", "zsh",
 }
 _EVAL_FLAGS = {
@@ -112,6 +113,8 @@ def _effective_tokens(tokens):
         head = _basename(remaining[0])
         if head not in _WRAPPERS:
             break
+        if head == "command" and len(remaining) > 1 and remaining[1] in {"-v", "-V"}:
+            break
         privileged |= head in {"sudo", "doas"}
         remaining.pop(0)
         while remaining:
@@ -158,8 +161,11 @@ def _segment_breadth(tokens):
             and effective[1].lower() == "-m"):
         module = effective[2].lower()
         if (module == "ensurepip" or (module == "pip" and (
-                len(effective) == 3 or effective[3].lower() == "install"))):
+                len(effective) == 3
+                or _installer_subcommand(effective[2:], "pip") is not None))):
             return "package_installer"
+        if module == "http.server":
+            return "interpreter_or_downloader"
     if _installer_subcommand(effective, normalized) is not None:
         return "package_installer"
     if len(effective) == 1 and normalized in _INSTALLER_COMMANDS:
@@ -238,6 +244,11 @@ def _eval_option(effective, interpreter):
         if lowered in accepted:
             return index, None
         if interpreter in {"bash", "dash", "fish", "ksh", "sh", "zsh"}:
+            cluster = token[1:] if token.startswith("-") else ""
+            if "c" in cluster:
+                suffix = cluster[cluster.index("c") + 1:]
+                return index, suffix or None
+        if interpreter in {"py", "python", "python3"}:
             cluster = token[1:] if token.startswith("-") else ""
             if "c" in cluster:
                 suffix = cluster[cluster.index("c") + 1:]

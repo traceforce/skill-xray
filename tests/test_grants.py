@@ -459,7 +459,6 @@ def test_network_wildcards_are_unrestricted(make_package, specifier):
 
 @pytest.mark.parametrize("specifier", [
     "Bash(python -m pytest:*)",
-    "Bash(python3 -m http.server:*)",
     "Bash(python -m json.tool:*)",
 ])
 def test_fixed_python_modules_are_not_misclassified_as_installers(make_package, specifier):
@@ -473,6 +472,45 @@ def test_fixed_python_modules_are_not_misclassified_as_installers(make_package, 
 def test_python_installer_modules_are_package_installers(make_package, specifier):
     findings = _run(make_package, _manifest("allowed-tools: %s" % specifier))
     assert findings[0].evidence["breadth_class"] == "package_installer"
+
+
+def test_python_http_server_module_is_network_capable(make_package):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(python3 -m http.server:*)"))
+    assert next(f for f in findings if f.vector == "SXV-004").evidence[
+        "reaches_network"
+    ] is True
+
+
+def test_fish_dynamic_payload_reports_both_risks(make_package):
+    findings = _run(make_package, _manifest('allowed-tools: Bash(fish -c "$PAYLOAD")'))
+    assert {f.vector for f in findings} == {"SXV-003", "SXV-004"}
+
+
+def test_python_module_installer_options_do_not_hide_install(make_package):
+    specifier = "Bash(python -m pip --proxy URL install pkg)"
+    findings = _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    assert any(f.vector == "SXV-004" for f in findings)
+
+
+def test_command_lookup_variable_is_not_dynamic_execution(make_package):
+    assert _run(make_package, _manifest("allowed-tools: Bash(command -v $TOOL)")) == []
+
+
+def test_python_clustered_command_option_reports_both_risks(make_package):
+    findings = _run(make_package, _manifest('allowed-tools: Bash(python -Ic "$PAYLOAD")'))
+    assert {f.vector for f in findings} == {"SXV-003", "SXV-004"}
+
+
+def test_dotnet_tool_list_stays_narrow(make_package):
+    assert _run(make_package, _manifest("allowed-tools: Bash(dotnet tool list)")) == []
+
+
+@pytest.mark.parametrize("action", ["install", "update", "restore"])
+def test_dotnet_mutating_tool_actions_are_broad(make_package, action):
+    findings = _run(
+        make_package, _manifest("allowed-tools: Bash(dotnet tool %s)" % action),
+    )
+    assert any(f.vector == "SXV-004" for f in findings)
 
 
 @pytest.mark.parametrize("specifier", [
