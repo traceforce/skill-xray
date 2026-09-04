@@ -699,6 +699,8 @@ def parse_grants(frontmatter):
         for spec in _split_grants((frontmatter or {}).get(key)):
             m = _GRANT_RE.match(spec)
             try:
+                if m and m.group(2) is not None and not _grant_parentheses_balanced(spec):
+                    m = None
                 if m and m.group(2) is not None:
                     shlex.split(m.group(2), posix=False)
             except ValueError:
@@ -708,6 +710,37 @@ def parse_grants(frontmatter):
             else:
                 grants.append(Grant(spec, None, spec, allowed, True, False))
     return grants
+
+
+def _grant_parentheses_balanced(spec):
+    start = spec.find("(")
+    if start < 0:
+        return True
+    depth = 0
+    quote = None
+    escaped = False
+    for index, char in enumerate(spec[start:], start):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and quote != "'":
+            escaped = True
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+            continue
+        if char in "'\"":
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return not spec[index + 1:].strip()
+            if depth < 0:
+                return False
+    return False
 
 
 # --- shell (tree-sitter-bash: error-recovering CST) ---

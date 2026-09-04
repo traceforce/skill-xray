@@ -176,6 +176,48 @@ def test_versioned_interpreter_network_evidence_is_normalized(make_package):
     ] is True
 
 
+def test_indirect_posix_command_target_reports_sxv003(make_package):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(${!RUNNER} payload)"))
+    assert next(f for f in findings if f.vector == "SXV-003").evidence[
+        "variable_name"
+    ] == "${!RUNNER}"
+
+
+def test_wrapped_command_substitution_reports_sxv003(make_package):
+    specifier = "Bash(timeout 5 $(command -v python) task.py)"
+    findings = _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    assert next(f for f in findings if f.vector == "SXV-003").evidence[
+        "variable_name"
+    ] == "$(command -v python)"
+
+
+@pytest.mark.parametrize("specifier", [
+    "Bash(sh -c$PAYLOAD)",
+    'Bash(sh -c"$PAYLOAD")',
+])
+def test_attached_eval_payload_reports_both_grant_risks(make_package, specifier):
+    findings = _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    assert {f.vector for f in findings} == {"SXV-003", "SXV-004"}
+
+
+def test_versioned_interpreter_dynamic_payload_reports_sxv003(make_package):
+    findings = _run(
+        make_package, _manifest('allowed-tools: Bash(python3.12 -c "$PAYLOAD")'),
+    )
+    assert any(f.vector == "SXV-003" for f in findings)
+
+
+@pytest.mark.parametrize("specifier", [
+    "Bash(pip install requests)",
+    "Bash(apt install curl)",
+])
+def test_installer_grants_record_network_reachability(make_package, specifier):
+    findings = _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    assert next(f for f in findings if f.vector == "SXV-004").evidence[
+        "reaches_network"
+    ] is True
+
+
 def test_disallowed_grant_is_never_treated_as_risk(make_package):
     manifest = _manifest(
         "allowed-tools: Bash(scripts/run.sh:*)",

@@ -11,7 +11,7 @@ _EXECUTION_TOOLS = {"Bash", "Shell", "Terminal", "Execute"}
 _NETWORK_TOOLS = {"WebFetch", "WebSearch"}
 _VARIABLE = re.compile(
     r"\$(?i:env):[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|"
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*(?:(?::[-+?=]|#{1,2}|%{1,2})[^}\n]*)?\}|"
+    r"\$\{!?[A-Za-z_][A-Za-z0-9_]*(?:(?::[-+?=]|#{1,2}|%{1,2})[^}\n]*)?\}|"
     r"\$[A-Za-z_][A-Za-z0-9_]*|\$\d+|\$[@*]"
 )
 _COMMAND_SUBSTITUTION = re.compile(
@@ -57,7 +57,7 @@ _PRIVILEGE_COMMANDS = {"su", "sudo"}
 _NETWORK_COMMANDS = {
     "aria2c", "curl", "http", "httpie", "nc", "ncat", "node", "npx", "perl", "python",
     "python3", "ruby", "scp", "sftp", "socat", "ssh", "wget",
-}
+} | _INSTALLER_COMMANDS
 _NETWORK_ONLY_COMMANDS = {"aria2c", "curl", "http", "httpie", "scp", "sftp", "wget"}
 _REMOTE_COMMANDS = _NETWORK_ONLY_COMMANDS | {"nc", "ncat", "socat", "ssh"}
 
@@ -150,7 +150,7 @@ def _segment_breadth(tokens):
         return "package_installer"
     if len(effective) == 1 and normalized in _INSTALLER_COMMANDS:
         return "package_installer"
-    if normalized in _INTERPRETERS and _eval_flag_index(effective) is not None:
+    if normalized in _INTERPRETERS and _eval_option(effective) is not None:
         return "interpreter_or_downloader"
     if normalized in _REMOTE_COMMANDS:
         return "interpreter_or_downloader"
@@ -194,13 +194,16 @@ def _reaches_network(tool, pattern, tokens):
     )
 
 
-def _eval_flag_index(effective):
+def _eval_option(effective):
     for index, token in enumerate(effective[1:], 1):
         lowered = token.lower()
         if lowered == "--":
             return None
         if lowered in _EVAL_FLAGS:
-            return index
+            return index, None
+        for prefix in ("-c", "-e", "/c", "/k"):
+            if lowered.startswith(prefix) and len(token) > len(prefix):
+                return index, token[len(prefix):]
         if not token.startswith(("-", "/")):
             return None
     return None
@@ -219,13 +222,35 @@ def _expandable_variable(token):
 def _dynamic_command_target(tokens):
     for segment in _segments(tokens):
         effective = _effective_tokens(segment)[0]
-        if not effective or _basename(effective[0]) not in _INTERPRETERS:
+        if not effective:
             continue
-        index = _eval_flag_index(effective)
-        if index is not None and index + 1 < len(effective):
-            variable = _expandable_variable(effective[index + 1])
+        head = _VERSION_SUFFIX.sub("", _basename(effective[0])) or _basename(effective[0])
+        if head not in _INTERPRETERS:
+            continue
+        option = _eval_option(effective)
+        if option is not None:
+            index, attached = option
+            payload = attached if attached is not None else (
+                effective[index + 1] if index + 1 < len(effective) else ""
+            )
+            variable = _expandable_variable(payload)
             if variable:
                 return variable
+    return None
+
+
+def _command_substitution_head(tokens):
+    effective = _effective_tokens(tokens)[0]
+    if not effective or not effective[0].startswith("$("):
+        return None
+    parts = []
+    for token in effective:
+        parts.append(token)
+        if token.endswith(")"):
+            value = " ".join(parts)
+            if re.fullmatch(r"\$\([^\n)]{1,200}\)", value):
+                return value
+            return None
     return None
 
 
@@ -248,16 +273,20 @@ def check(parsed) -> list[Finding]:
             command, tokens = _command_tokens(grant.pattern)
             if grant.tool in _EXECUTION_TOOLS and grant.pattern:
                 substitution = _COMMAND_SUBSTITUTION.search(command)
-                variable = substitution
-                if variable is None:
+                value = substitution.group(1) if substitution else None
+                variable = None
+                if value is None:
                     for segment in _segments(tokens):
+                        if (value := _command_substitution_head(segment)) is not None:
+                            break
                         segment_head = _effective_tokens(segment)[0]
                         if segment_head and (variable := _expandable_variable(segment_head[0])):
                             break
-                if variable is None:
+                if value is None and variable is None:
                     variable = _dynamic_command_target(tokens)
-                if variable:
-                    value = variable.group(1) if substitution else variable.group(0)
+                if value is None and variable is not None:
+                    value = variable.group(0)
+                if value is not None:
                     findings.append(Finding(
                         vector="SXV-003", rule="grant-variable-substitution", severity="high",
                         path=artifact.rel, line=line,

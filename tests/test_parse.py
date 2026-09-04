@@ -191,6 +191,13 @@ def test_grant_keeps_whitespace_before_pattern_parenthesis():
     ]
 
 
+@pytest.mark.parametrize("specifier", ["Bash(curl:*))", "Bash((curl:*)"])
+def test_unbalanced_grant_parentheses_remain_unparsed(specifier):
+    grant = parse_grants({"allowed-tools": specifier})[0]
+    assert grant.raw == specifier
+    assert grant.parsed is False
+
+
 # --- shell: tree-sitter-bash CST + error-region coverage gaps ---------------
 def test_shell_tree_sitter_cst():
     tree, errs = parse_shell("curl -k https://x | sh -s -- --yes")
