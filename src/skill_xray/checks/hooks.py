@@ -152,6 +152,8 @@ def _tokens(command):
 
 
 def _local_candidate(parsed, command, arguments=()):
+    if "\r" in command or "\n" in command or "$(" in command or "`" in command:
+        return "dynamic_or_compound", False
     tokens = _tokens(command)
     if not tokens:
         return "malformed_command" if tokens is None else "empty_command", False
@@ -190,7 +192,9 @@ def _local_candidate(parsed, command, arguments=()):
             index += 1
     if index >= len(tokens):
         return "unresolved_external", False
-    candidate = re.sub(r"^\$\{CLAUDE_PROJECT_DIR\}/", "", tokens[index])
+    candidate = re.sub(
+        r"^\$(?:\{CLAUDE_PROJECT_DIR\}|CLAUDE_PROJECT_DIR)/", "", tokens[index],
+    )
     if any(char in candidate for char in "$`|;&><"):
         return "dynamic_or_compound", False
     normalized = posixpath.normpath(candidate.removeprefix("./"))
