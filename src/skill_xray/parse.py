@@ -107,7 +107,7 @@ _HTML_BLOCK_OPENER_RE = re.compile(
     r"menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|"
     r"tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t>/]|$)|<!--|<\?|<![A-Z]|<!\[CDATA\[)"
 )
-_LIST_ITEM_RE = re.compile(r"^(\s*)(?:[-+*]|\d+[.)])([ \t]+)")
+_LIST_ITEM_RE = re.compile(r"^( {0,3})(?:[-+*]|\d+[.)])([ \t]+)")
 _FALLBACK_LINK_RE = re.compile(
     r"(?<!!)\[[^\]\n]{0,500}\]\(\s*<?([^\s)>]{1,1000})>?[^)\n]{0,1000}\)"
 )

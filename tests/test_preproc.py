@@ -605,6 +605,14 @@ def test_container_relative_indented_code_stays_inert_on_parser_failure(
     assert _findings(make_package, "---\nname: demo\n---\n" + body) == []
 
 
+def test_indented_list_lookalike_stays_inert_on_parser_failure(make_package, monkeypatch):
+    monkeypatch.setattr(parse._MD, "parse", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        MemoryError,
+    ))
+    body = "---\nname: demo\n---\n    - !`id`\n"
+    assert _findings(make_package, body) == []
+
+
 def test_shortcut_reference_survives_root_markdown_parser_failure(make_package, monkeypatch):
     original = parse._MD.parse
 
