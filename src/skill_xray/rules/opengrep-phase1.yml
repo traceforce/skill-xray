@@ -1569,7 +1569,7 @@ rules:
               - pattern: os.path.expanduser($PATH)
           - metavariable-regex:
               metavariable: $PATH
-              regex: '(?i).*(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config[/\\]fish[/\\]config\.fish|Documents[/\\](?:WindowsPowerShell|PowerShell)[/\\](?:Microsoft\.)?PowerShell_profile\.ps1).*'
+              regex: '(?i).*(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config[/\\]fish[/\\]config\.fish|Documents[/\\](?:WindowsPowerShell|PowerShell)[/\\](?:Microsoft\.)?PowerShell_profile\.ps1)["'']?$'
     pattern-sinks:
       - patterns:
           - pattern: $TARGET.write_text($CONTENT, ...)
@@ -1625,7 +1625,7 @@ rules:
               - pattern: $PATH
           - metavariable-regex:
               metavariable: $PATH
-              regex: '(?i).*(?:\.config/systemd/user|/etc/systemd/system)/.*\.(?:service|timer).*'
+              regex: '(?i).*(?:\.config/systemd/user|/etc/systemd/system)/.*\.(?:service|timer)["'']?$'
     pattern-sinks:
       - patterns:
           - pattern: $TARGET.write_text($CONTENT, ...)
@@ -1659,13 +1659,13 @@ rules:
           - pattern: Path($PATH)
           - metavariable-regex:
               metavariable: $PATH
-              regex: '(?i).*\.git[/\\]hooks[/\\](?:pre-|post-|commit-msg|update|applypatch-msg).*'
-      - pattern-regex: 'Path\([^\n)]*\)\s*/\s*["'']\.git["'']\s*/\s*["'']hooks["'']\s*/\s*["''](?:pre-[^"'']+|post-[^"'']+|commit-msg|update|applypatch-msg)["'']'
+              regex: '(?i).*\.git[/\\]hooks[/\\](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?$'
+      - pattern-regex: 'Path\([^\n)]*\)\s*/\s*["'']\.git["'']\s*/\s*["'']hooks["'']\s*/\s*["''](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|post-rewrite)["'']'
       - patterns:
           - pattern: $PATH
           - metavariable-regex:
               metavariable: $PATH
-              regex: '(?i)^["''].*\.git[/\\]hooks[/\\](?:pre-[^/\\"'']+|post-[^/\\"'']+|commit-msg|update|applypatch-msg)["'']$'
+              regex: '(?i)^["''].*\.git[/\\]hooks[/\\](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|post-rewrite)["'']$'
     pattern-sinks:
       - patterns:
           - pattern: $TARGET.write_text($CONTENT, ...)
@@ -1702,7 +1702,7 @@ rules:
           - pattern: $TARGET.write_text($CONTENT, ...)
           - metavariable-regex:
               metavariable: $NAME
-              regex: '(?i).+\.(?:service|timer)["'']?'
+              regex: '(?i).+\.(?:service|timer)["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
@@ -1714,7 +1714,7 @@ rules:
           - pattern: $TARGET.write_text($CONTENT, ...)
           - metavariable-regex:
               metavariable: $NAME
-              regex: '(?i).+\.desktop["'']?'
+              regex: '(?i).+\.desktop["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
@@ -1728,7 +1728,7 @@ rules:
       skill_xray_rule: opengrep-shell-startup-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)(?:[ \t]|$)'
+      - pattern-regex: '(?im)^[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;\n]*(?:>>?|tee[ \t]+-a)[^;\n]*(?:~|\$HOME|\$\{HOME\})/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)(?:[ \t]|$)'
       - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)[^\n]*<<[^\n]*\n(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)'
 
   - id: skill-xray.bash-cron-persistence
@@ -1753,8 +1753,8 @@ rules:
       skill_xray_rule: opengrep-launchd-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^[^\n]*<key>Program(?:Arguments)?</key>[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*(?:>>?|tee)[^\n]*(?:LaunchAgents|\.plist)(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee)[^\n]*(?:LaunchAgents|\.plist)[^\n]*<<[^\n]*\n(?:[^\n]*\n){0,20}[^\n]*<key>Program(?:Arguments)?</key>(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)'
+      - pattern-regex: '(?im)^[^\n]*<key>Program(?:Arguments)?</key>[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*(?:>>?|tee)[^\n]*Library/LaunchAgents/[^ /]+\.plist(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee)[^\n]*Library/LaunchAgents/[^ /]+\.plist[^\n]*<<[^\n]*\n(?:[^\n]*\n){0,20}[^\n]*<key>Program(?:Arguments)?</key>(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)'
 
   - id: skill-xray.python-windows-run-persistence
     mode: taint
@@ -1859,7 +1859,7 @@ rules:
               - pattern: $PATH
           - metavariable-regex:
               metavariable: $PATH
-              regex: '(?i).*\.config[/\\]autostart[/\\][^/\\]+\.desktop.*'
+              regex: '(?i).*\.config[/\\]autostart[/\\][^/\\]+\.desktop["'']?$'
     pattern-sinks:
       - patterns:
           - pattern: $TARGET.write_text($CONTENT, ...)
