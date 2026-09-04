@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from bisect import bisect_left, bisect_right
 
 from ..findings import Finding, cap_findings
 from ..ingest import IDENTITY_FILES
@@ -34,11 +35,15 @@ _CONTENT_INTRO = re.compile(
 _BLOCK_PREFIX = re.compile(r"^\s*(?:>|[-*+]\s|\d+[.)]\s|```)")
 _DEFENSIVE_DESCRIPTION = re.compile(
     r"(?i)\b(?:check|detector|rule|scanner)\s+(?:detects|flags|identifies|reports)\b"
-    r"[^.\n]{0,160}\b(?:that|which)\s+[^.\n]{0,80}"
+    r"[^.;!?\n]{0,160}\b(?:that|which)\s+[^.;!?\n]{0,80}"
     r"\b(?:append|write|add|insert|save|persist|store|replace|overwrite|prepend|"
     r"update|edit|copy)\w*\b"
 )
 _EVIDENCE_LIMIT = 400
+_NEXT_OPERATION = re.compile(
+    r"(?i)\s+\b(?:and|then)\s+(?:note|mention|describe|explain|report|"
+    r"append|write|add|insert|save|persist|store|replace|overwrite|prepend|update|edit|copy)\b"
+)
 
 
 def _clause_ends(text):
@@ -66,9 +71,9 @@ def _clause_ends(text):
 def _target_attached_before_write(clause, target, write):
     before = clause[:target.start()]
     between = clause[target.end():write.start()]
-    introduced = re.search(r"(?i)\b(?:in|into|to|within)\s+[^;.!?]{0,200}$", before)
+    introduced = re.search(r"(?i)\b(?:in|into|to|within)\s+[^;!?]{0,200}$", before)
     connector = re.fullmatch(
-        r"(?i)\s*,?\s*(?:(?:must|should|will|shall|is|be)\s+)*", between,
+        r"(?i)\s*,?\s*(?:(?:must|should|will|shall|is|be)\s+)+", between,
     )
     return bool(introduced and re.fullmatch(r"\s*,?\s*", between) or connector)
 
@@ -79,16 +84,6 @@ def _target_attached_after_write(clause, target, write):
         re.search(r"(?i)\b(?:to|into|in|within)\s+[`'\"]?(?:[~./\\\w-]+[/\\])?$", between)
         or re.fullmatch(r"(?i)\s+(?:the\s+)?(?:[~./\\\w-]+[/\\])?", between)
     )
-
-
-def _operation_text(clause, write):
-    tail = clause[write.start():]
-    boundary = re.search(
-        r"(?i)\s+\b(?:and|then)\s+(?:note|mention|describe|explain|report|"
-        r"append|write|add|insert|save|persist|store|replace|overwrite|prepend|update|edit|copy)\b",
-        tail,
-    )
-    return tail[:boundary.start()] if boundary else tail
 
 
 def check(parsed) -> list[Finding]:
@@ -115,15 +110,29 @@ def check(parsed) -> list[Finding]:
             boundaries = list(_clause_ends(block))
             for clause_end in (*boundaries, len(block)):
                 clause = block[clause_start:clause_end]
-                for write in _WRITE.finditer(clause):
-                    target = _IDENTITY_TARGET.search(clause, write.end())
+                writes = list(_WRITE.finditer(clause))
+                targets = list(_IDENTITY_TARGET.finditer(clause))
+                target_starts = [target.start() for target in targets]
+                operation_boundaries = [match.start() for match in _NEXT_OPERATION.finditer(clause)]
+                for write in writes:
+                    boundary_index = bisect_right(operation_boundaries, write.start())
+                    operation_end = (
+                        operation_boundaries[boundary_index]
+                        if boundary_index < len(operation_boundaries) else len(clause)
+                    )
+                    following_index = bisect_left(target_starts, write.end())
+                    target = (
+                        targets[following_index]
+                        if following_index < len(targets)
+                        and targets[following_index].start() < operation_end else None
+                    )
                     if target is not None and not _target_attached_after_write(
                         clause, target, write,
                     ):
                         target = None
                     if target is None:
-                        preceding = list(_IDENTITY_TARGET.finditer(clause, 0, write.start()))
-                        candidate = preceding[-1] if preceding else None
+                        preceding_index = bisect_left(target_starts, write.start()) - 1
+                        candidate = targets[preceding_index] if preceding_index >= 0 else None
                         target = (
                             candidate
                             if candidate and _target_attached_before_write(clause, candidate, write)
@@ -131,18 +140,19 @@ def check(parsed) -> list[Finding]:
                         )
                     if target is None:
                         continue
-                    persisted = _operation_text(clause, write)
+                    persisted = clause[write.start():operation_end]
                     introduced_block = bool(
                         next_block and _CONTENT_INTRO.search(persisted)
                         and _BLOCK_PREFIX.search(next_block)
                     )
                     correlated = persisted + ("\n" + next_block if introduced_block else "")
+                    quoted = list(_QUOTED.finditer(correlated))
                     content = next(
-                        (match.group("content") for match in _QUOTED.finditer(correlated)
+                        (match.group("content") for match in quoted
                          if _AGGRAVATOR.search(match.group("content"))),
                         None,
                     )
-                    if content is None and _AGGRAVATOR.search(persisted):
+                    if content is None and not quoted and _AGGRAVATOR.search(persisted):
                         content = persisted
                     elif content is None and introduced_block and _AGGRAVATOR.search(next_block):
                         content = next_block

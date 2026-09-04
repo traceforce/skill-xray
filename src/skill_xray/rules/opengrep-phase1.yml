@@ -1371,6 +1371,23 @@ rules:
               regex: '(?is).*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)).*'
     pattern-sinks:
       - patterns:
+          - pattern: Path($PATH).write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^["'']?(?:[^"'']*[/\\])?(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?$'
+      - patterns:
+          - pattern: open($PATH, $MODE, ...)
+          - pattern-inside: |
+              with open($PATH, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^["'']?(?:[^"'']*[/\\])?(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?$'
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
+      - patterns:
           - pattern-inside: |
               $TARGET = $PATH
               ...
@@ -1417,6 +1434,21 @@ rules:
       skill_xray_severity: critical
     patterns:
       - pattern-either:
+          - patterns:
+              - pattern-inside: |
+                  $TARGET=$PATH
+                  ...
+              - metavariable-regex:
+                  metavariable: $PATH
+                  regex: '(?i).*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?$'
+              - pattern-either:
+                  - pattern: echo $CONTENT >> $TARGET
+                  - pattern: echo $CONTENT > $TARGET
+                  - pattern: printf ... >> $TARGET
+                  - pattern: printf ... > $TARGET
+              - metavariable-regex:
+                  metavariable: $CONTENT
+                  regex: '(?is).*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|secretly|higher\s+priority).*'
           - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^#;&|>\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|secretly|higher\s+priority)[^#;&|>\n]*>>?\s*["'']?(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?(?:[\s;#]|$).*$'
           - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^>#\n]*(?:''[^''\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session))[^''\n]*''|"[^"\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session))[^"\n]*")[^>#\n]*>>?\s*[^\n]*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?(?:[\s;#]|$).*$'
           - pattern-regex: '(?im)^\s*(?:echo|printf)\b(?=[^#;&|>\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)))[^#;&|>\n]*>>?\s*[^\n]*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?(?:[\s;#]|$).*$'
