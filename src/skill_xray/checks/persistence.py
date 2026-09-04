@@ -39,9 +39,13 @@ _DEFENSIVE_DESCRIPTION = re.compile(
     r"\b(?:append|write|add|insert|save|persist|store|replace|overwrite|prepend|"
     r"update|edit|copy)\w*\b"
 )
+_EXAMPLE_DESCRIPTION = re.compile(
+    r"(?i)\b(?:for\s+example|e\.g\.)\s*,?\s+(?:an?\s+)?(?:attacker|malicious\s+skill)\b"
+    r"[^;.!?\n]{0,300}"
+)
 _EVIDENCE_LIMIT = 400
 _NEXT_OPERATION = re.compile(
-    r"(?i)\s+\b(?:and|then)\s+(?:note|mention|describe|explain|report|"
+    r"(?i)(?:\s+\b(?:and|then)|\s*,)\s+(?:note|mention|describe|explain|report|"
     r"append|write|add|insert|save|persist|store|replace|overwrite|prepend|update|edit|copy)\b"
 )
 
@@ -80,6 +84,8 @@ def _target_attached_before_write(clause, target, write):
 
 def _target_attached_after_write(clause, target, write):
     between = clause[write.end():target.start()]
+    if re.search(r"(?i)\b[A-Za-z0-9_-]+\.[A-Za-z0-9]{1,12}\b", between):
+        return False
     return bool(
         re.search(r"(?i)\b(?:to|into|in|within)\s+[`'\"]?(?:[~./\\\w-]+[/\\])?$", between)
         or re.fullmatch(r"(?i)\s+(?:the\s+)?(?:[~./\\\w-]+[/\\])?", between)
@@ -95,16 +101,34 @@ def check(parsed) -> list[Finding]:
         spans = artifact.markdown.prose_spans if artifact.markdown else ()
         for index, (start, end) in enumerate(spans):
             block = "\n".join(lines[start - 1:end])
+            block = re.sub(
+                r"(?s)<!--.*?-->",
+                lambda match: "".join("\n" if char == "\n" else " " for char in match.group()),
+                block,
+            )
             block = _DEFENSIVE_DESCRIPTION.sub(
                 lambda match: "".join(
                     "\n" if char == "\n" else " " for char in match.group(0)
                 ),
                 block,
             )
-            next_block = ""
-            if index + 1 < len(spans) and spans[index + 1][0] - end <= 2:
-                next_start, next_end = spans[index + 1]
-                next_block = "\n".join(lines[next_start - 1:next_end])
+            block = _EXAMPLE_DESCRIPTION.sub(
+                lambda match: "".join(
+                    "\n" if char == "\n" else " " for char in match.group(0)
+                ),
+                block,
+            )
+            following_blocks = []
+            previous_end = end
+            for next_start, next_end in spans[index + 1:]:
+                if next_start - previous_end > 2:
+                    break
+                candidate = "\n".join(lines[next_start - 1:next_end])
+                if not _BLOCK_PREFIX.search(candidate):
+                    break
+                following_blocks.append(candidate)
+                previous_end = next_end
+            next_block = "\n".join(following_blocks)
             operation = None
             clause_start = 0
             boundaries = list(_clause_ends(block))
@@ -152,7 +176,14 @@ def check(parsed) -> list[Finding]:
                          if _AGGRAVATOR.search(match.group("content"))),
                         None,
                     )
-                    if content is None and not quoted and _AGGRAVATOR.search(persisted):
+                    first_quote_is_payload = bool(
+                        quoted and re.fullmatch(
+                            r"(?i)\s*(?:the\s+)?(?:text|content|instructions?)?\s*",
+                            correlated[write.end() - write.start():quoted[0].start()],
+                        )
+                    )
+                    if (content is None and not first_quote_is_payload
+                            and _AGGRAVATOR.search(persisted)):
                         content = persisted
                     elif content is None and introduced_block and _AGGRAVATOR.search(next_block):
                         content = next_block
