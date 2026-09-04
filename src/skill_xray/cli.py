@@ -64,6 +64,8 @@ def _print_findings(pkg, findings) -> None:
         loc = ""
         if f.line is not None:
             loc = "  L%d" % f.line
+            if f.column is not None:
+                loc += ":%d" % f.column
         elif f.offset is not None:
             loc = "  @%d" % f.offset + ("+%d" % f.length if f.length is not None else "")
         sys.stdout.write("  [%-8s] %-8s %-20s %s: %s%s\n" % (

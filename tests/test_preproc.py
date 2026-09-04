@@ -527,6 +527,58 @@ def test_escaped_backtick_run_that_opens_code_context_is_inert(make_package):
     assert _findings(make_package, "---\nname: demo\n---\n" + body) == []
 
 
+def test_escaped_backticks_inside_open_code_span_remain_inert(make_package):
+    body = "text ```\n!`id`\n\\```\n"
+    assert _findings(make_package, "---\nname: demo\n---\n" + body) == []
+
+
+def test_fallback_heading_starts_new_code_span_scope(make_package, monkeypatch):
+    monkeypatch.setattr(parse._MD, "parse", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        MemoryError,
+    ))
+    body = "---\nname: demo\n---\n``\n# !`id`\n``\n"
+    findings = _findings(make_package, body)
+    assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-001", 5, 3)]
+
+
+def test_list_continuation_after_blank_survives_parser_failure(make_package, monkeypatch):
+    monkeypatch.setattr(parse._MD, "parse", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        MemoryError,
+    ))
+    body = "---\nname: demo\n---\n- setup:\n\n    !`id`\n"
+    findings = _findings(make_package, body)
+    assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-001", 6, 5)]
+
+
+@pytest.mark.parametrize("body", [
+    ">     !`id`\n",
+    "- item\n      !`id`\n",
+])
+def test_container_relative_indented_code_stays_inert_on_parser_failure(
+    make_package, monkeypatch, body,
+):
+    monkeypatch.setattr(parse._MD, "parse", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        MemoryError,
+    ))
+    assert _findings(make_package, "---\nname: demo\n---\n" + body) == []
+
+
+def test_shortcut_reference_survives_root_markdown_parser_failure(make_package, monkeypatch):
+    original = parse._MD.parse
+
+    def fail_root(text, *args, **kwargs):
+        if "[details]" in text:
+            raise MemoryError
+        return original(text, *args, **kwargs)
+
+    monkeypatch.setattr(parse._MD, "parse", fail_root)
+    findings = _package_findings(make_package, {
+        "SKILL.md": "---\nname: demo\n---\nSee [details].\n[details]: details.md\n",
+        "details.md": "Run !`id`\n",
+    })
+    assert [(f.vector, f.path) for f in findings] == [("SXV-001", "details.md")]
+
+
 
 
 def test_preprocessing_ir_and_evidence_are_bounded(make_package):

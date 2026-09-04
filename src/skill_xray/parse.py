@@ -110,18 +110,23 @@ _REFERENCE_DEFINITION_RE = re.compile(
 _REFERENCE_USE_RE = re.compile(
     r"(?<!!)\[([^\]\n]{1,500})\]\[([^\]\n]{0,500})\]"
 )
+_SHORTCUT_REFERENCE_RE = re.compile(
+    r"(?<![!\]])\[([^\]\n]{1,500})\](?![\[(:])"
+)
 
 
 def _blockquote_parts(line):
     position = 0
     depth = 0
     while position < len(line):
+        segment_start = position
         spaces = 0
         while position < len(line) and line[position] == " " and spaces < 3:
             position += 1
             spaces += 1
         if position >= len(line) or line[position] != ">":
-            return (line, 0, 0) if depth == 0 else (line[position:], position, depth)
+            return ((line, 0, 0) if depth == 0 else
+                    (line[segment_start:], segment_start, depth))
         depth += 1
         position += 1
         if position < len(line) and line[position] in " \t":
@@ -189,24 +194,10 @@ def _table_lines(lines):
 
 
 def _indented_code_lines(lines):
-    indented = set()
-    list_indent = None
-    for index, line in enumerate(lines):
-        if not line.strip():
-            list_indent = None
-            continue
-        item = _LIST_ITEM_RE.match(line)
-        if item:
-            list_indent = len(item.group(0))
-            continue
-        leading = len(line) - len(line.lstrip(" "))
-        if list_indent is not None and leading >= list_indent:
-            continue
-        if line.startswith("\t") or leading >= 4:
-            indented.add(index)
-        elif leading == 0:
-            list_indent = None
-    return indented
+    return {
+        index for index, (content, _prefix, _container) in enumerate(_container_lines(lines))
+        if content.startswith("\t") or len(content) - len(content.lstrip(" ")) >= 4
+    }
 
 
 def _container_lines(lines):
@@ -237,6 +228,20 @@ def _container_lines(lines):
                 list_indents.pop(depth, None)
             prepared.append((content, quote_prefix, (depth, 0)))
     return prepared
+
+
+def _fallback_block_starts(lines):
+    starts = set()
+    previous_depth = None
+    prepared = _container_lines(lines)
+    for index, (candidate, _prefix, _container) in enumerate(prepared):
+        raw, _quote_prefix, depth = _blockquote_parts(lines[index])
+        if index and depth != previous_depth:
+            starts.add(index)
+        if _LIST_ITEM_RE.match(raw) or _BLOCK_OPENER_RE.match(candidate):
+            starts.add(index)
+        previous_depth = depth
+    return starts
 
 
 def _fenced_lines(lines):
@@ -387,6 +392,10 @@ def _fallback_links(text, line_offset=0):
             label = _reference_label(match.group(2) or match.group(1))
             if label in definitions:
                 links.append((definitions[label], "", index + 1 + line_offset))
+        for match in _SHORTCUT_REFERENCE_RE.finditer(line):
+            label = _reference_label(match.group(1))
+            if label in definitions:
+                links.append((definitions[label], "", index + 1 + line_offset))
     return links
 
 
@@ -399,6 +408,8 @@ def _scan_inline_preproc(
     # Successful CommonMark parsing supplies exact code spans. If parsing fails, conservative
     # indentation also keeps obvious examples from becoming executable findings.
     conservative = excluded_lines is None
+    if conservative and block_starts is None:
+        block_starts = _fallback_block_starts(lines)
     table = _table_lines(lines) if markdown_exclusions else set()
     fenced = _fenced_lines(lines) if conservative and markdown_exclusions else set()
     excluded = set() if excluded_lines is None else excluded_lines
