@@ -377,6 +377,57 @@ def test_installer_global_options_do_not_hide_install(make_package, specifier):
     ] == "package_installer"
 
 
+@pytest.mark.parametrize("specifier", [
+    "Bash(${RUNNER-python})", "Bash(${RUNNER/pat/repl})", "Bash(${RUNNER^^})",
+])
+def test_additional_braced_command_expansions_report_sxv003(make_package, specifier):
+    assert any(
+        f.vector == "SXV-003"
+        for f in _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    )
+
+
+def test_shell_clustered_command_option_reports_both_risks(make_package):
+    findings = _run(make_package, _manifest('allowed-tools: Bash(bash -lc "$PAYLOAD")'))
+    assert {f.vector for f in findings} == {"SXV-003", "SXV-004"}
+
+
+def test_cargo_global_option_value_does_not_hide_install(make_package):
+    findings = _run(
+        make_package,
+        _manifest("allowed-tools: Bash(cargo --color always install ripgrep)"),
+    )
+    assert next(f for f in findings if f.vector == "SXV-004").evidence[
+        "breadth_class"
+    ] == "package_installer"
+
+
+def test_exec_wrapper_exposes_dynamic_command_target(make_package):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(exec $RUNNER payload)"))
+    assert any(f.vector == "SXV-003" for f in findings)
+
+
+def test_stdbuf_option_value_does_not_hide_network_command(make_package):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(stdbuf -o L curl:*)"))
+    assert next(f for f in findings if f.vector == "SXV-004").evidence[
+        "reaches_network"
+    ] is True
+
+
+def test_bare_cmd_grant_is_broad(make_package):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(cmd.exe:*)"))
+    assert any(f.vector == "SXV-004" for f in findings)
+
+
+def test_uv_pip_read_only_command_stays_narrow(make_package):
+    assert _run(make_package, _manifest("allowed-tools: Bash(uv pip list)")) == []
+
+
+def test_uv_pip_install_remains_broad(make_package):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(uv pip install requests)"))
+    assert any(f.vector == "SXV-004" for f in findings)
+
+
 def test_disallowed_grant_is_never_treated_as_risk(make_package):
     manifest = _manifest(
         "allowed-tools: Bash(scripts/run.sh:*)",

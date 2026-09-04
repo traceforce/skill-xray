@@ -12,7 +12,7 @@ _NETWORK_TOOLS = {"WebFetch", "WebSearch"}
 _VARIABLE = re.compile(
     r"\$(?i:env):[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|"
     r"\$\{(?i:env):[A-Za-z_][A-Za-z0-9_]*\}|"
-    r"\$\{!?[A-Za-z_][A-Za-z0-9_]*(?:(?::|#{1,2}|%{1,2})[^}\n]*)?\}|"
+    r"\$\{!?[A-Za-z_][A-Za-z0-9_]*[^}\n]*\}|"
     r"\$[A-Za-z_][A-Za-z0-9_]*|\$\d+|\$[@*]"
 )
 _VERSION_SUFFIX = re.compile(r"\d+(?:\.\d+)*$")
@@ -20,7 +20,7 @@ _ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_]\w*=")
 _WRAPPER_ARGUMENT = re.compile(r"^-|=|^\d+(?:\.\d+)?[smhd]?$")
 
 _BROAD_COMMANDS = {
-    "bash", "bun", "chmod", "chown", "curl", "dash", "deno", "env", "eval", "git",
+    "bash", "bun", "chmod", "chown", "cmd", "curl", "dash", "deno", "env", "eval", "git",
     "fish", "ksh", "nc", "ncat", "node", "npx", "osascript", "perl", "php",
     "pip", "pip3", "powershell", "pwsh", "py", "python", "python3", "ruby",
     "scp", "sftp", "sh", "socat", "ssh", "su", "sudo", "wget", "xargs", "zsh",
@@ -30,10 +30,15 @@ _INSTALLERS = {
     ("cargo", "install"), ("dotnet", "tool"), ("gem", "install"),
     ("go", "install"), ("npm", "ci"), ("npm", "i"), ("npm", "install"),
     ("pip", "install"),
-    ("pip3", "install"), ("pnpm", "add"), ("uv", "add"), ("uv", "pip"),
+    ("pip3", "install"), ("pnpm", "add"), ("uv", "add"),
+    ("uv", "pip", "install"),
     ("yarn", "add"),
 }
-_INSTALLER_COMMANDS = {command for command, _subcommand in _INSTALLERS}
+_INSTALLER_COMMANDS = {action[0] for action in _INSTALLERS}
+_INSTALLER_VALUE_OPTIONS = {
+    "cargo": {"--color", "--config", "--target-dir"},
+    "pip": {"--proxy", "--python"}, "pip3": {"--proxy", "--python"},
+}
 _INTERPRETERS = {
     "bash", "bun", "dash", "deno", "ksh", "node", "osascript", "perl", "php",
     "cmd", "powershell", "pwsh", "py", "python", "python3", "ruby", "sh", "zsh",
@@ -50,12 +55,13 @@ _EVAL_FLAGS = {
     "perl": {"-e"}, "php": {"-r"}, "ruby": {"-e"}, "osascript": {"-e"},
 }
 _WRAPPERS = {
-    "command", "doas", "env", "ionice", "nice", "nohup", "setsid", "stdbuf",
+    "command", "doas", "env", "exec", "ionice", "nice", "nohup", "setsid", "stdbuf",
     "sudo", "time", "timeout", "xargs",
 }
 _WRAPPER_VALUE_OPTIONS = {
     "env": {"-C", "--chdir", "-u", "--unset"},
     "sudo": {"-u", "--user", "-g", "--group", "-h", "--host", "-p", "--prompt"},
+    "stdbuf": {"-i", "--input", "-o", "--output", "-e", "--error"},
     "timeout": {"-s", "--signal", "-k", "--kill-after"},
 }
 _PRIVILEGE_COMMANDS = {"su", "sudo"}
@@ -179,9 +185,14 @@ def _installer_subcommand(effective, normalized):
         return None
     index = 1
     while index < len(effective) and effective[index].startswith("-"):
+        option = effective[index].split("=", 1)[0]
         index += 1
-    if index < len(effective) and (normalized, effective[index].lower()) in _INSTALLERS:
-        return effective[index].lower()
+        if option in _INSTALLER_VALUE_OPTIONS.get(normalized, set()) and index < len(effective):
+            index += 1
+    tail = tuple(token.lower() for token in effective[index:])
+    for action in _INSTALLERS:
+        if action[0] == normalized and tail[:len(action) - 1] == action[1:]:
+            return action[-1]
     return None
 
 
@@ -226,6 +237,11 @@ def _eval_option(effective, interpreter):
             return None
         if lowered in accepted:
             return index, None
+        if interpreter in {"bash", "dash", "fish", "ksh", "sh", "zsh"}:
+            cluster = token[1:] if token.startswith("-") else ""
+            if "c" in cluster:
+                suffix = cluster[cluster.index("c") + 1:]
+                return index, suffix or None
         for prefix in accepted & {"-c", "-e", "/c", "/k"}:
             if lowered.startswith(prefix) and len(token) > len(prefix):
                 return index, token[len(prefix):]
