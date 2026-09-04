@@ -11,6 +11,7 @@ _EXECUTION_TOOLS = {"Bash", "Shell", "Terminal", "Execute"}
 _NETWORK_TOOLS = {"WebFetch", "WebSearch"}
 _VARIABLE = re.compile(
     r"\$(?i:env):[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|"
+    r"\$\{(?i:env):[A-Za-z_][A-Za-z0-9_]*\}|"
     r"\$\{!?[A-Za-z_][A-Za-z0-9_]*(?:(?::[-+?=]|#{1,2}|%{1,2})[^}\n]*)?\}|"
     r"\$[A-Za-z_][A-Za-z0-9_]*|\$\d+|\$[@*]"
 )
@@ -25,7 +26,7 @@ _BROAD_COMMANDS = {
     "scp", "sftp", "sh", "socat", "ssh", "su", "sudo", "wget", "xargs", "zsh",
 }
 _INSTALLERS = {
-    ("apt", "install"), ("apt-get", "install"), ("brew", "install"),
+    ("apk", "add"), ("apt", "install"), ("apt-get", "install"), ("brew", "install"),
     ("cargo", "install"), ("dotnet", "tool"), ("gem", "install"),
     ("go", "install"), ("npm", "ci"), ("npm", "i"), ("npm", "install"),
     ("pip", "install"),
@@ -54,10 +55,10 @@ _PRIVILEGE_COMMANDS = {"su", "sudo"}
 _NETWORK_COMMANDS = {
     "aria2c", "curl", "http", "httpie", "nc", "ncat", "node", "npx", "perl", "python",
     "python3", "ruby", "scp", "sftp", "socat", "ssh", "wget", "git",
-    "powershell", "pwsh",
+    "powershell", "pwsh", "ftp", "telnet",
 } | _INSTALLER_COMMANDS
 _NETWORK_ONLY_COMMANDS = {"aria2c", "curl", "http", "httpie", "scp", "sftp", "wget"}
-_REMOTE_COMMANDS = _NETWORK_ONLY_COMMANDS | {"nc", "ncat", "socat", "ssh"}
+_REMOTE_COMMANDS = _NETWORK_ONLY_COMMANDS | {"ftp", "nc", "ncat", "socat", "ssh", "telnet"}
 _GIT_REMOTE_SUBCOMMANDS = {"clone", "fetch", "pull", "push", "remote", "submodule"}
 
 
@@ -132,6 +133,8 @@ def _segment_breadth(tokens):
     effective, privileged = _effective_tokens(tokens)
     if privileged:
         return "privilege_escalation"
+    if not effective and tokens and _basename(tokens[0]) in _WRAPPERS:
+        return "interpreter_or_downloader"
     if not effective:
         effective = tokens
     head = _basename(effective[0])
@@ -232,7 +235,7 @@ def _dynamic_command_target(tokens):
         if option is not None:
             index, attached = option
             payload = attached if attached is not None else (
-                effective[index + 1] if index + 1 < len(effective) else ""
+                " ".join(effective[index + 1:]) if index + 1 < len(effective) else ""
             )
             substitution = _expandable_substitution(payload)
             if substitution:
@@ -247,7 +250,25 @@ def _command_substitution_head(tokens):
     effective = _effective_tokens(tokens)[0]
     if not effective:
         return None
-    return _expandable_substitution(" ".join(effective))
+    joined = " ".join(effective)
+    substitution = _expandable_substitution(joined)
+    if substitution is None or joined.find(substitution) >= len(effective[0]):
+        return None
+    return substitution
+
+
+def _denial_covers(denial, grant):
+    if denial.tool != grant.tool or denial.allowed or not denial.parsed:
+        return False
+    denied = (denial.pattern or "").strip()
+    allowed = (grant.pattern or "").strip()
+    if not denied or denied.lower() in {"*", "**", ":*"} or denied == allowed:
+        return True
+    if denied.endswith(":*"):
+        prefix = denied[:-2].rstrip()
+        candidate = allowed[:-2].rstrip() if allowed.endswith(":*") else allowed
+        return candidate == prefix or candidate.startswith(prefix + " ")
+    return False
 
 
 def _expandable_substitution(value):
@@ -300,20 +321,10 @@ def check(parsed) -> list[Finding]:
     )
     for artifact in manifests:
         line = artifact.frontmatter_key_lines.get("allowed-tools") or 1
-        denied_tools = {
-            grant.tool for grant in artifact.grants or ()
-            if (not grant.allowed and grant.parsed
-                and (grant.pattern is None or grant.pattern.strip().lower()
-                     in {"*", "**", ":*"}))
-        }
-        denied_grants = {
-            (grant.tool, (grant.pattern or "").strip())
-            for grant in artifact.grants or () if not grant.allowed and grant.parsed
-        }
+        denials = [grant for grant in artifact.grants or () if not grant.allowed]
         for grant in artifact.grants or ():
             if (not grant.allowed or not grant.tool or not grant.parsed
-                    or grant.tool in denied_tools
-                    or (grant.tool, (grant.pattern or "").strip()) in denied_grants):
+                    or any(_denial_covers(denial, grant) for denial in denials)):
                 continue
             command, tokens = _command_tokens(grant.pattern)
             if grant.tool in _EXECUTION_TOOLS and grant.pattern:
@@ -329,7 +340,7 @@ def check(parsed) -> list[Finding]:
                 if value is None and variable is None:
                     variable = _dynamic_command_target(tokens)
                 if value is None and variable is not None:
-                    value = variable.group(0)
+                    value = variable if isinstance(variable, str) else variable.group(0)
                 if value is not None:
                     findings.append(Finding(
                         vector="SXV-003", rule="grant-variable-substitution", severity="high",

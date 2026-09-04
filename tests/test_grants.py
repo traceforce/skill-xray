@@ -304,6 +304,40 @@ def test_git_remote_grants_are_network_capable(make_package, subcommand):
     assert hit.evidence["reaches_network"] is True
 
 
+def test_braced_powershell_environment_target_reports_sxv003(make_package):
+    findings = _run(
+        make_package,
+        _manifest(r"allowed-tools: Bash(${env:USERPROFILE}\tool.ps1)"),
+    )
+    assert any(f.vector == "SXV-003" for f in findings)
+
+
+@pytest.mark.parametrize("specifier", ["Bash(apk add:*)", "Bash(ftp:*)", "Bash(telnet:*)"])
+def test_additional_installer_and_network_clients_are_broad(make_package, specifier):
+    findings = _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    hit = next(f for f in findings if f.vector == "SXV-004")
+    assert hit.evidence["reaches_network"] is True
+
+
+@pytest.mark.parametrize("wrapper", ["timeout", "command", "nohup"])
+def test_bare_delegating_wrapper_is_broad(make_package, wrapper):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(%s:*)" % wrapper))
+    assert any(f.vector == "SXV-004" for f in findings)
+
+
+def test_argument_substitution_is_not_a_dynamic_command_target(make_package):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(echo $(date))"))
+    assert not any(f.vector == "SXV-003" for f in findings)
+
+
+def test_prefix_denial_closes_narrower_matching_allow(make_package):
+    manifest = _manifest(
+        "allowed-tools: Bash(curl https://example.invalid:*)",
+        "disallowed-tools: Bash(curl:*)",
+    )
+    assert _run(make_package, manifest) == []
+
+
 def test_disallowed_grant_is_never_treated_as_risk(make_package):
     manifest = _manifest(
         "allowed-tools: Bash(scripts/run.sh:*)",
