@@ -338,6 +338,45 @@ def test_prefix_denial_closes_narrower_matching_allow(make_package):
     assert _run(make_package, manifest) == []
 
 
+def test_python_uppercase_e_option_is_not_eval(make_package):
+    assert _run(
+        make_package, _manifest("allowed-tools: Bash(python -E app.py $VALUE)"),
+    ) == []
+
+
+def test_single_quoted_fragment_in_command_head_is_literal(make_package):
+    assert _run(
+        make_package, _manifest("allowed-tools: Bash(foo'$RUNNER')"),
+    ) == []
+
+
+def test_posix_substring_command_target_reports_sxv003(make_package):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(${RUNNER:0})"))
+    assert any(f.vector == "SXV-003" for f in findings)
+
+
+def test_eval_builtin_dynamic_payload_reports_both_risks(make_package):
+    findings = _run(make_package, _manifest('allowed-tools: Bash(eval "$PAYLOAD")'))
+    assert {f.vector for f in findings} == {"SXV-003", "SXV-004"}
+
+
+def test_single_quotes_inside_double_quotes_do_not_hide_substitution(make_package):
+    specifier = '''Bash("x'$(command -v python)'" task.py)'''
+    findings = _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    assert any(f.vector == "SXV-003" for f in findings)
+
+
+@pytest.mark.parametrize("specifier", [
+    "Bash(pip --user install requests:*)",
+    "Bash(apt -y install curl:*)",
+])
+def test_installer_global_options_do_not_hide_install(make_package, specifier):
+    findings = _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    assert next(f for f in findings if f.vector == "SXV-004").evidence[
+        "breadth_class"
+    ] == "package_installer"
+
+
 def test_disallowed_grant_is_never_treated_as_risk(make_package):
     manifest = _manifest(
         "allowed-tools: Bash(scripts/run.sh:*)",

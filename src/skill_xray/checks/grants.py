@@ -12,7 +12,7 @@ _NETWORK_TOOLS = {"WebFetch", "WebSearch"}
 _VARIABLE = re.compile(
     r"\$(?i:env):[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|"
     r"\$\{(?i:env):[A-Za-z_][A-Za-z0-9_]*\}|"
-    r"\$\{!?[A-Za-z_][A-Za-z0-9_]*(?:(?::[-+?=]|#{1,2}|%{1,2})[^}\n]*)?\}|"
+    r"\$\{!?[A-Za-z_][A-Za-z0-9_]*(?:(?::|#{1,2}|%{1,2})[^}\n]*)?\}|"
     r"\$[A-Za-z_][A-Za-z0-9_]*|\$\d+|\$[@*]"
 )
 _VERSION_SUFFIX = re.compile(r"\d+(?:\.\d+)*$")
@@ -39,8 +39,15 @@ _INTERPRETERS = {
     "cmd", "powershell", "pwsh", "py", "python", "python3", "ruby", "sh", "zsh",
 }
 _EVAL_FLAGS = {
-    "--eval", "--print", "-c", "-command", "-e", "-enc", "-encodedcommand", "-p",
-    "-r", "/c", "/k", "eval", "run",
+    "bash": {"-c"}, "dash": {"-c"}, "fish": {"-c"}, "ksh": {"-c"},
+    "sh": {"-c"}, "zsh": {"-c"},
+    "cmd": {"/c", "/k"},
+    "powershell": {"-command", "-enc", "-encodedcommand"},
+    "pwsh": {"-command", "-enc", "-encodedcommand"},
+    "py": {"-c"}, "python": {"-c"}, "python3": {"-c"},
+    "bun": {"-e", "--eval", "-p", "--print"},
+    "node": {"-e", "--eval", "-p", "--print"},
+    "perl": {"-e"}, "php": {"-r"}, "ruby": {"-e"}, "osascript": {"-e"},
 }
 _WRAPPERS = {
     "command", "doas", "env", "ionice", "nice", "nohup", "setsid", "stdbuf",
@@ -147,11 +154,13 @@ def _segment_breadth(tokens):
         if (module == "ensurepip" or (module == "pip" and (
                 len(effective) == 3 or effective[3].lower() == "install"))):
             return "package_installer"
-    if len(effective) >= 2 and (normalized, effective[1].lower()) in _INSTALLERS:
+    if _installer_subcommand(effective, normalized) is not None:
         return "package_installer"
     if len(effective) == 1 and normalized in _INSTALLER_COMMANDS:
         return "package_installer"
-    if normalized in _INTERPRETERS and _eval_option(effective) is not None:
+    if normalized == "eval":
+        return "interpreter_or_downloader"
+    if normalized in _INTERPRETERS and _eval_option(effective, normalized) is not None:
         return "interpreter_or_downloader"
     if normalized in _REMOTE_COMMANDS:
         return "interpreter_or_downloader"
@@ -162,6 +171,17 @@ def _segment_breadth(tokens):
         return "interpreter_or_downloader"
     if len(effective) == 1 and normalized in _BROAD_COMMANDS:
         return "interpreter_or_downloader"
+    return None
+
+
+def _installer_subcommand(effective, normalized):
+    if normalized not in _INSTALLER_COMMANDS:
+        return None
+    index = 1
+    while index < len(effective) and effective[index].startswith("-"):
+        index += 1
+    if index < len(effective) and (normalized, effective[index].lower()) in _INSTALLERS:
+        return effective[index].lower()
     return None
 
 
@@ -198,14 +218,15 @@ def _reaches_network(tool, pattern, tokens):
     )
 
 
-def _eval_option(effective):
+def _eval_option(effective, interpreter):
+    accepted = _EVAL_FLAGS.get(interpreter, set())
     for index, token in enumerate(effective[1:], 1):
-        lowered = token.lower()
+        lowered = token.lower() if interpreter in {"cmd", "powershell", "pwsh"} else token
         if lowered == "--":
             return None
-        if lowered in _EVAL_FLAGS:
+        if lowered in accepted:
             return index, None
-        for prefix in ("-c", "-e", "/c", "/k"):
+        for prefix in accepted & {"-c", "-e", "/c", "/k"}:
             if lowered.startswith(prefix) and len(token) > len(prefix):
                 return index, token[len(prefix):]
         if not token.startswith(("-", "/")):
@@ -214,13 +235,26 @@ def _eval_option(effective):
 
 
 def _expandable_variable(token):
-    if len(token) >= 2 and token[0] == token[-1] == "'":
-        return None
     for match in _VARIABLE.finditer(token):
-        backslashes = len(token[:match.start()]) - len(token[:match.start()].rstrip("\\"))
-        if backslashes % 2 == 0:
+        if _shell_expands_at(token, match.start()):
             return match
     return None
+
+
+def _shell_expands_at(token, target):
+    single = False
+    double = False
+    escaped = False
+    for char in token[:target]:
+        if escaped:
+            escaped = False
+        elif char == "\\" and not single:
+            escaped = True
+        elif char == "'" and not double:
+            single = not single
+        elif char == '"' and not single:
+            double = not double
+    return not single and not escaped
 
 
 def _dynamic_command_target(tokens):
@@ -229,9 +263,12 @@ def _dynamic_command_target(tokens):
         if not effective:
             continue
         head = _VERSION_SUFFIX.sub("", _basename(effective[0])) or _basename(effective[0])
+        if head == "eval":
+            payload = " ".join(effective[1:])
+            return _expandable_substitution(payload) or _expandable_variable(payload)
         if head not in _INTERPRETERS:
             continue
-        option = _eval_option(effective)
+        option = _eval_option(effective, head)
         if option is not None:
             index, attached = option
             payload = attached if attached is not None else (
@@ -273,6 +310,7 @@ def _denial_covers(denial, grant):
 
 def _expandable_substitution(value):
     single_quoted = False
+    double_quoted = False
     escaped = False
     index = 0
     while index < len(value):
@@ -285,8 +323,12 @@ def _expandable_substitution(value):
             escaped = True
             index += 1
             continue
-        if char == "'":
+        if char == "'" and not double_quoted:
             single_quoted = not single_quoted
+            index += 1
+            continue
+        if char == '"' and not single_quoted:
+            double_quoted = not double_quoted
             index += 1
             continue
         if single_quoted:
