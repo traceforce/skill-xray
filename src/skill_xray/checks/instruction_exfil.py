@@ -693,6 +693,7 @@ def _prose_blocks(art):
             wanted.append((2, fm_end - 1))
         wanted.extend(spans)
         yield from _source_span_blocks(art.text or "", wanted)
+        yield from getattr(art.markdown, "html_prose", ())
         return
     yield from _plain_prose_blocks(art.text or "")
 

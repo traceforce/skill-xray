@@ -77,6 +77,7 @@ class Markdown:
     preproc_counts: dict = field(default_factory=lambda: {"inline": 0, "fenced": 0})
     html_comments: list = field(default_factory=list)
     html_tags: list = field(default_factory=list)
+    html_prose: list = field(default_factory=list)
     html_uninspectable: list = field(default_factory=list)
     has_html: bool = False
     has_uninspectable_html: bool = False
@@ -116,6 +117,7 @@ class _InspectableHTML(HTMLParser):
         self.md = md
         self.fully_inspected = True
         self.saw_markup = False
+        self.anchors = []
 
     def handle_starttag(self, tag, attrs):
         self.saw_markup = True
@@ -143,12 +145,18 @@ class _InspectableHTML(HTMLParser):
                 self.fully_inspected = False
             if tag in {"img", "source"} and (
                     compact_target.startswith("//")
-                    or compact_target.startswith(("http:", "https:"))):
+                    or re.match(r"^[a-z][a-z0-9+.-]*:", compact_target)):
                 self.fully_inspected = False
-            self.md.links.append((target, "", self.line + self.getpos()[0] - 1))
+            if tag == "a":
+                self.anchors.append([target, [], self.line + self.getpos()[0] - 1])
+            else:
+                self.md.links.append((target, "", self.line + self.getpos()[0] - 1))
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
+        if tag.lower() == "a" and self.anchors:
+            target, label, line = self.anchors.pop()
+            self.md.links.append((target, "".join(label).strip(), line))
 
     def handle_endtag(self, tag):
         self.saw_markup = True
@@ -158,6 +166,13 @@ class _InspectableHTML(HTMLParser):
         self.md.html_tags.append((tag, self.line + line - 1, source_column, True, ()))
         if tag not in _PRESENTATIONAL_HTML and tag not in _PROMPT_PLACEHOLDER_HTML:
             self.fully_inspected = False
+        if tag == "a" and self.anchors:
+            target, label, anchor_line = self.anchors.pop()
+            self.md.links.append((target, "".join(label).strip(), anchor_line))
+
+    def handle_data(self, data):
+        for _target, label, _line in self.anchors:
+            label.append(data)
 
     def handle_comment(self, data):
         self.saw_markup = True
@@ -188,14 +203,22 @@ def _inspect_html(fragment, line, md, column=1):
     if not parser.saw_markup or not parser.fully_inspected:
         md.has_uninspectable_html = True
         md.html_uninspectable.append((fragment, line, column))
+    else:
+        def blank_markup(match):
+            return "".join("\n" if char == "\n" else " " for char in match.group(0))
+
+        projected = re.sub(r"<!--.*?(?:-->|$)|<[^>]*>", blank_markup, fragment, flags=re.S)
+        md.html_prose.append((projected, line))
 
 
-def _scan_inline(inline, line, md):
+def _scan_inline(inline, line, md, source=None):
     children = inline.children or []
-    source = inline.content or ""
+    source = source if source is not None else (inline.content or "")
     source_line = line
     search_from = 0
     for j, c in enumerate(children):
+        content = c.content or ""
+        index = source.find(content, search_from) if content else -1
         if c.type in ("softbreak", "hardbreak"):
             line += 1                     # inline children carry no map; count line breaks
         elif c.type == "link_open":
@@ -208,7 +231,6 @@ def _scan_inline(inline, line, md):
             md.links.append((href, txt, line))
         elif c.type == "html_inline":
             md.has_html = True
-            index = source.find(c.content, search_from)
             if index >= 0:
                 html_line = source_line + source.count("\n", 0, index)
                 previous_break = source.rfind("\n", 0, index)
@@ -217,6 +239,20 @@ def _scan_inline(inline, line, md):
             else:
                 html_line, column = line, 1
             _inspect_html(c.content, html_line, md, column)
+            anchor = re.match(
+                r"(?is)<a\b[^>]*\bhref\s*=\s*(['\"])(.*?)\1[^>]*>", c.content or "",
+            )
+            if anchor:
+                label = []
+                for following in children[j + 1:]:
+                    if following.type == "html_inline" and re.match(
+                            r"(?is)</a\s*>", following.content or ""):
+                        break
+                    if following.type != "html_inline":
+                        label.append(following.content or "")
+                md.links.append((anchor.group(2), "".join(label).strip(), html_line))
+        if index >= 0:
+            search_from = index + len(content)
 
 
 _FENCE_OPEN_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
@@ -690,7 +726,8 @@ def parse_markdown(text, line_offset=0):
                     ))
         elif tok.type == "html_block":
             md.has_html = True
-            _inspect_html(tok.content, line, md)
+            raw = "\n".join(source_lines[tok.map[0]:tok.map[1]]) if tok.map else tok.content
+            _inspect_html(raw, line, md)
             if tok.map:
                 md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
                 block_starts.add(tok.map[0])
@@ -698,7 +735,8 @@ def parse_markdown(text, line_offset=0):
             if tok.map:
                 md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
                 block_starts.add(tok.map[0])
-            _scan_inline(tok, line, md)
+            raw = "\n".join(source_lines[tok.map[0]:tok.map[1]]) if tok.map else tok.content
+            _scan_inline(tok, line, md, raw)
         elif tok.type == "table_open" and tok.map:
             preproc_excluded.update(range(tok.map[0], tok.map[1]))
     # A CommonMark link reference definition (`[label]: url "title"`) emits no token, so its title
