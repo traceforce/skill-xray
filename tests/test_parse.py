@@ -198,6 +198,14 @@ def test_unbalanced_grant_parentheses_remain_unparsed(specifier):
     assert grant.parsed is False
 
 
+def test_quoted_parenthesis_does_not_absorb_following_grant():
+    grants = parse_grants({"allowed-tools": 'Bash(echo "(":*) Read'})
+    assert [(grant.tool, grant.pattern, grant.parsed) for grant in grants] == [
+        ("Bash", 'echo "(":*', True),
+        ("Read", None, True),
+    ]
+
+
 # --- shell: tree-sitter-bash CST + error-region coverage gaps ---------------
 def test_shell_tree_sitter_cst():
     tree, errs = parse_shell("curl -k https://x | sh -s -- --yes")

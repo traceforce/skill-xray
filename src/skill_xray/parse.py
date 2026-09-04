@@ -672,7 +672,26 @@ def _split_grants(val):
     if not isinstance(val, str):
         return []
     out, depth, cur = [], 0, ""
+    quote = None
+    escaped = False
     for index, ch in enumerate(val):
+        if escaped:
+            cur += ch
+            escaped = False
+            continue
+        if ch == "\\" and quote != "'":
+            cur += ch
+            escaped = True
+            continue
+        if quote:
+            cur += ch
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "'\"":
+            cur += ch
+            quote = ch
+            continue
         if depth == 0 and (ch == "," or ch.isspace()):
             if ch.isspace() and cur.strip():
                 following = val[index + 1:].lstrip()

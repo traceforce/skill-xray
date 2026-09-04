@@ -14,16 +14,12 @@ _VARIABLE = re.compile(
     r"\$\{!?[A-Za-z_][A-Za-z0-9_]*(?:(?::[-+?=]|#{1,2}|%{1,2})[^}\n]*)?\}|"
     r"\$[A-Za-z_][A-Za-z0-9_]*|\$\d+|\$[@*]"
 )
-_COMMAND_SUBSTITUTION = re.compile(
-    r"(?:^|&&|\|\||[;|])\s*(?:sudo\s+|env\s+)?"
-    r"(\$\([^\n)]{1,200}\)|`[^\n`]{1,200}`)"
-)
 _VERSION_SUFFIX = re.compile(r"\d+(?:\.\d+)*$")
 _ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_]\w*=")
 _WRAPPER_ARGUMENT = re.compile(r"^-|=|^\d+(?:\.\d+)?[smhd]?$")
 
 _BROAD_COMMANDS = {
-    "bash", "bun", "chmod", "chown", "curl", "dash", "deno", "env", "eval",
+    "bash", "bun", "chmod", "chown", "curl", "dash", "deno", "env", "eval", "git",
     "fish", "ksh", "nc", "ncat", "node", "npx", "osascript", "perl", "php",
     "pip", "pip3", "powershell", "pwsh", "py", "python", "python3", "ruby",
     "scp", "sftp", "sh", "socat", "ssh", "su", "sudo", "wget", "xargs", "zsh",
@@ -31,7 +27,8 @@ _BROAD_COMMANDS = {
 _INSTALLERS = {
     ("apt", "install"), ("apt-get", "install"), ("brew", "install"),
     ("cargo", "install"), ("dotnet", "tool"), ("gem", "install"),
-    ("go", "install"), ("npm", "i"), ("npm", "install"), ("pip", "install"),
+    ("go", "install"), ("npm", "ci"), ("npm", "i"), ("npm", "install"),
+    ("pip", "install"),
     ("pip3", "install"), ("pnpm", "add"), ("uv", "add"), ("uv", "pip"),
     ("yarn", "add"),
 }
@@ -56,7 +53,7 @@ _WRAPPER_VALUE_OPTIONS = {
 _PRIVILEGE_COMMANDS = {"su", "sudo"}
 _NETWORK_COMMANDS = {
     "aria2c", "curl", "http", "httpie", "nc", "ncat", "node", "npx", "perl", "python",
-    "python3", "ruby", "scp", "sftp", "socat", "ssh", "wget",
+    "python3", "ruby", "scp", "sftp", "socat", "ssh", "wget", "git",
 } | _INSTALLER_COMMANDS
 _NETWORK_ONLY_COMMANDS = {"aria2c", "curl", "http", "httpie", "scp", "sftp", "wget"}
 _REMOTE_COMMANDS = _NETWORK_ONLY_COMMANDS | {"nc", "ncat", "socat", "ssh"}
@@ -241,14 +238,17 @@ def _dynamic_command_target(tokens):
 
 def _command_substitution_head(tokens):
     effective = _effective_tokens(tokens)[0]
-    if not effective or not effective[0].startswith("$("):
+    if not effective or not effective[0].startswith(("$(", "`")):
         return None
+    opener = effective[0][0:2] if effective[0].startswith("$(") else "`"
+    closer = ")" if opener == "$(" else "`"
     parts = []
     for token in effective:
         parts.append(token)
-        if token.endswith(")"):
+        if token.endswith(closer):
             value = " ".join(parts)
-            if re.fullmatch(r"\$\([^\n)]{1,200}\)", value):
+            if ((opener == "$(" and re.fullmatch(r"\$\([^\n)]{1,200}\)", value))
+                    or (opener == "`" and re.fullmatch(r"`[^\n`]{1,200}`", value))):
                 return value
             return None
     return None
@@ -264,7 +264,9 @@ def check(parsed) -> list[Finding]:
         line = artifact.frontmatter_key_lines.get("allowed-tools") or 1
         denied_tools = {
             grant.tool for grant in artifact.grants or ()
-            if not grant.allowed and grant.parsed and grant.pattern is None
+            if (not grant.allowed and grant.parsed
+                and (grant.pattern is None or grant.pattern.strip().lower()
+                     in {"*", "**", ":*"}))
         }
         for grant in artifact.grants or ():
             if (not grant.allowed or not grant.tool or not grant.parsed
@@ -272,8 +274,7 @@ def check(parsed) -> list[Finding]:
                 continue
             command, tokens = _command_tokens(grant.pattern)
             if grant.tool in _EXECUTION_TOOLS and grant.pattern:
-                substitution = _COMMAND_SUBSTITUTION.search(command)
-                value = substitution.group(1) if substitution else None
+                value = None
                 variable = None
                 if value is None:
                     for segment in _segments(tokens):

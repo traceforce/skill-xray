@@ -218,6 +218,32 @@ def test_installer_grants_record_network_reachability(make_package, specifier):
     ] is True
 
 
+def test_wildcard_denial_closes_same_allowed_tool(make_package):
+    manifest = _manifest("allowed-tools: Bash", "disallowed-tools: Bash(*)")
+    assert _run(make_package, manifest) == []
+
+
+def test_npm_ci_is_an_installer_grant(make_package):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(npm ci:*)"))
+    hit = next(f for f in findings if f.vector == "SXV-004")
+    assert hit.evidence["breadth_class"] == "package_installer"
+    assert hit.evidence["reaches_network"] is True
+
+
+def test_unrestricted_git_grant_is_broad_and_network_capable(make_package):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(git:*)"))
+    hit = next(f for f in findings if f.vector == "SXV-004")
+    assert hit.evidence["reaches_network"] is True
+
+
+def test_quoted_command_substitution_is_not_dynamic(make_package):
+    specifier = "Bash(echo 'safe; $(command -v python)')"
+    assert not any(
+        f.vector == "SXV-003"
+        for f in _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    )
+
+
 def test_disallowed_grant_is_never_treated_as_risk(make_package):
     manifest = _manifest(
         "allowed-tools: Bash(scripts/run.sh:*)",
