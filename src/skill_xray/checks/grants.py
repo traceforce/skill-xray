@@ -11,8 +11,8 @@ _EXECUTION_TOOLS = {"Bash", "Shell", "Terminal", "Execute"}
 _NETWORK_TOOLS = {"WebFetch", "WebSearch"}
 _VARIABLE = re.compile(
     r"\$(?i:env):[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|"
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*(?::[-+?=][^}\n]*)?\}|"
-    r"\$[A-Za-z_][A-Za-z0-9_]*|\$\d+"
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*(?:(?::[-+?=]|#{1,2}|%{1,2})[^}\n]*)?\}|"
+    r"\$[A-Za-z_][A-Za-z0-9_]*|\$\d+|\$[@*]"
 )
 _COMMAND_SUBSTITUTION = re.compile(
     r"(?:^|&&|\|\||[;|])\s*(?:sudo\s+|env\s+)?"
@@ -35,6 +35,7 @@ _INSTALLERS = {
     ("pip3", "install"), ("pnpm", "add"), ("uv", "add"), ("uv", "pip"),
     ("yarn", "add"),
 }
+_INSTALLER_COMMANDS = {command for command, _subcommand in _INSTALLERS}
 _INTERPRETERS = {
     "bash", "bun", "dash", "deno", "ksh", "node", "osascript", "perl", "php",
     "cmd", "powershell", "pwsh", "py", "python", "python3", "ruby", "sh", "zsh",
@@ -79,7 +80,8 @@ def _command_tokens(pattern):
         command = command[:-2]
     command = command.strip()
     try:
-        lexer = shlex.shlex(command, posix=False, punctuation_chars=";&|")
+        lexer = shlex.shlex(command, posix=False, punctuation_chars=";&|\n")
+        lexer.whitespace = " \t\r"
         lexer.whitespace_split = True
         lexer.commenters = ""
         return command, list(lexer)
@@ -116,7 +118,7 @@ def _segments(tokens):
     segments = []
     current = []
     for token in tokens:
-        if token and set(token) <= set(";&|"):
+        if token and set(token) <= set(";&|\n"):
             if current:
                 segments.append(current)
                 current = []
@@ -146,9 +148,9 @@ def _segment_breadth(tokens):
         return "package_installer"
     if len(effective) >= 2 and (normalized, effective[1].lower()) in _INSTALLERS:
         return "package_installer"
-    if normalized in _INTERPRETERS and any(
-        token.lower() in _EVAL_FLAGS for token in effective[1:]
-    ):
+    if len(effective) == 1 and normalized in _INSTALLER_COMMANDS:
+        return "package_installer"
+    if normalized in _INTERPRETERS and _eval_flag_index(effective) is not None:
         return "interpreter_or_downloader"
     if normalized in _REMOTE_COMMANDS:
         return "interpreter_or_downloader"
@@ -185,10 +187,33 @@ def _reaches_network(tool, pattern, tokens):
     if pattern is None or not tokens or tokens[0] in {"", "*", "**"}:
         return True
     return any(
-        effective and _basename(effective[0]) in _NETWORK_COMMANDS
+        effective and (_VERSION_SUFFIX.sub("", _basename(effective[0]))
+                       or _basename(effective[0])) in _NETWORK_COMMANDS
         for segment in _segments(tokens)
         if (effective := _effective_tokens(segment)[0])
     )
+
+
+def _eval_flag_index(effective):
+    for index, token in enumerate(effective[1:], 1):
+        lowered = token.lower()
+        if lowered == "--":
+            return None
+        if lowered in _EVAL_FLAGS:
+            return index
+        if not token.startswith(("-", "/")):
+            return None
+    return None
+
+
+def _expandable_variable(token):
+    if len(token) >= 2 and token[0] == token[-1] == "'":
+        return None
+    for match in _VARIABLE.finditer(token):
+        backslashes = len(token[:match.start()]) - len(token[:match.start()].rstrip("\\"))
+        if backslashes % 2 == 0:
+            return match
+    return None
 
 
 def _dynamic_command_target(tokens):
@@ -196,11 +221,11 @@ def _dynamic_command_target(tokens):
         effective = _effective_tokens(segment)[0]
         if not effective or _basename(effective[0]) not in _INTERPRETERS:
             continue
-        for index, token in enumerate(effective[1:-1], 1):
-            if token.lower() in _EVAL_FLAGS:
-                variable = _VARIABLE.search(effective[index + 1])
-                if variable:
-                    return variable
+        index = _eval_flag_index(effective)
+        if index is not None and index + 1 < len(effective):
+            variable = _expandable_variable(effective[index + 1])
+            if variable:
+                return variable
     return None
 
 
@@ -212,8 +237,13 @@ def check(parsed) -> list[Finding]:
     )
     for artifact in manifests:
         line = artifact.frontmatter_key_lines.get("allowed-tools") or 1
+        denied_tools = {
+            grant.tool for grant in artifact.grants or ()
+            if not grant.allowed and grant.parsed and grant.pattern is None
+        }
         for grant in artifact.grants or ():
-            if not grant.allowed or not grant.tool or not grant.parsed:
+            if (not grant.allowed or not grant.tool or not grant.parsed
+                    or grant.tool in denied_tools):
                 continue
             command, tokens = _command_tokens(grant.pattern)
             if grant.tool in _EXECUTION_TOOLS and grant.pattern:
@@ -222,7 +252,7 @@ def check(parsed) -> list[Finding]:
                 if variable is None:
                     for segment in _segments(tokens):
                         segment_head = _effective_tokens(segment)[0]
-                        if segment_head and (variable := _VARIABLE.search(segment_head[0])):
+                        if segment_head and (variable := _expandable_variable(segment_head[0])):
                             break
                 if variable is None:
                     variable = _dynamic_command_target(tokens)

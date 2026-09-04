@@ -183,6 +183,14 @@ def test_grants_space_separated_specifiers_are_independent():
     ]
 
 
+def test_grant_keeps_whitespace_before_pattern_parenthesis():
+    grants = parse_grants({"allowed-tools": "Bash (curl:*) Read"})
+    assert [(grant.tool, grant.pattern, grant.parsed) for grant in grants] == [
+        ("Bash", "curl:*", True),
+        ("Read", None, True),
+    ]
+
+
 # --- shell: tree-sitter-bash CST + error-region coverage gaps ---------------
 def test_shell_tree_sitter_cst():
     tree, errs = parse_shell("curl -k https://x | sh -s -- --yes")

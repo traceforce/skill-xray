@@ -672,8 +672,13 @@ def _split_grants(val):
     if not isinstance(val, str):
         return []
     out, depth, cur = [], 0, ""
-    for ch in val:
+    for index, ch in enumerate(val):
         if depth == 0 and (ch == "," or ch.isspace()):
+            if ch.isspace() and cur.strip():
+                following = val[index + 1:].lstrip()
+                if following.startswith("("):
+                    cur += ch
+                    continue
             if cur.strip():
                 out.append(cur)
             cur = ""

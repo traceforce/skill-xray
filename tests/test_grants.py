@@ -125,6 +125,57 @@ def test_later_network_segment_sets_network_evidence(make_package):
     assert hit.evidence["reaches_network"] is True
 
 
+def test_newline_starts_an_independent_grant_command(make_package):
+    findings = _run(
+        make_package,
+        _manifest("allowed-tools: |", "  Bash(echo ok", "  curl https://example.invalid:*)"),
+    )
+    hit = next(f for f in findings if f.vector == "SXV-004")
+    assert hit.evidence["reaches_network"] is True
+
+
+@pytest.mark.parametrize("target", ["$@", "$*", "${RUNNER%/*}/tool"])
+def test_posix_dynamic_command_targets_report_sxv003(make_package, target):
+    findings = _run(make_package, _manifest("allowed-tools: Bash(%s)" % target))
+    assert any(f.vector == "SXV-003" for f in findings)
+
+
+@pytest.mark.parametrize("specifier", ["Bash(npm:*)", "Bash(apt:*)", "Bash(brew:*)"])
+def test_bare_installer_wildcards_are_broad(make_package, specifier):
+    findings = _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    assert next(f for f in findings if f.vector == "SXV-004").evidence[
+        "breadth_class"
+    ] == "package_installer"
+
+
+def test_script_arguments_named_eval_are_not_interpreter_options(make_package):
+    assert _run(
+        make_package, _manifest("allowed-tools: Bash(python app.py --eval $VALUE)"),
+    ) == []
+
+
+@pytest.mark.parametrize("specifier", ["Bash('$RUNNER' payload)", "Bash(\\$RUNNER payload)"])
+def test_literal_command_variables_are_not_dynamic(make_package, specifier):
+    assert not any(
+        f.vector == "SXV-003"
+        for f in _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    )
+
+
+def test_broad_denial_closes_same_allowed_tool(make_package):
+    manifest = _manifest("allowed-tools: Bash", "disallowed-tools: Bash")
+    assert _run(make_package, manifest) == []
+
+
+def test_versioned_interpreter_network_evidence_is_normalized(make_package):
+    findings = _run(
+        make_package, _manifest("allowed-tools: Bash(python3.12 -c:*)"),
+    )
+    assert next(f for f in findings if f.vector == "SXV-004").evidence[
+        "reaches_network"
+    ] is True
+
+
 def test_disallowed_grant_is_never_treated_as_risk(make_package):
     manifest = _manifest(
         "allowed-tools: Bash(scripts/run.sh:*)",
