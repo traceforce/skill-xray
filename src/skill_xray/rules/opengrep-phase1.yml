@@ -1585,6 +1585,16 @@ rules:
               - pattern-inside: |
                   $CONTENT = "curl " + $URL + " | sh"
                   ...
+              - patterns:
+                  - pattern-inside: |
+                      $CONTENT = requests.$HTTP_METHOD(...).text
+                      ...
+                  - metavariable-regex:
+                      metavariable: $HTTP_METHOD
+                      regex: '^(?:get|post|put|request)$'
+              - pattern-inside: |
+                  $CONTENT = urllib.request.urlopen(...).read()
+                  ...
       - patterns:
           - pattern-inside: |
               with open($TARGET, $MODE) as $HANDLE:
@@ -1650,6 +1660,7 @@ rules:
           - metavariable-regex:
               metavariable: $PATH
               regex: '(?i).*\.git[/\\]hooks[/\\](?:pre-|post-|commit-msg|update|applypatch-msg).*'
+      - pattern-regex: 'Path\([^\n)]*\)\s*/\s*["'']\.git["'']\s*/\s*["'']hooks["'']\s*/\s*["''](?:pre-[^"'']+|post-[^"'']+|commit-msg|update|applypatch-msg)["'']'
     pattern-sinks:
       - patterns:
           - pattern: $TARGET.write_text($CONTENT, ...)
@@ -1668,6 +1679,40 @@ rules:
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+
+  - id: skill-xray.python-component-path-persistence
+    languages: [python]
+    message: Executable remote content is written to a component-built persistence path.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-component-path-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - patterns:
+          - pattern-inside: |
+              $TARGET = Path.home() / ".config" / "systemd" / "user" / $NAME
+              ...
+              $TARGET.write_text($CONTENT, ...)
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:service|timer)["'']?'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+      - patterns:
+          - pattern-inside: |
+              $TARGET = Path.home() / ".config" / "autostart" / $NAME
+              ...
+              $TARGET.write_text($CONTENT, ...)
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.desktop["'']?'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
 
   - id: skill-xray.bash-shell-startup-persistence
     languages: [bash]

