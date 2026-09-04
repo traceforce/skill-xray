@@ -1538,13 +1538,13 @@ rules:
             ...
       - metavariable-regex:
           metavariable: $NAME
-          regex: '(?i).+\.(?:bat|cmd|exe|js|jse|lnk|ps1|py|vbs|wsf)["'']?'
+          regex: '(?i).+\.(?:bat|cmd|exe|js|jse|lnk|ps1|py|vbs|wsf)["'']?$'
       - pattern-inside: |
-          with open($TARGET, $MODE) as $FILE:
+          with open($TARGET, $MODE, ...) as $FILE:
             ...
             $FILE.write($CONTENT)
             ...
-      - pattern: open($TARGET, $MODE)
+      - pattern: open($TARGET, $MODE, ...)
       - metavariable-regex:
           metavariable: $MODE
           regex: '^[''"]?[awx](?:[bt]\+?|\+[bt]?)?[''"]?$'
@@ -1597,13 +1597,13 @@ rules:
                   ...
       - patterns:
           - pattern-inside: |
-              with open($TARGET, $MODE) as $HANDLE:
+              with open($TARGET, $MODE, ...) as $HANDLE:
                 ...
                 $HANDLE.write($CONTENT)
-          - pattern: open($TARGET, $MODE)
+          - pattern: open($TARGET, $MODE, ...)
           - metavariable-regex:
               metavariable: $MODE
-              regex: '^["'']?[aw](?:[bt+])?["'']?$'
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
@@ -1633,14 +1633,14 @@ rules:
               metavariable: $CONTENT
               regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
       - patterns:
-          - pattern: open($TARGET, $MODE)
+          - pattern: open($TARGET, $MODE, ...)
           - pattern-inside: |
-              with open($TARGET, $MODE) as $HANDLE:
+              with open($TARGET, $MODE, ...) as $HANDLE:
                 ...
                 $HANDLE.write($CONTENT)
           - metavariable-regex:
               metavariable: $MODE
-              regex: '^["'']?[aw](?:[bt+])?["'']?$'
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
@@ -1661,6 +1661,11 @@ rules:
               metavariable: $PATH
               regex: '(?i).*\.git[/\\]hooks[/\\](?:pre-|post-|commit-msg|update|applypatch-msg).*'
       - pattern-regex: 'Path\([^\n)]*\)\s*/\s*["'']\.git["'']\s*/\s*["'']hooks["'']\s*/\s*["''](?:pre-[^"'']+|post-[^"'']+|commit-msg|update|applypatch-msg)["'']'
+      - patterns:
+          - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^["''].*\.git[/\\]hooks[/\\](?:pre-[^/\\"'']+|post-[^/\\"'']+|commit-msg|update|applypatch-msg)["'']$'
     pattern-sinks:
       - patterns:
           - pattern: $TARGET.write_text($CONTENT, ...)
@@ -1668,14 +1673,14 @@ rules:
               metavariable: $CONTENT
               regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
       - patterns:
-          - pattern: open($TARGET, $MODE)
+          - pattern: open($TARGET, $MODE, ...)
           - pattern-inside: |
-              with open($TARGET, $MODE) as $HANDLE:
+              with open($TARGET, $MODE, ...) as $HANDLE:
                 ...
                 $HANDLE.write($CONTENT)
           - metavariable-regex:
               metavariable: $MODE
-              regex: '^["'']?[aw](?:[bt+])?["'']?$'
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
@@ -1735,7 +1740,7 @@ rules:
       skill_xray_rule: opengrep-cron-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^[^\n]*crontab[^\n]*(?:https?://|powershell[ \t]+-enc)[^\n]*(?:\|[ \t]*(?:ba)?sh|powershell|exec)[^\n]*crontab[^\n]*$'
+      - pattern-regex: '(?im)^[^\n]*crontab[^\n]*(?:https?://|powershell[ \t]+-enc)[^\n]*(?:\|[ \t]*(?:ba)?sh|powershell|exec)[^\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
       - pattern-regex: '(?im)^[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
       - pattern-regex: '(?im)^[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*/etc/cron(?:tab|\.d/[^ /]+)[^\n]*$'
 
@@ -1801,7 +1806,7 @@ rules:
           - pattern: ($STARTUP / $NAME).write_text($CONTENT, ...)
           - metavariable-regex:
               metavariable: $NAME
-              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|vbs|js|jse|wsf)["'']?'
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|vbs|js|jse|wsf)["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
@@ -1825,13 +1830,13 @@ rules:
               regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
       - patterns:
           - pattern-inside: |
-              with open($TARGET, $MODE) as $HANDLE:
+              with open($TARGET, $MODE, ...) as $HANDLE:
                 ...
                 $HANDLE.write($CONTENT)
-          - pattern: open($TARGET, $MODE)
+          - pattern: open($TARGET, $MODE, ...)
           - metavariable-regex:
               metavariable: $MODE
-              regex: '^["'']?[aw](?:[bt+])?["'']?$'
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
@@ -1851,6 +1856,7 @@ rules:
               - pattern: Path.home() / $PATH
               - pattern: Path($PATH).expanduser()
               - pattern: os.path.expanduser($PATH)
+              - pattern: $PATH
           - metavariable-regex:
               metavariable: $PATH
               regex: '(?i).*\.config[/\\]autostart[/\\][^/\\]+\.desktop.*'
@@ -1861,14 +1867,14 @@ rules:
               metavariable: $CONTENT
               regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
       - patterns:
-          - pattern: open($TARGET, $MODE)
+          - pattern: open($TARGET, $MODE, ...)
           - pattern-inside: |
-              with open($TARGET, $MODE) as $HANDLE:
+              with open($TARGET, $MODE, ...) as $HANDLE:
                 ...
                 $HANDLE.write($CONTENT)
           - metavariable-regex:
               metavariable: $MODE
-              regex: '^["'']?[aw](?:[bt+])?["'']?$'
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'

