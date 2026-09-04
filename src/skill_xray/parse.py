@@ -671,6 +671,12 @@ def _split_grants(val):
         return [x.strip() for x in val if isinstance(x, str) and x.strip()]   # non-str: flag later
     if not isinstance(val, str):
         return []
+    next_nonspace = [len(val)] * (len(val) + 1)
+    nearest = len(val)
+    for index in range(len(val) - 1, -1, -1):
+        if not val[index].isspace():
+            nearest = index
+        next_nonspace[index] = nearest
     out, depth, cur = [], 0, ""
     quote = None
     escaped = False
@@ -694,8 +700,8 @@ def _split_grants(val):
             continue
         if depth == 0 and (ch == "," or ch.isspace()):
             if ch.isspace() and cur.strip():
-                following = val[index + 1:].lstrip()
-                if following.startswith("("):
+                following = next_nonspace[index + 1]
+                if following < len(val) and val[following] == "(":
                     cur += ch
                     continue
             if cur.strip():

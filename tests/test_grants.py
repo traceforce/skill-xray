@@ -244,6 +244,66 @@ def test_quoted_command_substitution_is_not_dynamic(make_package):
     )
 
 
+@pytest.mark.parametrize("specifier", [
+    "Bash(/opt/$(cat selected)/run)",
+    'Bash("$(command -v python)" task.py)',
+    'Bash(sh -c "$(cat payload)")',
+])
+def test_executable_command_substitutions_report_sxv003(make_package, specifier):
+    assert any(
+        f.vector == "SXV-003"
+        for f in _run(make_package, _manifest("allowed-tools: %s" % specifier))
+    )
+
+
+def test_long_command_substitution_is_still_detected(make_package):
+    substitution = "$(printf %s)" % ("x" * 300)
+    findings = _run(
+        make_package, _manifest("allowed-tools: Bash(%s task.py)" % substitution),
+    )
+    assert any(f.vector == "SXV-003" for f in findings)
+
+
+def test_env_option_value_is_not_treated_as_executable(make_package):
+    findings = _run(
+        make_package, _manifest("allowed-tools: Bash(env -C $DIR curl:*)"),
+    )
+    assert not any(f.vector == "SXV-003" for f in findings)
+    assert next(f for f in findings if f.vector == "SXV-004").evidence[
+        "reaches_network"
+    ] is True
+
+
+def test_powershell_grant_records_network_capability(make_package):
+    findings = _run(
+        make_package,
+        _manifest("allowed-tools: Bash(powershell -Command Invoke-WebRequest:*)"),
+    )
+    assert next(f for f in findings if f.vector == "SXV-004").evidence[
+        "reaches_network"
+    ] is True
+
+
+def test_python_pip_read_only_command_stays_narrow(make_package):
+    assert _run(make_package, _manifest("allowed-tools: Bash(python -m pip list)")) == []
+
+
+def test_exact_narrow_denial_closes_matching_allow(make_package):
+    manifest = _manifest(
+        "allowed-tools: Bash(curl:*)", "disallowed-tools: Bash(curl:*)",
+    )
+    assert _run(make_package, manifest) == []
+
+
+@pytest.mark.parametrize("subcommand", ["clone", "fetch", "pull", "push"])
+def test_git_remote_grants_are_network_capable(make_package, subcommand):
+    findings = _run(
+        make_package, _manifest("allowed-tools: Bash(git %s:*)" % subcommand),
+    )
+    hit = next(f for f in findings if f.vector == "SXV-004")
+    assert hit.evidence["reaches_network"] is True
+
+
 def test_disallowed_grant_is_never_treated_as_risk(make_package):
     manifest = _manifest(
         "allowed-tools: Bash(scripts/run.sh:*)",

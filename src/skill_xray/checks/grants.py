@@ -46,7 +46,7 @@ _WRAPPERS = {
     "sudo", "time", "timeout", "xargs",
 }
 _WRAPPER_VALUE_OPTIONS = {
-    "env": {"-u", "--unset"},
+    "env": {"-C", "--chdir", "-u", "--unset"},
     "sudo": {"-u", "--user", "-g", "--group", "-h", "--host", "-p", "--prompt"},
     "timeout": {"-s", "--signal", "-k", "--kill-after"},
 }
@@ -54,9 +54,11 @@ _PRIVILEGE_COMMANDS = {"su", "sudo"}
 _NETWORK_COMMANDS = {
     "aria2c", "curl", "http", "httpie", "nc", "ncat", "node", "npx", "perl", "python",
     "python3", "ruby", "scp", "sftp", "socat", "ssh", "wget", "git",
+    "powershell", "pwsh",
 } | _INSTALLER_COMMANDS
 _NETWORK_ONLY_COMMANDS = {"aria2c", "curl", "http", "httpie", "scp", "sftp", "wget"}
 _REMOTE_COMMANDS = _NETWORK_ONLY_COMMANDS | {"nc", "ncat", "socat", "ssh"}
+_GIT_REMOTE_SUBCOMMANDS = {"clone", "fetch", "pull", "push", "remote", "submodule"}
 
 
 def _basename(token):
@@ -136,13 +138,12 @@ def _segment_breadth(tokens):
     normalized = _VERSION_SUFFIX.sub("", head) or head
     if normalized in _PRIVILEGE_COMMANDS:
         return "privilege_escalation"
-    if (
-        normalized in {"py", "python", "python3"}
-        and len(effective) >= 3
-        and effective[1].lower() == "-m"
-        and effective[2].lower() in {"pip", "ensurepip"}
-    ):
-        return "package_installer"
+    if (normalized in {"py", "python", "python3"} and len(effective) >= 3
+            and effective[1].lower() == "-m"):
+        module = effective[2].lower()
+        if (module == "ensurepip" or (module == "pip" and (
+                len(effective) == 3 or effective[3].lower() == "install"))):
+            return "package_installer"
     if len(effective) >= 2 and (normalized, effective[1].lower()) in _INSTALLERS:
         return "package_installer"
     if len(effective) == 1 and normalized in _INSTALLER_COMMANDS:
@@ -150,6 +151,9 @@ def _segment_breadth(tokens):
     if normalized in _INTERPRETERS and _eval_option(effective) is not None:
         return "interpreter_or_downloader"
     if normalized in _REMOTE_COMMANDS:
+        return "interpreter_or_downloader"
+    if (normalized == "git" and (len(effective) == 1
+                                  or effective[1].lower() in _GIT_REMOTE_SUBCOMMANDS)):
         return "interpreter_or_downloader"
     if normalized == "npx":
         return "interpreter_or_downloader"
@@ -230,6 +234,9 @@ def _dynamic_command_target(tokens):
             payload = attached if attached is not None else (
                 effective[index + 1] if index + 1 < len(effective) else ""
             )
+            substitution = _expandable_substitution(payload)
+            if substitution:
+                return substitution
             variable = _expandable_variable(payload)
             if variable:
                 return variable
@@ -238,19 +245,50 @@ def _dynamic_command_target(tokens):
 
 def _command_substitution_head(tokens):
     effective = _effective_tokens(tokens)[0]
-    if not effective or not effective[0].startswith(("$(", "`")):
+    if not effective:
         return None
-    opener = effective[0][0:2] if effective[0].startswith("$(") else "`"
-    closer = ")" if opener == "$(" else "`"
-    parts = []
-    for token in effective:
-        parts.append(token)
-        if token.endswith(closer):
-            value = " ".join(parts)
-            if ((opener == "$(" and re.fullmatch(r"\$\([^\n)]{1,200}\)", value))
-                    or (opener == "`" and re.fullmatch(r"`[^\n`]{1,200}`", value))):
-                return value
-            return None
+    return _expandable_substitution(" ".join(effective))
+
+
+def _expandable_substitution(value):
+    single_quoted = False
+    escaped = False
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if char == "\\" and not single_quoted:
+            escaped = True
+            index += 1
+            continue
+        if char == "'":
+            single_quoted = not single_quoted
+            index += 1
+            continue
+        if single_quoted:
+            index += 1
+            continue
+        if value.startswith("$(", index):
+            depth = 1
+            end = index + 2
+            while end < len(value) and depth:
+                if value[end] == "(" and value[end - 1] != "\\":
+                    depth += 1
+                elif value[end] == ")" and value[end - 1] != "\\":
+                    depth -= 1
+                end += 1
+            if depth == 0:
+                return value[index:end]
+        elif char == "`":
+            end = index + 1
+            while end < len(value):
+                if value[end] == "`" and value[end - 1] != "\\":
+                    return value[index:end + 1]
+                end += 1
+        index += 1
     return None
 
 
@@ -268,9 +306,14 @@ def check(parsed) -> list[Finding]:
                 and (grant.pattern is None or grant.pattern.strip().lower()
                      in {"*", "**", ":*"}))
         }
+        denied_grants = {
+            (grant.tool, (grant.pattern or "").strip())
+            for grant in artifact.grants or () if not grant.allowed and grant.parsed
+        }
         for grant in artifact.grants or ():
             if (not grant.allowed or not grant.tool or not grant.parsed
-                    or grant.tool in denied_tools):
+                    or grant.tool in denied_tools
+                    or (grant.tool, (grant.pattern or "").strip()) in denied_grants):
                 continue
             command, tokens = _command_tokens(grant.pattern)
             if grant.tool in _EXECUTION_TOOLS and grant.pattern:
