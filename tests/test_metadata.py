@@ -322,6 +322,8 @@ def test_unsupported_language_remains_explicitly_incomplete(make_package):
      "tag:yaml.org,2002:python/object/new:subprocess.Popen"),
     ("!ruby/object:Gem::Requirement", "!ruby/object:Gem::Requirement"),
     ("!!python/object:example.Payload", "tag:yaml.org,2002:python/object:example.Payload"),
+    ("!!python/name:os.system", "tag:yaml.org,2002:python/name:os.system"),
+    ("!!python/module:os", "tag:yaml.org,2002:python/module:os"),
     ("!ruby/hash:Example", "!ruby/hash:Example"),
 ])
 def test_unsafe_object_tag_reports_exact_parser_location(make_package, tag, expected):

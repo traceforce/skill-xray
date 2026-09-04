@@ -622,10 +622,7 @@ class YamlTag:
 
 def _dangerous_yaml_tag(tag):
     return (
-        tag.startswith((
-            "tag:yaml.org,2002:python/object:",
-            "tag:yaml.org,2002:python/object/",
-        ))
+        tag.startswith("tag:yaml.org,2002:python/")
         or tag.startswith((
             "!ruby/exception:", "!ruby/hash:", "!ruby/object:", "!ruby/struct:",
             "tag:yaml.org,2002:ruby/exception:", "tag:yaml.org,2002:ruby/hash:",
