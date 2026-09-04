@@ -191,6 +191,12 @@ def test_blockquoted_table_cannot_absorb_unquoted_live_preprocessing(make_packag
     assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-001", 7, 1)]
 
 
+def test_mismatched_table_columns_cannot_suppress_live_preprocessing(make_package):
+    body = "a | b\n--- | --- | ---\n!`id` | x | y\n"
+    findings = _findings(make_package, "---\nname: demo\n---\n" + body)
+    assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-001", 6, 1)]
+
+
 def test_pipe_prose_before_table_remains_executable(make_package):
     body = "run | !`id`\n| behavior | example |\n| --- | --- |\n| inert | text |\n"
     findings = _findings(make_package, "---\nname: demo\n---\n" + body)
@@ -429,6 +435,15 @@ def test_list_nested_fence_survives_markdown_parser_failure(make_package, monkey
     assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-002", 5, 5)]
 
 
+def test_list_nested_fence_keeps_container_across_blank_line(make_package, monkeypatch):
+    monkeypatch.setattr(parse._MD, "parse", lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        MemoryError,
+    ))
+    body = "---\nname: demo\n---\n- ```!sh\n\n  id\n  ```\n"
+    findings = _findings(make_package, body)
+    assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-002", 4, 3)]
+
+
 def test_linked_preprocessing_survives_root_markdown_parser_failure(
     make_package, monkeypatch,
 ):
@@ -465,10 +480,53 @@ def test_fallback_link_inside_inline_code_does_not_load_document(make_package, m
     assert findings == []
 
 
+def test_fallback_link_inside_multiline_code_span_does_not_load_document(
+    make_package, monkeypatch,
+):
+    original = parse._MD.parse
+
+    def fail_root(text, *args, **kwargs):
+        if "[details](details.md)" in text:
+            raise MemoryError
+        return original(text, *args, **kwargs)
+
+    monkeypatch.setattr(parse._MD, "parse", fail_root)
+    findings = _package_findings(make_package, {
+        "SKILL.md": (
+            "---\nname: demo\n---\nExample: ``[details](details.md)\ncontinued``\n"
+        ),
+        "details.md": "Run !`id`\n",
+    })
+    assert findings == []
+
+
+def test_reference_link_survives_root_markdown_parser_failure(make_package, monkeypatch):
+    original = parse._MD.parse
+
+    def fail_root(text, *args, **kwargs):
+        if "[details][ref]" in text:
+            raise MemoryError
+        return original(text, *args, **kwargs)
+
+    monkeypatch.setattr(parse._MD, "parse", fail_root)
+    findings = _package_findings(make_package, {
+        "SKILL.md": "---\nname: demo\n---\nSee [details][ref].\n[ref]: details.md\n",
+        "details.md": "Run !`id`\n",
+    })
+    assert [(f.vector, f.path) for f in findings] == [("SXV-001", "details.md")]
+
+
 def test_html_block_boundary_cannot_extend_code_span_over_preprocessing(make_package):
     body = "``\n<div>\n!`id`\n</div>\n``\n"
     findings = _findings(make_package, "---\nname: demo\n---\n" + body)
     assert [(f.vector, f.line, f.column) for f in findings] == [("SXV-001", 6, 1)]
+
+
+def test_escaped_backtick_run_that_opens_code_context_is_inert(make_package):
+    body = "\\`` !`id` \\``\n"
+    assert _findings(make_package, "---\nname: demo\n---\n" + body) == []
+
+
 
 
 def test_preprocessing_ir_and_evidence_are_bounded(make_package):

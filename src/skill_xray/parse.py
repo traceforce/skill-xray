@@ -104,6 +104,12 @@ _LIST_ITEM_RE = re.compile(r"^(\s*)(?:[-+*]|\d+[.)])([ \t]+)")
 _FALLBACK_LINK_RE = re.compile(
     r"(?<!!)\[[^\]\n]{0,500}\]\(\s*<?([^\s)>]{1,1000})>?[^)\n]{0,1000}\)"
 )
+_REFERENCE_DEFINITION_RE = re.compile(
+    r"^ {0,3}\[([^\]\n]{1,500})\]:[ \t]*<?([^\s>]{1,1000})>?"
+)
+_REFERENCE_USE_RE = re.compile(
+    r"(?<!!)\[([^\]\n]{1,500})\]\[([^\]\n]{0,500})\]"
+)
 
 
 def _blockquote_parts(line):
@@ -123,7 +129,8 @@ def _blockquote_parts(line):
     return line[position:], position, depth
 
 
-def _has_table_pipe(line):
+def _table_separators(line):
+    separators = []
     code_width = None
     index = 0
     while index < len(line):
@@ -142,9 +149,19 @@ def _has_table_pipe(line):
             index = end
             continue
         if line[index] == "|" and code_width is None:
-            return True
+            separators.append(index)
         index += 1
-    return False
+    return separators
+
+
+def _table_cell_count(line):
+    separators = _table_separators(line)
+    if not separators:
+        return 0
+    first = len(line) - len(line.lstrip())
+    last = len(line.rstrip()) - 1
+    return (len(separators) + 1 - int(separators[0] == first)
+            - int(separators[-1] == last))
 
 
 def _table_lines(lines):
@@ -153,8 +170,9 @@ def _table_lines(lines):
     while index < len(lines):
         line, _line_prefix, line_depth = _blockquote_parts(lines[index])
         header, _header_prefix, header_depth = _blockquote_parts(lines[index - 1])
-        if (not _TABLE_DIVIDER_RE.match(line) or not _has_table_pipe(line)
-                or not _has_table_pipe(header) or line_depth != header_depth):
+        if (not _TABLE_DIVIDER_RE.match(line) or not _table_cell_count(line)
+                or _table_cell_count(line) != _table_cell_count(header)
+                or line_depth != header_depth):
             index += 1
             continue
         start = index - 1
@@ -162,7 +180,7 @@ def _table_lines(lines):
         while end + 1 < len(lines):
             candidate, _prefix, depth = _blockquote_parts(lines[end + 1])
             if (depth != line_depth or _BLOCK_OPENER_RE.match(candidate)
-                    or not _has_table_pipe(candidate)):
+                    or not _table_cell_count(candidate)):
                 break
             end += 1
         table.update(range(start, end + 1))
@@ -197,8 +215,8 @@ def _container_lines(lines):
     for source in lines:
         content, quote_prefix, depth = _blockquote_parts(source)
         if not content.strip():
-            list_indents.pop(depth, None)
-            prepared.append((content, quote_prefix, (depth, 0)))
+            list_indent = list_indents.get(depth, 0)
+            prepared.append((content, quote_prefix, (depth, list_indent)))
             continue
         item = _LIST_ITEM_RE.match(content)
         if item:
@@ -318,15 +336,57 @@ def _without_inline_code(line):
     return "".join(masked)
 
 
+def _masked_fallback_lines(lines, excluded):
+    masked = list(lines)
+    block = []
+
+    def flush():
+        if not block:
+            return
+        content = "\n".join(lines[index] for index in block)
+        for index, value in zip(
+            block, _without_inline_code(content).split("\n"), strict=True,
+        ):
+            masked[index] = value
+        block.clear()
+
+    for index, line in enumerate(lines):
+        candidate = _blockquote_parts(line)[0]
+        if index in excluded or not line.strip():
+            flush()
+            continue
+        if block and _BLOCK_OPENER_RE.match(candidate):
+            flush()
+        block.append(index)
+    flush()
+    return masked
+
+
+def _reference_label(value):
+    return " ".join(value.split()).casefold()
+
+
 def _fallback_links(text, line_offset=0):
     lines = text.split("\n")
     excluded = _fenced_lines(lines) | _indented_code_lines(lines) | _table_lines(lines)
-    links = []
-    for index, line in enumerate(lines):
+    masked = _masked_fallback_lines(lines, excluded)
+    definitions = {}
+    for index, line in enumerate(masked):
         if index in excluded:
             continue
-        for match in _FALLBACK_LINK_RE.finditer(_without_inline_code(line)):
+        match = _REFERENCE_DEFINITION_RE.match(line)
+        if match:
+            definitions[_reference_label(match.group(1))] = match.group(2)
+    links = []
+    for index, line in enumerate(masked):
+        if index in excluded:
+            continue
+        for match in _FALLBACK_LINK_RE.finditer(line):
             links.append((match.group(1), "", index + 1 + line_offset))
+        for match in _REFERENCE_USE_RE.finditer(line):
+            label = _reference_label(match.group(2) or match.group(1))
+            if label in definitions:
+                links.append((definitions[label], "", index + 1 + line_offset))
     return links
 
 
