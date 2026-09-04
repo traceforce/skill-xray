@@ -10,7 +10,7 @@ from ..ingest import IDENTITY_FILES
 
 _INSTRUCTION_KINDS = {"skill_manifest", "instruction", "agent_identity"}
 _IDENTITY_TARGET = re.compile(
-    r"(?i)(?<![A-Za-z0-9_.-])(?:%s)(?![A-Za-z0-9_-]|\.[A-Za-z0-9])"
+    r"(?i)(?<![A-Za-z0-9_.-])(?:%s)(?![A-Za-z0-9_/\\-]|\.[A-Za-z0-9])"
     % "|".join(re.escape(name) for name in sorted(IDENTITY_FILES, reverse=True))
 )
 _WRITE = re.compile(
@@ -51,7 +51,10 @@ def _clause_ends(text):
         if char == "\\" and quote:
             escaped = True
             continue
-        if char in "'\"":
+        if char in "'\"" and not (
+            char == "'" and index and index + 1 < len(text)
+            and text[index - 1].isalnum() and text[index + 1].isalnum()
+        ):
             quote = None if quote == char else char if quote is None else quote
             continue
         if quote is None and (
@@ -70,6 +73,24 @@ def _target_attached_before_write(clause, target, write):
     return bool(introduced and re.fullmatch(r"\s*,?\s*", between) or connector)
 
 
+def _target_attached_after_write(clause, target, write):
+    between = clause[write.end():target.start()]
+    return bool(
+        re.search(r"(?i)\b(?:to|into|in|within)\s+[`'\"]?(?:[~./\\\w-]+[/\\])?$", between)
+        or re.fullmatch(r"(?i)\s+(?:the\s+)?(?:[~./\\\w-]+[/\\])?", between)
+    )
+
+
+def _operation_text(clause, write):
+    tail = clause[write.start():]
+    boundary = re.search(
+        r"(?i)\s+\b(?:and|then)\s+(?:note|mention|describe|explain|report|"
+        r"append|write|add|insert|save|persist|store|replace|overwrite|prepend|update|edit|copy)\b",
+        tail,
+    )
+    return tail[:boundary.start()] if boundary else tail
+
+
 def check(parsed) -> list[Finding]:
     findings = []
     for artifact in parsed.artifacts:
@@ -79,16 +100,12 @@ def check(parsed) -> list[Finding]:
         spans = artifact.markdown.prose_spans if artifact.markdown else ()
         for index, (start, end) in enumerate(spans):
             block = "\n".join(lines[start - 1:end])
-            defensive = _DEFENSIVE_DESCRIPTION.search(block)
-            if defensive:
-                block = (
-                    block[:defensive.start()]
-                    + "".join(
-                        "\n" if char == "\n" else " "
-                        for char in block[defensive.start():defensive.end()]
-                    )
-                    + block[defensive.end():]
-                )
+            block = _DEFENSIVE_DESCRIPTION.sub(
+                lambda match: "".join(
+                    "\n" if char == "\n" else " " for char in match.group(0)
+                ),
+                block,
+            )
             next_block = ""
             if index + 1 < len(spans) and spans[index + 1][0] - end <= 2:
                 next_start, next_end = spans[index + 1]
@@ -100,6 +117,10 @@ def check(parsed) -> list[Finding]:
                 clause = block[clause_start:clause_end]
                 for write in _WRITE.finditer(clause):
                     target = _IDENTITY_TARGET.search(clause, write.end())
+                    if target is not None and not _target_attached_after_write(
+                        clause, target, write,
+                    ):
+                        target = None
                     if target is None:
                         preceding = list(_IDENTITY_TARGET.finditer(clause, 0, write.start()))
                         candidate = preceding[-1] if preceding else None
@@ -110,7 +131,7 @@ def check(parsed) -> list[Finding]:
                         )
                     if target is None:
                         continue
-                    persisted = clause[write.start():]
+                    persisted = _operation_text(clause, write)
                     introduced_block = bool(
                         next_block and _CONTENT_INTRO.search(persisted)
                         and _BLOCK_PREFIX.search(next_block)
