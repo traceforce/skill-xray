@@ -20,7 +20,7 @@ from .checks.code_lane import (
     _manifest_index,
     build_code_lane,
 )
-from .checks.grants import declared_capabilities
+from .checks.grants import declared_capabilities, effective_grants
 from .findings import Finding, cap_findings, dedupe_findings, vector_registry
 from .opengrep_runtime import OpenGrepRuntimeError, resolve_opengrep
 
@@ -118,13 +118,13 @@ def _location(result: dict, target: SelectedCode) -> tuple[int, dict] | None:
     line = start.get("line")
     if type(line) is not int or not 1 <= line <= target.text.count("\n") + 1:
         return None
-    def _int_or_none(value):
-        return value if type(value) is int else None
+    def _bounded(value, minimum):
+        return value if type(value) is int and value >= minimum else None
     return line, {
-        "start": {"line": line, "col": _int_or_none(start.get("col")),
-                  "offset": _int_or_none(start.get("offset"))},
-        "end": {"line": _int_or_none(end.get("line")), "col": _int_or_none(end.get("col")),
-                "offset": _int_or_none(end.get("offset"))},
+        "start": {"line": line, "col": _bounded(start.get("col"), 1),
+                  "offset": _bounded(start.get("offset"), 0)},
+        "end": {"line": _bounded(end.get("line"), 1), "col": _bounded(end.get("col"), 1),
+                "offset": _bounded(end.get("offset"), 0)},
     }
 
 
@@ -1502,7 +1502,10 @@ def findings_from_report(
                     },
                 ))
                 continue
-            if "allowed-tools" not in (manifest.frontmatter or {}):
+            allowed_value = (manifest.frontmatter or {}).get("allowed-tools")
+            if allowed_value is None or (
+                isinstance(allowed_value, str) and not allowed_value.strip()
+            ):
                 continue
             grants = manifest.grants or []
             if (("grants_unparsed_shape", "allowed-tools") in manifest.diagnostics
@@ -1561,7 +1564,7 @@ def findings_from_report(
                         or capability == "network"
                         and _network_capability_is_invalid(tree, line, column)):
                     continue
-            declared = sorted(grant.tool for grant in grants if grant.allowed and grant.tool)
+            declared = sorted(grant.tool for grant in effective_grants(grants) if grant.tool)
         python_candidate = vector in _PY_TAINT_VECTORS and target.suffix == ".py"
         needs_postfilter = python_candidate and not malformed_metavars
         postfilter_skipped = False

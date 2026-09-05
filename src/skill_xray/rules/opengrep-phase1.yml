@@ -1905,6 +1905,8 @@ rules:
               regex: '^(?:system|popen|spawnl|spawnle|spawnlp|spawnlpe|spawnv|spawnve|spawnvp|spawnvpe|execl|execle|execlp|execlpe|execv|execve|execvp|execvpe|posix_spawn|posix_spawnp)$'
       - pattern: eval(...)
       - pattern: exec(...)
+      - pattern: builtins.eval(...)
+      - pattern: builtins.exec(...)
 
   - id: skill-xray.python-network-capability
     languages: [python]

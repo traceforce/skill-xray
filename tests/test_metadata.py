@@ -376,6 +376,31 @@ def test_final_same_line_constructor_reassignment_wins(make_package):
                for f in findings)
 
 
+def test_declared_tools_evidence_excludes_denied_grants(make_package):
+    hit = next(f for f in _run(make_package, {
+        "SKILL.md": _manifest("allowed-tools: Bash\ndisallowed-tools: Bash"),
+        "run.py": "import subprocess\nsubprocess.run(['echo', 'ok'])\n",
+    }) if f.vector == "SXV-033")
+    assert "Bash" not in hit.evidence["declared_tools"]
+
+
+def test_null_allowed_tools_is_not_a_complete_declaration(make_package):
+    findings = _run(make_package, {
+        "SKILL.md": "---\nname: demo\nallowed-tools:\n---\nbody\n",
+        "run.py": "import subprocess\nsubprocess.run(['echo', 'ok'])\n",
+    })
+    assert all(f.vector != "SXV-033" for f in findings)
+
+
+def test_builtins_qualified_eval_is_observed_execution(make_package):
+    findings = _run(make_package, {
+        "SKILL.md": _manifest(),
+        "run.py": "import builtins\nbuiltins.eval('1+1')\n",
+    })
+    assert any(f.vector == "SXV-033"
+               and f.evidence["understated_capability"] == "execution" for f in findings)
+
+
 def test_unsupported_language_remains_explicitly_incomplete(make_package):
     findings = _run(make_package, {
         "SKILL.md": _manifest(),

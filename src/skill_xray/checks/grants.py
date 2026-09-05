@@ -343,15 +343,20 @@ def _denial_covers(denial, grant):
     return False
 
 
-def declared_capabilities(grants):
-    """Capabilities materially declared by effective allowed grants."""
+def effective_grants(grants):
+    """Allowed, parsed grants not closed by a matching denial."""
     values = list(grants or ())
     denials = [grant for grant in values if not grant.allowed]
-    allowed = [
+    return [
         grant for grant in values
         if grant.allowed and grant.parsed
         and not any(_denial_covers(denial, grant) for denial in denials)
     ]
+
+
+def declared_capabilities(grants):
+    """Capabilities materially declared by effective allowed grants."""
+    allowed = effective_grants(grants)
     execution = False
     for grant in allowed:
         if grant.tool not in _EXECUTION_TOOLS:
