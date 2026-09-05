@@ -1477,6 +1477,12 @@ rules:
     patterns:
       - pattern: os.chmod($PAYLOAD_PATH, $MODE)
       - metavariable-regex:
+          metavariable: $WRITE_MODE
+          regex: '^["'']?[wax](?:[bt]\+?|\+[bt]?)?["'']?$'
+      - metavariable-regex:
+          metavariable: $APPEND_MODE
+          regex: '^["'']?a(?:[bt]\+?|\+[bt]?)?["'']?$'
+      - metavariable-regex:
           metavariable: $STARTUP_NAME
           regex: '^["'']?\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)["'']?$'
       - metavariable-pattern:
@@ -1542,12 +1548,10 @@ rules:
       skill_xray_severity: critical
     patterns:
       - pattern-inside: |
-          def $FUNC(...):
-            ...
-            $STARTUP = ... / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
-            ...
-            $TARGET = $STARTUP / $NAME
-            ...
+          $STARTUP = ... / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+          ...
+          $TARGET = $STARTUP / $NAME
+          ...
       - metavariable-regex:
           metavariable: $NAME
           regex: '(?i).+\.(?:bat|cmd|exe|js|jse|lnk|ps1|py|vbs|wsf)["'']?$'
@@ -1766,7 +1770,7 @@ rules:
       skill_xray_severity: critical
     pattern-either:
       - pattern-regex: '(?im)^[^;&\n]*<key>Program(?:Arguments)?</key>[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee)[^;&\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/Library/LaunchAgents/[^ /"'']+\.plist"?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee)[^\n]*Library/LaunchAgents/[^ /]+\.plist[^\n]*<<[^\n]*\n(?:[^\n]*\n){0,20}[^\n]*<key>Program(?:Arguments)?</key>(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)'
+      - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee)[^\n]*Library/LaunchAgents/[^ /]+\.plist["'']?[^\n]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}[^\n]*<key>Program(?:Arguments)?</key>(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
 
   - id: skill-xray.python-windows-run-persistence
     mode: taint
@@ -1780,13 +1784,16 @@ rules:
     pattern-sources:
       - patterns:
           - pattern-either:
-              - pattern: winreg.OpenKey(..., $PATH, ...)
-              - pattern: winreg.OpenKeyEx(..., $PATH, ...)
-              - pattern: winreg.CreateKey(..., $PATH, ...)
-              - pattern: winreg.CreateKeyEx(..., $PATH, ...)
+              - pattern: winreg.OpenKey($HIVE, $PATH, ...)
+              - pattern: winreg.OpenKeyEx($HIVE, $PATH, ...)
+              - pattern: winreg.CreateKey($HIVE, $PATH, ...)
+              - pattern: winreg.CreateKeyEx($HIVE, $PATH, ...)
+          - metavariable-regex:
+              metavariable: $HIVE
+              regex: '^(?:winreg\.)?HKEY_(?:CURRENT_USER|LOCAL_MACHINE)$'
           - metavariable-regex:
               metavariable: $PATH
-              regex: '(?i).*\\CurrentVersion\\Run(?:Once)?["'']?$'
+              regex: '(?i)^[rRuUbfF]*["'']Software\\Microsoft\\Windows\\CurrentVersion\\Run(?:Once)?["'']$'
     pattern-sinks:
       - patterns:
           - pattern: winreg.SetValueEx($KEY, ..., $VALUE)
@@ -1845,7 +1852,7 @@ rules:
       skill_xray_rule: opengrep-cron-persistence
       skill_xray_severity: critical
     pattern-sources:
-      - pattern-regex: '["'']/etc/cron(?:tab|\.d/[^"'']+)["'']'
+      - pattern-regex: '["'']/etc/cron(?:tab|\.d/[A-Za-z0-9_-]+)["'']'
     pattern-sinks:
       - patterns:
           - pattern: $TARGET.write_text($CONTENT, ...)
