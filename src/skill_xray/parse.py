@@ -17,6 +17,7 @@ import tomllib
 import unicodedata
 import warnings
 from dataclasses import dataclass, field
+from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import unquote
 
@@ -149,8 +150,6 @@ class _InspectableHTML(HTMLParser):
                 self.fully_inspected = False
             if tag == "a":
                 self.anchors.append([target, [], self.line + self.getpos()[0] - 1])
-            else:
-                self.md.links.append((target, "", self.line + self.getpos()[0] - 1))
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
@@ -198,27 +197,84 @@ def _inspect_html(fragment, line, md, column=1):
     try:
         parser.feed(fragment)
         parser.close()
+        if parser.anchors:
+            parser.fully_inspected = False
     except (ValueError, RecursionError):
         parser.fully_inspected = False
     if not parser.saw_markup or not parser.fully_inspected:
         md.has_uninspectable_html = True
         md.html_uninspectable.append((fragment, line, column))
     else:
-        def blank_markup(match):
-            return "".join("\n" if char == "\n" else " " for char in match.group(0))
+        md.html_prose.append((_project_html(fragment), line))
 
-        projected = re.sub(r"<!--.*?(?:-->|$)|<[^>]*>", blank_markup, fragment, flags=re.S)
-        md.html_prose.append((projected, line))
+
+_HTML_PROJECTION_TOKEN = re.compile(
+    r"<!--.*?(?:-->|$)|<[^>]*>|&(?:#[xX][0-9A-Fa-f]+|#\d+|[A-Za-z][A-Za-z0-9]+);",
+    re.S,
+)
+
+
+def _blank_source(value):
+    return "".join("\n" if char == "\n" else " " for char in value)
+
+
+def _project_html(fragment):
+    """Rendered prose with source width/newlines retained for exact finding locations."""
+    output = []
+    position = 0
+    code_depth = 0
+    for match in _HTML_PROJECTION_TOKEN.finditer(fragment):
+        text = fragment[position:match.start()]
+        output.append(_blank_source(text) if code_depth else text)
+        token = match.group(0)
+        if token.startswith("<") and not token.startswith("<!--"):
+            tag_match = re.match(r"(?is)<\s*(/?)\s*([a-z][a-z0-9-]*)", token)
+            if tag_match and tag_match.group(2).lower() in {"code", "pre"}:
+                code_depth += -1 if tag_match.group(1) else 1
+                code_depth = max(code_depth, 0)
+            output.append(_blank_source(token))
+        elif token.startswith("&") and not code_depth:
+            decoded = unescape(token)
+            output.append((decoded + " " * len(token))[:len(token)])
+        else:
+            output.append(_blank_source(token))
+        position = match.end()
+    tail = fragment[position:]
+    output.append(_blank_source(tail) if code_depth else tail)
+    return "".join(output)
+
+
+def _mask_inline_code(source, children):
+    masked = list(source)
+    cursor = 0
+    for child in children:
+        if child.type != "code_inline":
+            continue
+        marker = child.markup or "`"
+        needle = marker + (child.content or "") + marker
+        start = source.find(needle, cursor)
+        if start < 0:
+            start = source.find(marker, cursor)
+            end = source.find(marker, start + len(marker)) if start >= 0 else -1
+        else:
+            end = start + len(needle) - len(marker)
+        if start < 0 or end < 0:
+            continue
+        stop = end + len(marker)
+        for index in range(start, stop):
+            if masked[index] != "\n":
+                masked[index] = " "
+        cursor = stop
+    return "".join(masked)
 
 
 def _scan_inline(inline, line, md, source=None):
     children = inline.children or []
     source = source if source is not None else (inline.content or "")
-    source_line = line
-    search_from = 0
+    if any(child.type == "html_inline" for child in children):
+        md.has_html = True
+        _inspect_html(_mask_inline_code(source, children), line, md)
     for j, c in enumerate(children):
-        content = c.content or ""
-        index = source.find(content, search_from) if content else -1
         if c.type in ("softbreak", "hardbreak"):
             line += 1                     # inline children carry no map; count line breaks
         elif c.type == "link_open":
@@ -229,30 +285,6 @@ def _scan_inline(inline, line, md, source=None):
                     break
                 txt += children[k].content or ""
             md.links.append((href, txt, line))
-        elif c.type == "html_inline":
-            md.has_html = True
-            if index >= 0:
-                html_line = source_line + source.count("\n", 0, index)
-                previous_break = source.rfind("\n", 0, index)
-                column = index - previous_break
-                search_from = index + len(c.content)
-            else:
-                html_line, column = line, 1
-            _inspect_html(c.content, html_line, md, column)
-            anchor = re.match(
-                r"(?is)<a\b[^>]*\bhref\s*=\s*(['\"])(.*?)\1[^>]*>", c.content or "",
-            )
-            if anchor:
-                label = []
-                for following in children[j + 1:]:
-                    if following.type == "html_inline" and re.match(
-                            r"(?is)</a\s*>", following.content or ""):
-                        break
-                    if following.type != "html_inline":
-                        label.append(following.content or "")
-                md.links.append((anchor.group(2), "".join(label).strip(), html_line))
-        if index >= 0:
-            search_from = index + len(content)
 
 
 _FENCE_OPEN_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
@@ -729,10 +761,12 @@ def parse_markdown(text, line_offset=0):
             raw = "\n".join(source_lines[tok.map[0]:tok.map[1]]) if tok.map else tok.content
             _inspect_html(raw, line, md)
             if tok.map:
-                md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
                 block_starts.add(tok.map[0])
         elif tok.type == "inline":
-            if tok.map:
+            has_inline_html = any(
+                child.type == "html_inline" for child in (tok.children or ())
+            )
+            if tok.map and not has_inline_html:
                 md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
                 block_starts.add(tok.map[0])
             raw = "\n".join(source_lines[tok.map[0]:tok.map[1]]) if tok.map else tok.content
