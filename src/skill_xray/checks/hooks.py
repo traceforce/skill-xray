@@ -26,7 +26,7 @@ _HOOK_EVENT = re.compile(r"\b(%s)\b" % "|".join(_HOOK_EVENTS), re.IGNORECASE)
 _CANONICAL_EVENT = {event.lower(): event for event in _HOOK_EVENTS}
 _SETTINGS = re.compile(
     r"(?i)(?:~[/\\]|%USERPROFILE%[/\\])?\.claude[/\\]"
-    r"settings(?:\.local)?\.json|\bsettings(?:\.local)?\.json\b"
+    r"settings(?:\.local)?\.json|(?<![\w/\\.])settings(?:\.local)?\.json\b"
 )
 # Inflected verb forms only, so nouns like "additional"/"installation" do not read as directives.
 _WRITE = re.compile(
@@ -64,9 +64,12 @@ _NPM_EXACT = re.compile(
 _OPTIONS_WITH_VALUE = {
     "npx": {"-c", "--cache", "--call", "--prefix", "--registry", "--userconfig"},
     "pnpx": {"--registry"},
-    "pipx": {"--python", "--index-url", "--pip-args"},
-    "uvx": {"--index", "--python", "--python-platform"},
+    "pipx": {"-p", "--python", "--index-url", "--pip-args"},
+    "uvx": {"-p", "--index", "--python", "--python-platform"},
 }
+_RUNNER_ALIASES = {"npm": {"exec", "x"}, "bun": {"x"}, "pnpm": {"dlx"}, "yarn": {"dlx"}}
+_GLOBAL_VALUE_OPTS = {"-c", "--prefix", "--loglevel", "--registry",
+                      "--workspace", "-w", "--dir", "--filter"}
 
 
 def _portable_basename(value):
@@ -108,7 +111,8 @@ def _instruction_findings(artifact):
             clause_end = negated.end() + end_match.end() if end_match else len(block)
             # A contrastive turn ("...but append...") begins a fresh affirmative directive.
             contrast = re.search(
-                r"(?i)\b(?:but|however|yet|instead|rather)\b", block[negated.end():clause_end]
+                r"(?i)\b(?:but|however|yet|instead|rather|then|next|afterwards?)\b",
+                block[negated.end():clause_end],
             )
             if contrast:
                 clause_end = negated.end() + contrast.start()
@@ -213,22 +217,25 @@ def _local_candidate(parsed, command, arguments=()):
             value_opts = {"-o"}
         elif head.startswith("python"):
             value_opts = {"-w", "-x"}
-        elif head == "node":
-            value_opts = {"-r", "--require", "--import", "--loader", "--experimental-loader"}
         elif head in {"perl", "ruby"}:
             value_opts = {"-i"}
         else:
             value_opts = set()
         index = 1
         while index < len(tokens) and tokens[index].startswith("-"):
-            flag = tokens[index].lower()
-            if flag == "-c" or (not is_shell and flag in {"-e", "--eval"}):
+            token = tokens[index].lower()
+            base = token.split("=", 1)[0]
+            if base == "-c" or (not is_shell and base in {"-e", "--eval"}):
                 return "inline_interpreter", False
-            if is_shell and flag == "-s":
+            if is_shell and base == "-s":
                 # `sh -s` runs the program from stdin; the path is only $0, not the script.
                 return "dynamic_or_compound", False
-            # An option that consumes the next token, so its value is not read as the script path.
-            index += 2 if flag in value_opts else 1
+            if head == "node" and base in {"-r", "--require", "--import", "--loader",
+                                           "--experimental-loader", "--env-file",
+                                           "--env-file-if-exists"}:
+                # These auto-load an external module or env before the script; surface for review.
+                return "dynamic_or_compound", False
+            index += 2 if ("=" not in token and base in value_opts) else 1
     if index >= len(tokens):
         return "unresolved_external", False
     candidate = re.sub(
@@ -395,8 +402,9 @@ def _server_maps(artifact):
 
 
 def _package_specs(runner, args):
-    # npm/pipx allow the package-selecting option more than once, so every selected package is
-    # evaluated; once one is given the trailing positional is the command to run, not a package.
+    # Package-selecting options differ by runner: npm uses -p/--package, pipx uses --spec, uvx
+    # uses --from. uvx/pipx -p means --python (a value option), so it is not a selector here.
+    selectors = {"--spec", "--from"} if runner in {"uvx", "pipx"} else {"-p", "--package"}
     specs = []
     positionals = []
     index = 0
@@ -407,13 +415,13 @@ def _package_specs(runner, args):
             # still selects pkg while `npx pkg -- args` keeps pkg as the package.
             positionals.extend(args[index + 1:])
             break
-        if arg in {"-p", "--package", "--spec"}:
+        if arg in selectors:
             if index + 1 >= len(args) or args[index + 1].startswith("-"):
                 return specs, True
             specs.append(args[index + 1])
             index += 2
             continue
-        if arg.startswith(("--package=", "--spec=")):
+        if "=" in arg and arg.split("=", 1)[0] in selectors:
             value = arg.split("=", 1)[1]
             if not value:
                 return specs, True
@@ -453,12 +461,16 @@ def _is_exact_pin(runner, spec):
         except InvalidRequirement:
             return False
         if requirement.url:
-            # A PEP 508 direct reference is immutable only when it pins a full commit SHA.
+            if requirement.url.startswith("file:"):
+                return True
+            # A PEP 508 direct reference is otherwise immutable only when it pins a full SHA.
             return bool(re.search(r"@[0-9a-fA-F]{40}(?:[#?].*)?$", requirement.url))
         constraints = list(requirement.specifier)
         return (len(constraints) == 1 and constraints[0].operator in {"==", "==="}
                 and "*" not in constraints[0].version)
-    return bool(_NPM_EXACT.fullmatch(spec))
+    # npm aliases ("alias@npm:pkg@version") pin the target that follows @npm:.
+    target = spec.split("@npm:", 1)[1] if "@npm:" in spec else spec
+    return bool(_NPM_EXACT.fullmatch(target))
 
 
 def _mcp_findings(artifact):
@@ -481,7 +493,10 @@ def _mcp_findings(artifact):
             command = server.get("command")
             args = server.get("args", [])
             stype = server.get("type")
-            if command is None and isinstance(stype, str) and stype in ("http", "sse"):
+            if stype is not None and not isinstance(stype, str):
+                malformed = True
+                continue
+            if command is None and stype in ("http", "sse"):
                 continue
             if (not isinstance(command, str) or not command.strip()
                     or not isinstance(args, list)
@@ -490,17 +505,14 @@ def _mcp_findings(artifact):
                 continue
             runner = _portable_basename(command)
             runner_args = args
-            if runner in {"npm", "pnpm", "yarn", "bun"}:
+            if runner in _RUNNER_ALIASES:
                 # Skip leading global flags ("npm --prefix /tmp exec ...") to find the subcommand,
                 # consuming a value for options that take one.
-                global_value_opts = {"-c", "--prefix", "--loglevel", "--registry",
-                                     "--workspace", "-w", "--dir", "--filter"}
                 sub = 0
                 while sub < len(args) and args[sub].startswith("-"):
-                    sub += 2 if args[sub] in global_value_opts else 1
+                    sub += 2 if args[sub] in _GLOBAL_VALUE_OPTS else 1
                 subcommand = args[sub] if sub < len(args) else ""
-                aliases = {"npm": {"exec", "x"}, "bun": {"x"}, "pnpm": {"dlx"}, "yarn": {"dlx"}}
-                if subcommand in aliases[runner]:
+                if subcommand in _RUNNER_ALIASES[runner]:
                     runner, runner_args = "npx", args[sub + 1:]
             if runner not in _RUNNERS:
                 continue
