@@ -1110,24 +1110,38 @@ def _network_capability_is_invalid(
         return binding[1] + (separator + tail if separator else "")
 
     def assigned_constructor(name):
-        latest = None
-        for candidate in _scope_nodes(scopes[-1]):
-            if (isinstance(candidate, (ast.Assign, ast.AnnAssign))
-                    and _before(candidate, line, col)):
-                targets = (
-                    candidate.targets if isinstance(candidate, ast.Assign)
-                    else [candidate.target]
-                )
-                if any(_target_binds(target, name) for target in targets):
-                    if latest is None or (
-                        (candidate.lineno, candidate.col_offset)
-                        > (latest.lineno, latest.col_offset)
-                    ):
-                        latest = candidate
-        value = latest.value if latest is not None else None
-        if not isinstance(value, ast.Call):
+        for scope in reversed(scopes):
+            body = getattr(scope, "body", ())
+            if not isinstance(body, list):
+                continue
+            for candidate in reversed(body):
+                if (not isinstance(candidate, (ast.Assign, ast.AnnAssign))
+                        or not _before(candidate, line, col)):
+                    continue
+                targets = (candidate.targets if isinstance(candidate, ast.Assign)
+                           else [candidate.target])
+                if not any(dotted(target) == name for target in targets):
+                    continue
+                if dotted(candidate.value) == name:
+                    continue
+                if not isinstance(candidate.value, ast.Call):
+                    return None
+                return (dotted(candidate.value.func), candidate.lineno,
+                        candidate.col_offset + 1)
+        if "." not in name:
             return None
-        return dotted(value.func), latest.lineno, latest.col_offset + 1
+        assignments = []
+        for candidate in ast.walk(tree):
+            if not isinstance(candidate, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = (candidate.targets if isinstance(candidate, ast.Assign)
+                       else [candidate.target])
+            if any(dotted(target) == name for target in targets):
+                assignments.append(candidate)
+        if len(assignments) != 1 or not isinstance(assignments[0].value, ast.Call):
+            return None
+        candidate = assignments[0]
+        return dotted(candidate.value.func), candidate.lineno, candidate.col_offset + 1
 
     for node in ast.walk(scopes[-1]):
         if not isinstance(node, ast.Call) or not _contains_position(node, line, col):
@@ -1144,8 +1158,8 @@ def _network_capability_is_invalid(
         owner = node.func.value
         constructor = dotted(owner.func) if isinstance(owner, ast.Call) else None
         constructor_line, constructor_col = line, col
-        if constructor is None and isinstance(owner, ast.Name):
-            assigned = assigned_constructor(owner.id)
+        if constructor is None and dotted(owner):
+            assigned = assigned_constructor(dotted(owner))
             if assigned is not None:
                 constructor, constructor_line, constructor_col = assigned
         resolved_constructor = canonical(
@@ -1160,6 +1174,8 @@ def _network_capability_is_invalid(
         ) and not _qualified_rebound(
             scopes, constructor, constructor_line, constructor_col,
             unknown_is_rebound=True,
+        ) and not _qualified_rebound(
+            scopes, raw, line, col, unknown_is_rebound=True,
         ) and not (
             resolved_constructor != constructor
             and _qualified_rebound(
@@ -1502,13 +1518,21 @@ def findings_from_report(
                     },
                 ))
                 continue
-            allowed_value = (manifest.frontmatter or {}).get("allowed-tools")
-            if allowed_value is None or (
-                isinstance(allowed_value, str) and not allowed_value.strip()
-            ):
+            frontmatter = manifest.frontmatter or {}
+            has_allowed = "allowed-tools" in frontmatter
+            has_denied = "disallowed-tools" in frontmatter
+            if not has_allowed and not has_denied:
                 continue
+            malformed_empty = any(
+                value is None or isinstance(value, str) and not value.strip()
+                for present, value in (
+                    (has_allowed, frontmatter.get("allowed-tools")),
+                    (has_denied, frontmatter.get("disallowed-tools")),
+                ) if present
+            )
             grants = manifest.grants or []
-            if (("grants_unparsed_shape", "allowed-tools") in manifest.diagnostics
+            if (malformed_empty
+                    or ("grants_unparsed_shape", "allowed-tools") in manifest.diagnostics
                     or ("grants_unparsed_shape", "disallowed-tools") in manifest.diagnostics
                     or any(not grant.parsed for grant in grants)):
                 findings.append(Finding(

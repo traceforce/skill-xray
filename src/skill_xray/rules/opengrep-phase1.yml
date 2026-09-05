@@ -1958,6 +1958,11 @@ rules:
           - metavariable-regex:
               metavariable: $METHOD
               regex: '^(?:delete|get|head|options|patch|post|put|request|stream)$'
+      - patterns:
+          - pattern: $OWNER.$SESSION.$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request|stream)$'
 
   - id: skill-xray.shell-network-capability
     languages: [bash]
@@ -1968,11 +1973,20 @@ rules:
       skill_xray_rule: permission-understatement
       skill_xray_severity: high
       skill_xray_capability: network
-    patterns:
-      - pattern: $COMMAND ...
-      - metavariable-regex:
-          metavariable: $COMMAND
-          regex: '^(?:.*/)?(?:(?:aria2c|curl|http|httpie|nc|ncat|scp|sftp|socat|ssh|wget)|(?:curl|wget)\$(?:IFS|\{IFS\}).*)$'
+    pattern-either:
+      - patterns:
+          - pattern: $COMMAND ...
+          - metavariable-regex:
+              metavariable: $COMMAND
+              regex: '^(?:.*/)?(?:(?:aria2c|curl|ftp|http|httpie|nc|ncat|scp|sftp|socat|ssh|telnet|wget)[0-9.]*|(?:curl|wget)\$(?:IFS|\{IFS\}).*)$'
+      - patterns:
+          - pattern: $WRAPPER $COMMAND ...
+          - metavariable-regex:
+              metavariable: $WRAPPER
+              regex: '^(?:.*/)?(?:command|env|sudo)$'
+          - metavariable-regex:
+              metavariable: $COMMAND
+              regex: '^(?:.*/)?(?:aria2c|curl|ftp|http|httpie|nc|ncat|scp|sftp|socat|ssh|telnet|wget)[0-9.]*$'
 
   - id: skill-xray.shell-execution-capability
     languages: [bash]
@@ -1984,7 +1998,16 @@ rules:
       skill_xray_severity: high
       skill_xray_capability: execution
     pattern-either:
-      - pattern: eval ...
-      - pattern: exec ...
-      - pattern: bash -c ...
-      - pattern: sh -c ...
+      - patterns:
+          - pattern: $COMMAND ...
+          - metavariable-regex:
+              metavariable: $COMMAND
+              regex: '^(?:.*/)?(?:bash|bun|cmake|cp|dash|docker|fish|git|id|install|ksh|make|mkdir|mv|node|npm|npx|perl|php|pip[0-9.]*|pnpm|powershell|pwsh|python[0-9.]*|rm|ruby|sh|uv|uvx|yarn|zsh)$'
+      - patterns:
+          - pattern: $WRAPPER $COMMAND ...
+          - metavariable-regex:
+              metavariable: $WRAPPER
+              regex: '^(?:.*/)?(?:command|env|sudo)$'
+          - metavariable-regex:
+              metavariable: $COMMAND
+              regex: '^(?:.*/)?(?:bash|bun|cmake|cp|dash|docker|fish|git|id|install|ksh|make|mkdir|mv|node|npm|npx|perl|php|pip[0-9.]*|pnpm|powershell|pwsh|python[0-9.]*|rm|ruby|sh|uv|uvx|yarn|zsh)$'

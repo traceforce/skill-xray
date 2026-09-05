@@ -662,15 +662,13 @@ def _fm_load(block):
             return None, {}, "yaml_alias_budget", []
         data = YAML(typ="rt").load(io.StringIO(block))        # fresh loader per artifact: isolated
     except DuplicateKeyError:                                 # specific code before generic below
-        return None, {}, "yaml_duplicate_key", unsafe_tags
+        return None, {}, "yaml_duplicate_key", []
     except Exception as exc:                                  # any hostile-YAML error, fail closed
-        if unsafe_tags:
-            return None, {}, "yaml_unsafe_tag", unsafe_tags
         if has_alias:
             return None, {}, "yaml_alias_budget", []
         mark = getattr(exc, "problem_mark", None)             # +2: block dropped the opening `---`
         error = "yaml_error:line %d" % (mark.line + 2) if mark else "yaml_error"
-        return None, {}, error, unsafe_tags
+        return None, {}, error, []
     if data is None:
         return {}, {}, None, []
     if not isinstance(data, dict):               # CommentedMap is a dict; a list/scalar is not

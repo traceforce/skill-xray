@@ -365,7 +365,8 @@ def declared_capabilities(grants):
         execution |= grant.pattern is None or command in {"", "*", "**"}
         for segment in _segments(tokens):
             effective = _effective_tokens(segment)[0] or segment
-            head = _basename(effective[0]) if effective else ""
+            raw_head = _basename(effective[0]) if effective else ""
+            head = _VERSION_SUFFIX.sub("", raw_head) or raw_head
             execution |= bool(head and head not in _NON_EXECUTION_COMMANDS)
     network = any(
         _reaches_network(grant.tool, grant.pattern, _command_tokens(grant.pattern)[1])

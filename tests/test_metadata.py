@@ -390,6 +390,90 @@ def test_null_allowed_tools_is_not_a_complete_declaration(make_package):
         "run.py": "import subprocess\nsubprocess.run(['echo', 'ok'])\n",
     })
     assert all(f.vector != "SXV-033" for f in findings)
+    assert any(f.rule == "analysis-incomplete" for f in findings)
+
+
+def test_denial_only_manifest_governs_observed_execution(make_package):
+    findings = _run(make_package, {
+        "SKILL.md": "---\nname: demo\ndisallowed-tools: Bash\n---\nbody\n",
+        "run.py": "import subprocess\nsubprocess.run(['echo'])\n",
+    })
+    assert any(f.vector == "SXV-033" for f in findings)
+
+
+def test_conditional_client_rebind_does_not_hide_network(make_package):
+    source = (
+        "import httpx\nclass Fake:\n    def get(self, url): return None\n"
+        "client = httpx.Client()\nif flag:\n    client = Fake()\n"
+        "client.get('https://example.invalid')\n"
+    )
+    findings = _run(make_package, {"SKILL.md": _manifest(), "run.py": source})
+    assert any(f.vector == "SXV-033" for f in findings)
+
+
+def test_attribute_client_is_observed_network(make_package):
+    source = (
+        "import httpx\nclass Service:\n    def __init__(self):\n"
+        "        self.client = httpx.Client()\n    def fetch(self):\n"
+        "        return self.client.get('https://example.invalid')\n"
+    )
+    findings = _run(make_package, {"SKILL.md": _manifest(), "run.py": source})
+    assert any(f.vector == "SXV-033" for f in findings)
+
+
+def test_requests_session_stream_is_not_observed_network(make_package):
+    source = "import requests\nsession = requests.Session()\nsession.stream('local')\n"
+    findings = _run(make_package, {"SKILL.md": _manifest(), "run.py": source})
+    assert all(f.vector != "SXV-033" for f in findings)
+
+
+def test_rebound_client_method_is_not_observed_network(make_package):
+    source = (
+        "import httpx\ndef local(url): return None\nclient = httpx.Client()\n"
+        "client.get = local\nclient.get('local')\n"
+    )
+    findings = _run(make_package, {"SKILL.md": _manifest(), "run.py": source})
+    assert all(f.vector != "SXV-033" for f in findings)
+
+
+def test_versioned_network_grant_does_not_declare_execution(make_package):
+    findings = _run(make_package, {
+        "SKILL.md": _manifest("allowed-tools: Bash(wget2:*)"),
+        "run.py": "import subprocess\nsubprocess.run(['echo'])\n",
+    })
+    assert any(f.vector == "SXV-033"
+               and f.evidence["understated_capability"] == "execution" for f in findings)
+
+
+@pytest.mark.parametrize("source", [
+    "env curl https://example.invalid\n",
+    "command wget https://example.invalid\n",
+])
+def test_wrapped_shell_network_is_observed(make_package, source):
+    findings = _run(make_package, {"SKILL.md": _manifest(), "run.sh": source})
+    assert any(f.vector == "SXV-033"
+               and f.evidence["understated_capability"] == "network" for f in findings)
+
+
+@pytest.mark.parametrize("source", [
+    "/bin/bash -lc 'id'\n",
+    "env sh -c 'id'\n",
+    "python task.py\n",
+])
+def test_shell_process_launch_is_observed_execution(make_package, source):
+    files = {"SKILL.md": _manifest(), "run.sh": source, "task.py": "print('ok')\n"}
+    findings = _run(make_package, files)
+    assert any(f.vector == "SXV-033"
+               and f.evidence["understated_capability"] == "execution" for f in findings)
+
+
+def test_bare_exec_redirection_is_not_process_execution(make_package):
+    findings = _run(make_package, {
+        "SKILL.md": _manifest(), "run.sh": "exec 3>log\necho ok >&3\n",
+    })
+    assert all(not (f.vector == "SXV-033"
+                    and f.evidence.get("understated_capability") == "execution")
+               for f in findings)
 
 
 def test_builtins_qualified_eval_is_observed_execution(make_package):
@@ -448,6 +532,15 @@ def test_python_object_prefix_lookalike_is_not_a_constructor_tag(make_package):
     manifest = "---\nname: demo\nvalue: !!python/objective ordinary\n---\nbody\n"
     findings = _run(make_package, {"SKILL.md": manifest})
     assert all(f.vector != "SXV-034" for f in findings)
+
+
+def test_dangerous_tag_in_malformed_yaml_is_incomplete_not_sxv034(make_package):
+    manifest = "---\nname: demo\npayload: !!python/name:os.system\nbroken: [\n---\nbody\n"
+    findings = _run(make_package, {"SKILL.md": manifest})
+    assert all(f.vector != "SXV-034" for f in findings)
+    assert any(f.rule == "coverage-note"
+               and f.evidence.get("reason") == "frontmatter_parse_error"
+               for f in findings)
 
 
 @pytest.mark.parametrize("text", [
