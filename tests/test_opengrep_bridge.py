@@ -773,6 +773,17 @@ def test_invalid_result_location_is_fail_visible(start):
     ]
 
 
+def test_malformed_result_column_does_not_crash_sorting():
+    good = _result(line=2)
+    bad = _result(line=3)
+    bad["start"]["col"] = "not-an-int"
+    findings = findings_from_report({"results": [good, bad], "errors": []}, {
+        "0000.py": SelectedCode("run.py", "\n\n\npass\n", "file"),
+    })
+    assert {finding.rule for finding in findings} == {"opengrep-python-command-injection"}
+    assert all(finding.column is None or isinstance(finding.column, int) for finding in findings)
+
+
 def test_check_invokes_argument_list_and_converts_json(make_package):
     parsed = _parsed(make_package({"run.py": "import os\nos.system(input())\n"}))
     called = {}

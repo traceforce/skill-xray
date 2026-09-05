@@ -118,9 +118,13 @@ def _location(result: dict, target: SelectedCode) -> tuple[int, dict] | None:
     line = start.get("line")
     if type(line) is not int or not 1 <= line <= target.text.count("\n") + 1:
         return None
+    def _int_or_none(value):
+        return value if type(value) is int else None
     return line, {
-        "start": {key: start.get(key) for key in ("line", "col", "offset")},
-        "end": {key: end.get(key) for key in ("line", "col", "offset")},
+        "start": {"line": line, "col": _int_or_none(start.get("col")),
+                  "offset": _int_or_none(start.get("offset"))},
+        "end": {"line": _int_or_none(end.get("line")), "col": _int_or_none(end.get("col")),
+                "offset": _int_or_none(end.get("offset"))},
     }
 
 
@@ -1481,43 +1485,6 @@ def findings_from_report(
                     path=target.rel, severity="high",
                 ))
                 continue
-            if target.suffix == ".py":
-                cap_count = capability_postfilter_counts.get(target_name, 0)
-                capability_postfilter_counts[target_name] = cap_count + 1
-                if cap_count >= _MAX_POSTFILTERS_PER_TARGET:
-                    # SXV-033 needs confirmed behavior; past the budget fail visible, do not assert.
-                    findings.append(Finding(
-                        vector="", rule="analysis-incomplete", severity="high",
-                        path=target.rel,
-                        message=("observed %s capability could not be validated within the "
-                                 "per-file budget" % capability),
-                        evidence={
-                            "phase": "correlation",
-                            "reason": "capability-validation-budget",
-                            "observed_capability": capability,
-                        },
-                    ))
-                    continue
-                if target_name not in python_trees:
-                    artifact = (parsed.by_rel.get(target.rel)
-                                if target.origin == "file" else None)
-                    if artifact is not None:
-                        python_trees[target_name] = artifact.py_tree
-                    else:
-                        try:
-                            python_trees[target_name] = parse_python(target.text)
-                        except (SyntaxError, ValueError, RecursionError, MemoryError):
-                            python_trees[target_name] = None
-                tree = python_trees[target_name]
-                if tree is None:
-                    # Without an AST the observation cannot be validated; the parse diagnostic
-                    # already records the incomplete analysis, so do not assert SXV-033.
-                    continue
-                column = location["start"].get("col")
-                if (capability == "execution" and _sink_is_shadowed(tree, line, column)
-                        or capability == "network"
-                        and _network_capability_is_invalid(tree, line, column)):
-                    continue
             manifest = _governing_manifest(manifests, target.rel)
             if manifest is None:
                 continue
@@ -1556,6 +1523,44 @@ def findings_from_report(
                 continue
             if capability in declared_capabilities(grants):
                 continue
+            # Only spend the AST validation budget once the capability is actually understated.
+            if target.suffix == ".py":
+                cap_count = capability_postfilter_counts.get(target_name, 0)
+                capability_postfilter_counts[target_name] = cap_count + 1
+                if cap_count >= _MAX_POSTFILTERS_PER_TARGET:
+                    # SXV-033 needs confirmed behavior; past the budget fail visible, do not assert.
+                    findings.append(Finding(
+                        vector="", rule="analysis-incomplete", severity="high",
+                        path=target.rel,
+                        message=("observed %s capability could not be validated within the "
+                                 "per-file budget" % capability),
+                        evidence={
+                            "phase": "correlation",
+                            "reason": "capability-validation-budget",
+                            "observed_capability": capability,
+                        },
+                    ))
+                    continue
+                if target_name not in python_trees:
+                    artifact = (parsed.by_rel.get(target.rel)
+                                if target.origin == "file" else None)
+                    if artifact is not None:
+                        python_trees[target_name] = artifact.py_tree
+                    else:
+                        try:
+                            python_trees[target_name] = parse_python(target.text)
+                        except (SyntaxError, ValueError, RecursionError, MemoryError):
+                            python_trees[target_name] = None
+                tree = python_trees[target_name]
+                if tree is None:
+                    # Without an AST the observation cannot be validated; the parse diagnostic
+                    # already records the incomplete analysis, so do not assert SXV-033.
+                    continue
+                column = location["start"].get("col")
+                if (capability == "execution" and _sink_is_shadowed(tree, line, column)
+                        or capability == "network"
+                        and _network_capability_is_invalid(tree, line, column)):
+                    continue
             declared = sorted(grant.tool for grant in grants if grant.allowed and grant.tool)
         python_candidate = vector in _PY_TAINT_VECTORS and target.suffix == ".py"
         needs_postfilter = python_candidate and not malformed_metavars
