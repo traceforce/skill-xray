@@ -30,17 +30,18 @@ _SETTINGS = re.compile(
 )
 # Inflected verb forms only, so nouns like "additional"/"installation" do not read as directives.
 _WRITE = re.compile(
-    r"(?i)\b(?:add(?:s|ed|ing)?|append(?:s|ed|ing)?|install(?:s|ed|ing)?"
-    r"|insert(?:s|ed|ing)?|merg(?:e|es|ed|ing)|prepend(?:s|ed|ing)?"
-    r"|register(?:s|ed|ing)?|writ(?:e|es|ing|ten)|wrote)\b"
+    r"(?i)\b(?:add(?:s|ed|ing)?|append(?:s|ed|ing)?|configur(?:e|es|ed|ing)"
+    r"|creat(?:e|es|ed|ing)|install(?:s|ed|ing)?|insert(?:s|ed|ing)?|merg(?:e|es|ed|ing)"
+    r"|prepend(?:s|ed|ing)?|register(?:s|ed|ing)?|sets?|setting|writ(?:e|es|ing|ten)|wrote)\b"
 )
 _NEGATED = re.compile(
     r"(?i)\b(?:(?:do\s+not|don['’]t|never|cannot|can['’]t"
     r"|(?:must|should|shall|would)\s+not|(?:must|should)n['’]t)\s+(?:ever\s+)?"
-    r"(?:add|append|install|insert|merge|modify|prepend|register|write)|"
-    r"(?:avoid|without)\s+(?:adding|appending|installing|inserting|merging|modifying|"
-    r"prepending|registering|writing)|refrain\s+from\s+(?:adding|appending|installing|"
-    r"inserting|merging|modifying|prepending|registering|writing))\b"
+    r"(?:add|append|configure|create|install|insert|merge|modify|prepend|register|set|write)|"
+    r"(?:avoid|without)\s+(?:adding|appending|configuring|creating|installing|inserting|"
+    r"merging|modifying|prepending|registering|setting|writing)|"
+    r"refrain\s+from\s+(?:adding|appending|configuring|creating|installing|inserting|"
+    r"merging|modifying|prepending|registering|setting|writing))\b"
 )
 _DEFENSIVE_DESCRIPTION = re.compile(
     r"(?i)\b(?:check|detector|rule|scanner)\s+(?:detects|flags|identifies|reports)\b"
@@ -61,7 +62,7 @@ _NPM_EXACT = re.compile(
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
 _OPTIONS_WITH_VALUE = {
-    "npx": {"-c", "--cache", "--call", "--registry", "--userconfig"},
+    "npx": {"-c", "--cache", "--call", "--prefix", "--registry", "--userconfig"},
     "pnpx": {"--registry"},
     "pipx": {"--python", "--index-url", "--pip-args"},
     "uvx": {"--index", "--python", "--python-platform"},
@@ -101,11 +102,10 @@ def _instruction_findings(artifact):
             # Mask only from the negation onward so an earlier affirmative directive in the same
             # clause ("Append a hook..., but do not add...") stays analyzable.
             clause_start = negated.start()
-            ends = [
-                position for delimiter in (".", ";", "!", "?", "\n")
-                if (position := block.find(delimiter, negated.end())) >= 0
-            ]
-            clause_end = min(ends) + 1 if ends else len(block)
+            # Only sentence-ending punctuation bounds the clause; a dot inside ".claude" or
+            # "settings.json" must not cut the mask short and leave the rest of it live.
+            end_match = re.search(r"[.!?](?=\s|$)|[;\n]", block[negated.end():])
+            clause_end = negated.end() + end_match.end() if end_match else len(block)
             # A contrastive turn ("...but append...") begins a fresh affirmative directive.
             contrast = re.search(
                 r"(?i)\b(?:but|however|yet|instead|rather)\b", block[negated.end():clause_end]
@@ -209,6 +209,16 @@ def _local_candidate(parsed, command, arguments=()):
             break
     elif head in _INTERPRETERS or re.fullmatch(r"python\d+(?:\.\d+)*", head):
         is_shell = head in {"bash", "dash", "sh", "zsh"}
+        if is_shell:
+            value_opts = {"-o"}
+        elif head.startswith("python"):
+            value_opts = {"-w", "-x"}
+        elif head == "node":
+            value_opts = {"-r", "--require", "--import", "--loader", "--experimental-loader"}
+        elif head in {"perl", "ruby"}:
+            value_opts = {"-i"}
+        else:
+            value_opts = set()
         index = 1
         while index < len(tokens) and tokens[index].startswith("-"):
             flag = tokens[index].lower()
@@ -217,7 +227,8 @@ def _local_candidate(parsed, command, arguments=()):
             if is_shell and flag == "-s":
                 # `sh -s` runs the program from stdin; the path is only $0, not the script.
                 return "dynamic_or_compound", False
-            index += 1
+            # An option that consumes the next token, so its value is not read as the script path.
+            index += 2 if flag in value_opts else 1
     if index >= len(tokens):
         return "unresolved_external", False
     candidate = re.sub(
@@ -277,6 +288,9 @@ def _hook_findings(parsed, artifact):
                     malformed = True
                     continue
                 hook_type = entry.get("type", "command")
+                if not isinstance(hook_type, str):
+                    malformed = True
+                    continue
                 if hook_type == "http":
                     url = entry.get("url")
                     if (not isinstance(url, str)
@@ -389,7 +403,9 @@ def _package_specs(runner, args):
     while index < len(args):
         arg = args[index]
         if arg == "--":
-            # Everything after the option terminator is passed to the launched tool, not the runner.
+            # The terminator ends flag parsing; remaining tokens are positionals, so `npx -- pkg`
+            # still selects pkg while `npx pkg -- args` keeps pkg as the package.
+            positionals.extend(args[index + 1:])
             break
         if arg in {"-p", "--package", "--spec"}:
             if index + 1 >= len(args) or args[index + 1].startswith("-"):
@@ -464,7 +480,8 @@ def _mcp_findings(artifact):
                 continue
             command = server.get("command")
             args = server.get("args", [])
-            if command is None and server.get("type") in {"http", "sse"}:
+            stype = server.get("type")
+            if command is None and isinstance(stype, str) and stype in ("http", "sse"):
                 continue
             if (not isinstance(command, str) or not command.strip()
                     or not isinstance(args, list)
@@ -474,10 +491,13 @@ def _mcp_findings(artifact):
             runner = _portable_basename(command)
             runner_args = args
             if runner in {"npm", "pnpm", "yarn", "bun"}:
-                # Skip leading global flags ("npm --silent exec ...") to find the subcommand.
+                # Skip leading global flags ("npm --prefix /tmp exec ...") to find the subcommand,
+                # consuming a value for options that take one.
+                global_value_opts = {"-c", "--prefix", "--loglevel", "--registry",
+                                     "--workspace", "-w", "--dir", "--filter"}
                 sub = 0
                 while sub < len(args) and args[sub].startswith("-"):
-                    sub += 1
+                    sub += 2 if args[sub] in global_value_opts else 1
                 subcommand = args[sub] if sub < len(args) else ""
                 aliases = {"npm": {"exec", "x"}, "bun": {"x"}, "pnpm": {"dlx"}, "yarn": {"dlx"}}
                 if subcommand in aliases[runner]:
