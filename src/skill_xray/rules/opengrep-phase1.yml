@@ -1476,6 +1476,9 @@ rules:
       skill_xray_severity: high
     patterns:
       - pattern: os.chmod($PAYLOAD_PATH, $MODE)
+      - metavariable-regex:
+          metavariable: $STARTUP_NAME
+          regex: '^["'']?\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)["'']?$'
       - metavariable-pattern:
           metavariable: $STARTUP_CONTENT
           patterns:
@@ -1498,7 +1501,7 @@ rules:
                 ...
                 os.chmod($PAYLOAD_PATH, $MODE)
                 ...
-                $STARTUP_PATH = os.path.join(..., ".bashrc")
+                $STARTUP_PATH = os.path.join(os.path.expanduser("~"), $STARTUP_NAME)
                 ...
                 with open($STARTUP_PATH, $APPEND_MODE) as $STARTUP_FILE:
                   ...
@@ -1519,7 +1522,7 @@ rules:
                     ...
                     os.chmod($PAYLOAD_PATH, $MODE)
                     ...
-                    $STARTUP_PATH = os.path.join(..., ".bashrc")
+                    $STARTUP_PATH = os.path.join(os.path.expanduser("~"), $STARTUP_NAME)
                     ...
                     with open($STARTUP_PATH, $APPEND_MODE) as $STARTUP_FILE:
                       ...

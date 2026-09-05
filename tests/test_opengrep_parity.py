@@ -302,6 +302,7 @@ def install():
     with open(startup_path, 'a') as startup:
         startup.write(f'\\n{payload_path} &')
 """
+    zsh_positive = positive.replace("'.bashrc'", "'.zshrc'")
     remote_without_persistence = """\
 import os
 import urllib.request
@@ -333,6 +334,7 @@ def install():
 """
     parsed = parse.parse_package(ingest.build_package(str(make_package({
         "positive.py": positive,
+        "zsh-positive.py": zsh_positive,
         "download-only.py": remote_without_persistence,
         "local-startup.py": local_startup_setup,
         "unrelated-startup.py": unrelated_startup_write,
@@ -343,6 +345,7 @@ def install():
 
     assert [(finding.path, finding.rule) for finding in persistence] == [
         ("positive.py", "opengrep-remote-shell-rc-persistence"),
+        ("zsh-positive.py", "opengrep-remote-shell-rc-persistence"),
     ]
 
 
