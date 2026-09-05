@@ -1676,12 +1676,12 @@ rules:
           - metavariable-regex:
               metavariable: $PATH
               regex: '(?i).*\.git[/\\]hooks[/\\](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?$'
-      - pattern-regex: 'Path\([^\n)]*\)\s*/\s*["'']\.git["'']\s*/\s*["'']hooks["'']\s*/\s*["''](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|post-rewrite)["'']'
+      - pattern-regex: 'Path\([^\n)]*\)\s*/\s*["'']\.git["'']\s*/\s*["'']hooks["'']\s*/\s*["''](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']'
       - patterns:
           - pattern: $PATH
           - metavariable-regex:
               metavariable: $PATH
-              regex: '(?i)^["''].*\.git[/\\]hooks[/\\](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|post-rewrite)["'']$'
+              regex: '(?i)^["''].*\.git[/\\]hooks[/\\](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']$'
     pattern-sinks:
       - patterns:
           - pattern: $TARGET.write_text($CONTENT, ...)
@@ -1745,7 +1745,7 @@ rules:
       skill_xray_severity: critical
     pattern-either:
       - pattern-regex: '(?im)^[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)"?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)[^\n]*<<[^\n]*\n(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)'
+      - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)["'']?[^\n]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
 
   - id: skill-xray.bash-cron-persistence
     languages: [bash]
@@ -1758,7 +1758,7 @@ rules:
     pattern-either:
       - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?:https?://|powershell[ \t]+-enc)[^;\n]*(?:\|[ \t]*(?:ba)?sh|powershell|exec)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
       - pattern-regex: '(?im)^[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
-      - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;\n]*(?:>>?|tee[ \t]+-a)[^;\n]*/etc/cron(?:tab|\.d/[^ /]+)[^\n]*$'
+      - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;\n]*(?:>>?|tee[ \t]+-a)[^;\n]*/etc/cron(?:tab|\.d/[A-Za-z0-9_-]+)["'']?\s*$'
 
   - id: skill-xray.bash-launchd-persistence
     languages: [bash]
@@ -1826,6 +1826,9 @@ rules:
           - metavariable-regex:
               metavariable: $NAME
               regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
       - patterns:
           - pattern-inside: |
               $TARGET = $STARTUP / $NAME
@@ -1835,9 +1838,6 @@ rules:
           - metavariable-regex:
               metavariable: $NAME
               regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
-          - metavariable-regex:
-              metavariable: $CONTENT
-              regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
