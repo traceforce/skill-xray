@@ -362,6 +362,20 @@ def test_unrelated_denial_leaves_grant_effective(make_package):
     assert all(f.vector != "SXV-033" for f in findings)
 
 
+def test_final_same_line_constructor_reassignment_wins(make_package):
+    source = (
+        "import httpx\n"
+        "class Fake:\n"
+        "    def get(self, *a): return None\n"
+        "client = httpx.Client(); client = Fake()\n"
+        "client.get('https://example.invalid')\n"
+    )
+    findings = _run(make_package, {"SKILL.md": _manifest(), "run.py": source})
+    assert all(not (f.vector == "SXV-033"
+                    and f.evidence.get("understated_capability") == "network")
+               for f in findings)
+
+
 def test_unsupported_language_remains_explicitly_incomplete(make_package):
     findings = _run(make_package, {
         "SKILL.md": _manifest(),

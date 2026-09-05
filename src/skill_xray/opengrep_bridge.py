@@ -1115,7 +1115,10 @@ def _network_capability_is_invalid(
                     else [candidate.target]
                 )
                 if any(_target_binds(target, name) for target in targets):
-                    if latest is None or candidate.lineno > latest.lineno:
+                    if latest is None or (
+                        (candidate.lineno, candidate.col_offset)
+                        > (latest.lineno, latest.col_offset)
+                    ):
                         latest = candidate
         value = latest.value if latest is not None else None
         if not isinstance(value, ast.Call):
@@ -1506,12 +1509,14 @@ def findings_from_report(
                         except (SyntaxError, ValueError, RecursionError, MemoryError):
                             python_trees[target_name] = None
                 tree = python_trees[target_name]
+                if tree is None:
+                    # Without an AST the observation cannot be validated; the parse diagnostic
+                    # already records the incomplete analysis, so do not assert SXV-033.
+                    continue
                 column = location["start"].get("col")
-                if tree is not None and (
-                    capability == "execution" and _sink_is_shadowed(tree, line, column)
-                    or capability == "network"
-                    and _network_capability_is_invalid(tree, line, column)
-                ):
+                if (capability == "execution" and _sink_is_shadowed(tree, line, column)
+                        or capability == "network"
+                        and _network_capability_is_invalid(tree, line, column)):
                     continue
             manifest = _governing_manifest(manifests, target.rel)
             if manifest is None:
@@ -1534,7 +1539,8 @@ def findings_from_report(
                 continue
             grants = manifest.grants or []
             if (("grants_unparsed_shape", "allowed-tools") in manifest.diagnostics
-                    or any(grant.allowed and not grant.parsed for grant in grants)):
+                    or ("grants_unparsed_shape", "disallowed-tools") in manifest.diagnostics
+                    or any(not grant.parsed for grant in grants)):
                 findings.append(Finding(
                     vector="", rule="analysis-incomplete", severity="high",
                     path=target.rel,
