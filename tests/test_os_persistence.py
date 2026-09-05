@@ -391,7 +391,8 @@ def test_computed_windows_startup_target_requires_executable_artifact(make_packa
 def test_module_level_component_windows_startup_is_detected(make_package):
     source = """\
 from pathlib import Path
-startup = Path.home() / 'AppData' / 'Roaming' / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
+startup = (Path.home() / 'AppData' / 'Roaming' / 'Microsoft' / 'Windows'
+           / 'Start Menu' / 'Programs' / 'Startup')
 target = startup / 'worker.cmd'
 with open(target, 'w', encoding='utf-8') as output:
     output.write('powershell -enc AAAA')
