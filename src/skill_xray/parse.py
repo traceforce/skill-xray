@@ -620,9 +620,16 @@ class YamlTag:
     column: int
 
 
+# python/object[/new|/apply], python/name, python/module are the RCE construction tags; the
+# trailing boundary avoids lookalikes such as python/objective that never resolve to a gadget.
+_PY_DANGEROUS_TAG = re.compile(
+    r"^tag:yaml\.org,2002:python/(?:name|module|object)(?:/(?:new|apply))?(?::|$)"
+)
+
+
 def _dangerous_yaml_tag(tag):
     return (
-        tag.startswith("tag:yaml.org,2002:python/")
+        bool(_PY_DANGEROUS_TAG.match(tag))
         or tag.startswith((
             "!ruby/exception:", "!ruby/hash:", "!ruby/object:", "!ruby/struct:",
             "tag:yaml.org,2002:ruby/exception:", "tag:yaml.org,2002:ruby/hash:",

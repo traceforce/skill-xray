@@ -34,6 +34,8 @@ _PY_SINKS = {
     "os.system", "os.popen", "subprocess.run", "subprocess.call",
     "os.execl", "os.execle", "os.execlp", "os.execlpe", "os.execv", "os.execve",
     "os.execvp", "os.execvpe", "os.posix_spawn", "os.posix_spawnp",
+    "os.spawnl", "os.spawnle", "os.spawnlp", "os.spawnlpe",
+    "os.spawnv", "os.spawnve", "os.spawnvp", "os.spawnvpe",
     "subprocess.check_call", "subprocess.check_output", "subprocess.Popen",
     "subprocess.getoutput", "subprocess.getstatusoutput",
 }
@@ -1125,7 +1127,9 @@ def _network_capability_is_invalid(
             continue
         raw = dotted(node.func)
         resolved = canonical(raw) if raw else None
-        if resolved in allowed and not _qualified_rebound(scopes, raw, line, col):
+        if (resolved in allowed and not _qualified_rebound(scopes, raw, line, col)
+                and not (resolved != raw
+                         and _qualified_rebound(scopes, resolved, line, col))):
             return False
         if not isinstance(node.func, ast.Attribute):
             continue
@@ -1372,6 +1376,7 @@ def findings_from_report(
     findings = []
     python_trees: dict[str, ast.Module | None] = {}
     postfilter_counts: dict[str, int] = {}
+    capability_postfilter_counts: dict[str, int] = {}
     known_vectors = vector_registry()
     manifests = _manifest_index(parsed) if parsed is not None else {}
     results = report.get("results", [])
@@ -1462,7 +1467,8 @@ def findings_from_report(
         manifest = None
         declared = []
         if capability is not None:
-            if capability not in {"execution", "network"} or parsed is None:
+            if (not isinstance(capability, str)
+                    or capability not in {"execution", "network"} or parsed is None):
                 findings.append(_coverage(
                     "opengrep-unmapped-rule",
                     "OpenGrep capability observation has no valid correlation mapping.",
@@ -1470,23 +1476,28 @@ def findings_from_report(
                 ))
                 continue
             if target.suffix == ".py":
-                if target_name not in python_trees:
-                    artifact = parsed.by_rel.get(target.rel) if target.origin == "file" else None
-                    if artifact is not None:
-                        python_trees[target_name] = artifact.py_tree
-                    else:
-                        try:
-                            python_trees[target_name] = parse_python(target.text)
-                        except (SyntaxError, ValueError, RecursionError, MemoryError):
-                            python_trees[target_name] = None
-                tree = python_trees[target_name]
-                column = location["start"].get("col")
-                if tree is not None and (
-                    capability == "execution" and _sink_is_shadowed(tree, line, column)
-                    or capability == "network"
-                    and _network_capability_is_invalid(tree, line, column)
-                ):
-                    continue
+                cap_count = capability_postfilter_counts.get(target_name, 0)
+                capability_postfilter_counts[target_name] = cap_count + 1
+                # Bound per-target AST validation like the taint path; retain past the budget.
+                if cap_count < _MAX_POSTFILTERS_PER_TARGET:
+                    if target_name not in python_trees:
+                        artifact = (parsed.by_rel.get(target.rel)
+                                    if target.origin == "file" else None)
+                        if artifact is not None:
+                            python_trees[target_name] = artifact.py_tree
+                        else:
+                            try:
+                                python_trees[target_name] = parse_python(target.text)
+                            except (SyntaxError, ValueError, RecursionError, MemoryError):
+                                python_trees[target_name] = None
+                    tree = python_trees[target_name]
+                    column = location["start"].get("col")
+                    if tree is not None and (
+                        capability == "execution" and _sink_is_shadowed(tree, line, column)
+                        or capability == "network"
+                        and _network_capability_is_invalid(tree, line, column)
+                    ):
+                        continue
             manifest = _governing_manifest(manifests, target.rel)
             if manifest is None:
                 continue

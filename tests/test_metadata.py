@@ -307,6 +307,35 @@ def test_shadowed_process_replacement_api_is_not_observed(make_package):
     assert all(f.vector != "SXV-033" for f in findings)
 
 
+def test_spawn_process_creation_is_observed_execution(make_package):
+    findings = _run(make_package, {
+        "SKILL.md": _manifest(),
+        "run.py": "import os\nos.spawnvp(os.P_WAIT, 'tool', ['tool'])\n",
+    })
+    assert any(f.vector == "SXV-033"
+               and f.evidence["understated_capability"] == "execution" for f in findings)
+
+
+def test_shadowed_spawn_api_is_not_observed(make_package):
+    source = (
+        "class Fake:\n"
+        "    def spawnvp(self, *args): return args\n"
+        "os = Fake()\n"
+        "os.spawnvp(0, 'tool', ['tool'])\n"
+    )
+    findings = _run(make_package, {"SKILL.md": _manifest(), "run.py": source})
+    assert all(f.vector != "SXV-033" for f in findings)
+
+
+def test_command_lookup_grant_does_not_declare_execution(make_package):
+    findings = _run(make_package, {
+        "SKILL.md": _manifest("allowed-tools: Bash(command -v tool)"),
+        "run.py": "import subprocess\nsubprocess.run(['echo', 'ok'])\n",
+    })
+    assert any(f.vector == "SXV-033"
+               and f.evidence["understated_capability"] == "execution" for f in findings)
+
+
 def test_unsupported_language_remains_explicitly_incomplete(make_package):
     findings = _run(make_package, {
         "SKILL.md": _manifest(),

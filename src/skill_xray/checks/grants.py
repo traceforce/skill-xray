@@ -75,7 +75,7 @@ _NETWORK_ONLY_COMMANDS = {"aria2c", "curl", "http", "httpie", "scp", "sftp", "wg
 _REMOTE_COMMANDS = _NETWORK_ONLY_COMMANDS | {"ftp", "nc", "ncat", "socat", "ssh", "telnet"}
 _GIT_REMOTE_SUBCOMMANDS = {"clone", "fetch", "pull", "push", "remote", "submodule"}
 _NON_EXECUTION_COMMANDS = _NETWORK_ONLY_COMMANDS | {
-    "alias", "bg", "break", "cd", "chmod", "chown", "continue", "declare", "dirs",
+    "alias", "bg", "break", "cd", "chmod", "chown", "command", "continue", "declare", "dirs",
     "disown", "echo", "exit", "export", "false", "fg", "getopts", "hash", "help",
     "history", "jobs", "local", "logout", "mapfile", "popd", "printf", "pushd", "pwd",
     "read", "readarray", "readonly", "return", "set", "shift", "shopt", "suspend",
