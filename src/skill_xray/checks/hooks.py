@@ -35,10 +35,12 @@ _WRITE = re.compile(
     r"|register(?:s|ed|ing)?|writ(?:e|es|ing|ten)|wrote)\b"
 )
 _NEGATED = re.compile(
-    r"(?i)\b(?:(?:do\s+not|don['’]t|never)\s+(?:ever\s+)?"
+    r"(?i)\b(?:(?:do\s+not|don['’]t|never|cannot|can['’]t"
+    r"|(?:must|should|shall|would)\s+not|(?:must|should)n['’]t)\s+(?:ever\s+)?"
     r"(?:add|append|install|insert|merge|modify|prepend|register|write)|"
-    r"without\s+(?:adding|appending|installing|inserting|merging|modifying|"
-    r"prepending|registering|writing))\b"
+    r"(?:avoid|without)\s+(?:adding|appending|installing|inserting|merging|modifying|"
+    r"prepending|registering|writing)|refrain\s+from\s+(?:adding|appending|installing|"
+    r"inserting|merging|modifying|prepending|registering|writing))\b"
 )
 _DEFENSIVE_DESCRIPTION = re.compile(
     r"(?i)\b(?:check|detector|rule|scanner)\s+(?:detects|flags|identifies|reports)\b"
@@ -53,8 +55,6 @@ _FETCHERS = {
     "aria2c", "bitsadmin", "curl", "http", "httpie", "invoke-restmethod",
     "invoke-webrequest", "irm", "iwr", "wget",
 }
-_INLINE_FLAGS = {"-c", "-e", "--eval", "-command", "-encodedcommand"}
-_INTERPRETER_FLAGS = {"-b", "-i", "-o", "-s", "-u", "--no-warnings"}
 _RUNNERS = {"bunx", "npx", "pipx", "pnpx", "uvx"}
 _NPM_EXACT = re.compile(
     r"^(?:@[^/@]+/)?[^/@]+@v?\d+\.\d+\.\d+"
@@ -71,6 +71,12 @@ _OPTIONS_WITH_VALUE = {
 def _portable_basename(value):
     name = value.replace("\\", "/").rsplit("/", 1)[-1].lower()
     return re.sub(r"\.(?:bat|cmd|com|exe)$", "", name)
+
+
+def _is_agent_config_location(rel):
+    # Config kinds are classified by basename anywhere in the tree; only root-level or .claude/
+    # files are agent-recognized wiring, so nested fixtures are not treated as live config.
+    return posixpath.dirname(rel) in ("", ".claude")
 
 
 def _incomplete(path, reason):
@@ -90,26 +96,31 @@ def _instruction_findings(artifact):
         block = "\n".join(lines[start - 1:end])
         original_block = block
         masked = list(block)
+        intervals = []
         for negated in _NEGATED.finditer(block):
-            clause_start = max(
-                block.rfind(delimiter, 0, negated.start())
-                for delimiter in (".", ";", "!", "?", "\n")
-            ) + 1
+            # Mask only from the negation onward so an earlier affirmative directive in the same
+            # clause ("Append a hook..., but do not add...") stays analyzable.
+            clause_start = negated.start()
             ends = [
                 position for delimiter in (".", ";", "!", "?", "\n")
                 if (position := block.find(delimiter, negated.end())) >= 0
             ]
             clause_end = min(ends) + 1 if ends else len(block)
-            # A contrastive turn ("...but append...") starts a fresh affirmative directive, so
-            # stop masking there instead of erasing the live clause after it.
+            # A contrastive turn ("...but append...") begins a fresh affirmative directive.
             contrast = re.search(
                 r"(?i)\b(?:but|however|yet|instead|rather)\b", block[negated.end():clause_end]
             )
             if contrast:
                 clause_end = negated.end() + contrast.start()
-            for position in range(clause_start, clause_end):
+            intervals.append((clause_start, clause_end))
+        # Merge intervals so a delimiter-free block with many negations stays linear, not quadratic.
+        intervals.sort()
+        merged_end = -1
+        for lo, hi in intervals:
+            for position in range(max(lo, merged_end), hi):
                 if masked[position] != "\n":
                     masked[position] = " "
+            merged_end = max(merged_end, hi)
         block = "".join(masked)
         masked = list(block)
         for defensive in _DEFENSIVE_DESCRIPTION.finditer(block):
@@ -125,7 +136,9 @@ def _instruction_findings(artifact):
             event = _HOOK_EVENT.search(clause)
             target = _SETTINGS.search(clause)
             write = _WRITE.search(clause)
-            if event and target and write:
+            # Require the word "hook" so a clause that names the event while writing something
+            # else ("append release notes ... for the SessionStart event") is not an install.
+            if event and target and write and re.search(r"(?i)\bhooks?\b", clause):
                 candidate = clause_start, event, target, write
                 break
             clause_start = clause_end
@@ -195,13 +208,15 @@ def _local_candidate(parsed, command, arguments=()):
                 continue
             break
     elif head in _INTERPRETERS or re.fullmatch(r"python\d+(?:\.\d+)*", head):
+        is_shell = head in {"bash", "dash", "sh", "zsh"}
         index = 1
         while index < len(tokens) and tokens[index].startswith("-"):
             flag = tokens[index].lower()
-            if flag in _INLINE_FLAGS:
+            if flag == "-c" or (not is_shell and flag in {"-e", "--eval"}):
                 return "inline_interpreter", False
-            if flag not in _INTERPRETER_FLAGS:
-                return "unresolved_external", False
+            if is_shell and flag == "-s":
+                # `sh -s` runs the program from stdin; the path is only $0, not the script.
+                return "dynamic_or_compound", False
             index += 1
     if index >= len(tokens):
         return "unresolved_external", False
@@ -215,7 +230,8 @@ def _local_candidate(parsed, command, arguments=()):
     if (candidate.startswith(("/", "~")) or re.match(r"^[A-Za-z]:/", candidate)
             or normalized == ".." or normalized.startswith("../")):
         return "external_path", False
-    if normalized in parsed.by_rel:
+    art = parsed.by_rel.get(normalized)
+    if art is not None and getattr(art, "text", None) is not None:
         return "package_local:%s" % normalized, True
     return "unresolved_external", False
 
@@ -230,6 +246,8 @@ def _hook_source(artifact):
 
 
 def _hook_findings(parsed, artifact):
+    if artifact.kind in _CONFIG_KINDS and not _is_agent_config_location(artifact.rel):
+        return []
     hooks, source_line = _hook_source(artifact)
     if hooks is _MISSING:
         return []
@@ -337,8 +355,8 @@ def _hook_findings(parsed, artifact):
                 findings.append(Finding(
                     vector="SXV-012", rule="root-hook-autoexec", severity="medium",
                     path=artifact.rel, line=source_line,
-                message="%s hook auto-executes an unreviewable command (%s): %s"
-                        % (canonical_event, resolution, command),
+                    message="%s hook auto-executes an unreviewable command (%s): %s"
+                    % (canonical_event, resolution, command),
                     evidence={
                         "hook_event": canonical_event, "matcher": matcher, "command": command,
                         "hook_type": "command", "resolution": resolution,
@@ -370,6 +388,9 @@ def _package_specs(runner, args):
     index = 0
     while index < len(args):
         arg = args[index]
+        if arg == "--":
+            # Everything after the option terminator is passed to the launched tool, not the runner.
+            break
         if arg in {"-p", "--package", "--spec"}:
             if index + 1 >= len(args) or args[index + 1].startswith("-"):
                 return specs, True
@@ -395,7 +416,10 @@ def _package_specs(runner, args):
         index += 1
     if specs:
         return specs, False
-    if runner == "pipx" and positionals[:1] == ["run"]:
+    if runner == "pipx":
+        # pipx fetches an ephemeral package only for `run`; other subcommands act on installed ones.
+        if positionals[:1] != ["run"]:
+            return [], False
         positionals = positionals[1:]
     return positionals[:1], False
 
@@ -404,7 +428,7 @@ def _is_exact_pin(runner, spec):
     if spec.startswith((".", "/", "~", "file:")) or re.match(r"^[A-Za-z]:[\\/]", spec):
         return True
     if spec.startswith(("git:", "git+", "github:", "gitlab:", "bitbucket:")):
-        return bool(re.search(r"[#@][0-9a-fA-F]{40}$", spec))
+        return bool(re.search(r"[#@][0-9a-fA-F]{40}(?:[#?].*)?$", spec))
     if spec.startswith(("http:", "https:")):
         return False
     if runner in {"uvx", "pipx"}:
@@ -414,7 +438,7 @@ def _is_exact_pin(runner, spec):
             return False
         if requirement.url:
             # A PEP 508 direct reference is immutable only when it pins a full commit SHA.
-            return bool(re.search(r"@[0-9a-fA-F]{40}$", requirement.url))
+            return bool(re.search(r"@[0-9a-fA-F]{40}(?:[#?].*)?$", requirement.url))
         constraints = list(requirement.specifier)
         return (len(constraints) == 1 and constraints[0].operator in {"==", "==="}
                 and "*" not in constraints[0].version)
@@ -422,6 +446,8 @@ def _is_exact_pin(runner, spec):
 
 
 def _mcp_findings(artifact):
+    if artifact.kind in _CONFIG_KINDS and not _is_agent_config_location(artifact.rel):
+        return []
     server_maps = _server_maps(artifact)
     if not server_maps:
         return []
@@ -447,10 +473,15 @@ def _mcp_findings(artifact):
                 continue
             runner = _portable_basename(command)
             runner_args = args
-            if runner in {"pnpm", "yarn"} and args[:1] == ["dlx"]:
-                runner, runner_args = "npx", args[1:]
-            elif runner == "npm" and args[:1] == ["exec"]:
-                runner, runner_args = "npx", args[1:]
+            if runner in {"npm", "pnpm", "yarn", "bun"}:
+                # Skip leading global flags ("npm --silent exec ...") to find the subcommand.
+                sub = 0
+                while sub < len(args) and args[sub].startswith("-"):
+                    sub += 1
+                subcommand = args[sub] if sub < len(args) else ""
+                aliases = {"npm": {"exec", "x"}, "bun": {"x"}, "pnpm": {"dlx"}, "yarn": {"dlx"}}
+                if subcommand in aliases[runner]:
+                    runner, runner_args = "npx", args[sub + 1:]
             if runner not in _RUNNERS:
                 continue
             specs, bad_args = _package_specs(runner, runner_args)
