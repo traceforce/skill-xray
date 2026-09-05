@@ -70,6 +70,15 @@ _OPTIONS_WITH_VALUE = {
 _RUNNER_ALIASES = {"npm": {"exec", "x"}, "bun": {"x"}, "pnpm": {"dlx"}, "yarn": {"dlx"}}
 _GLOBAL_VALUE_OPTS = {"-c", "--prefix", "--loglevel", "--registry",
                       "--workspace", "-w", "--dir", "--filter"}
+_AGENT_CONFIG_DIRS = {
+    ".mcp.json": {""},
+    "hooks.json": {""},
+    "settings.json": {"", ".claude"},
+    "settings.local.json": {"", ".claude"},
+    "mcp.json": {"", ".cursor", ".vscode"},
+    "claude_desktop_config.json": {""},
+    "config.toml": {".codex"},
+}
 
 
 def _portable_basename(value):
@@ -78,9 +87,21 @@ def _portable_basename(value):
 
 
 def _is_agent_config_location(rel):
-    # Config kinds are classified by basename anywhere in the tree; only root-level or .claude/
-    # files are agent-recognized wiring, so nested fixtures are not treated as live config.
-    return posixpath.dirname(rel) in ("", ".claude")
+    name = posixpath.basename(rel).lower()
+    return posixpath.dirname(rel).lower() in _AGENT_CONFIG_DIRS.get(name, set())
+
+
+def _write_targets_hook(clause, event, write):
+    hook = re.search(r"(?i)\bhooks?\b", clause)
+    if hook is None:
+        return False
+    subject_start = min(event.start(), hook.start())
+    subject_end = max(event.end(), hook.end())
+    if write.end() <= subject_start:
+        return subject_end - write.end() <= 48
+    if subject_end <= write.start():
+        return write.end() - subject_start <= 48
+    return True
 
 
 def _incomplete(path, reason):
@@ -142,7 +163,7 @@ def _instruction_findings(artifact):
             write = _WRITE.search(clause)
             # Require the word "hook" so a clause that names the event while writing something
             # else ("append release notes ... for the SessionStart event") is not an install.
-            if event and target and write and re.search(r"(?i)\bhooks?\b", clause):
+            if event and target and write and _write_targets_hook(clause, event, write):
                 candidate = clause_start, event, target, write
                 break
             clause_start = clause_end
@@ -505,6 +526,21 @@ def _mcp_findings(artifact):
                 continue
             runner = _portable_basename(command)
             runner_args = args
+            if runner in {"bash", "dash", "sh", "zsh"}:
+                for index, option in enumerate(args[:-1]):
+                    if option.startswith("-") and "c" in option[1:]:
+                        wrapped = _tokens(args[index + 1])
+                        if wrapped:
+                            separator = next(
+                                (i for i, token in enumerate(wrapped)
+                                 if token and set(token) <= set(";&|<>")),
+                                len(wrapped),
+                            )
+                            wrapped = wrapped[:separator]
+                        if wrapped:
+                            runner = _portable_basename(wrapped[0])
+                            runner_args = wrapped[1:]
+                        break
             if runner in _RUNNER_ALIASES:
                 # Skip leading global flags ("npm --prefix /tmp exec ...") to find the subcommand,
                 # consuming a value for options that take one.

