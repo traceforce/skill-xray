@@ -1473,7 +1473,7 @@ rules:
     metadata:
       skill_xray_vector: SXV-039
       skill_xray_rule: opengrep-remote-shell-rc-persistence
-      skill_xray_severity: high
+      skill_xray_severity: critical
     patterns:
       - pattern: os.chmod($PAYLOAD_PATH, $MODE)
       - metavariable-regex:
@@ -1641,7 +1641,7 @@ rules:
               - pattern: $PATH
           - metavariable-regex:
               metavariable: $PATH
-              regex: '(?i).*(?:\.config/systemd/user|/etc/systemd/system)/.*\.(?:service|timer)["'']?$'
+              regex: '(?i).*(?:\.config/systemd/user|/etc/systemd/system)/.*\.service["'']?$'
     pattern-sinks:
       - patterns:
           - pattern: $TARGET.write_text($CONTENT, ...)
@@ -1718,7 +1718,7 @@ rules:
           - pattern: $TARGET.write_text($CONTENT, ...)
           - metavariable-regex:
               metavariable: $NAME
-              regex: '(?i).+\.(?:service|timer)["'']?$'
+              regex: '(?i).+\.service["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
@@ -1744,8 +1744,8 @@ rules:
       skill_xray_rule: opengrep-shell-startup-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)"?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
 
   - id: skill-xray.bash-cron-persistence
     languages: [bash]
@@ -1757,8 +1757,47 @@ rules:
       skill_xray_severity: critical
     pattern-either:
       - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?:https?://|powershell[ \t]+-enc)[^;\n]*(?:\|[ \t]*(?:ba)?sh|powershell|exec)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
-      - pattern-regex: '(?im)^[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
       - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;\n]*(?:>>?|tee[ \t]+-a)[^;\n]*/etc/cron(?:tab|\.d/[A-Za-z0-9_-]+)["'']?\s*$'
+
+  - id: skill-xray.python-launchd-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is installed as a LaunchAgent.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-launchd-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH)
+              - pattern: Path($PATH).expanduser()
+              - pattern: os.path.expanduser($PATH)
+              - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:Library/LaunchAgents|/Library/LaunchDaemons)/[^/\\]+\.plist["'']?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*<key>Program(?:Arguments)?</key>.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*<key>Program(?:Arguments)?</key>.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
 
   - id: skill-xray.bash-launchd-persistence
     languages: [bash]
@@ -1769,8 +1808,8 @@ rules:
       skill_xray_rule: opengrep-launchd-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^[^;&\n]*<key>Program(?:Arguments)?</key>[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee)[^;&\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/Library/LaunchAgents/[^ /"'']+\.plist"?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee)[^\n]*Library/LaunchAgents/[^ /]+\.plist["'']?[^\n]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}[^\n]*<key>Program(?:Arguments)?</key>(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*<key>Program(?:Arguments)?</key>[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee)[^;&\n]*(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/Library/LaunchAgents|/Library/Launch(?:Agents|Daemons))/[^ /"'']+\.plist"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee)[^\n]*Library/LaunchAgents/[^ /]+\.plist["'']?[^\n]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}[^\n]*<key>Program(?:Arguments)?</key>(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
 
   - id: skill-xray.bash-systemd-persistence
     languages: [bash]
@@ -1781,8 +1820,8 @@ rules:
       skill_xray_rule: opengrep-systemd-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Service\][^;&|\n]*\\nExecStart=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&|\n]*(?:>>?|tee)[^;&|\n]*(?:/etc/systemd/system|(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/systemd/user)/[^ /"'']+\.(?:service|timer)"?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee)[^\n]*(?:/etc/systemd/system|(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/systemd/user)/[^ /"'']+\.(?:service|timer)["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*ExecStart=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Service\][^;&|\n]*\\nExecStart=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&|\n]*>>?[^;&|\n]*(?:/etc/systemd/system|(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/systemd/user)/[^ /"'']+\.service"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee)[^\n]*(?:/etc/systemd/system|(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/systemd/user)/[^ /"'']+\.service["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*ExecStart=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
 
   - id: skill-xray.bash-git-hook-persistence
     languages: [bash]
@@ -1793,8 +1832,8 @@ rules:
       skill_xray_rule: opengrep-git-hook-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
 
   - id: skill-xray.python-windows-run-persistence
     mode: taint
@@ -1862,6 +1901,38 @@ rules:
           - metavariable-regex:
               metavariable: $NAME
               regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
+      - patterns:
+          - pattern: open($STARTUP / $NAME, $MODE, ...)
+          - pattern-inside: |
+              with open($STARTUP / $NAME, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              $TARGET = $STARTUP / $NAME
+              ...
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
               regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
@@ -1942,4 +2013,6 @@ rules:
       skill_xray_vector: SXV-039
       skill_xray_rule: opengrep-xdg-autostart-persistence
       skill_xray_severity: critical
-    pattern-regex: '(?im)^[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Desktop Entry\][^;&|\n]*\\nExec=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&|\n]*(?:>>?|tee)[^;&|\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop"?(?:[ \t]|$)'
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Desktop Entry\][^;&|\n]*\\nExec=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&|\n]*>>?[^;&|\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*Exec=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
