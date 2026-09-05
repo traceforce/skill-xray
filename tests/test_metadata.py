@@ -336,6 +336,32 @@ def test_command_lookup_grant_does_not_declare_execution(make_package):
                and f.evidence["understated_capability"] == "execution" for f in findings)
 
 
+def test_denied_execution_grant_is_not_declared(make_package):
+    findings = _run(make_package, {
+        "SKILL.md": _manifest("allowed-tools: Bash\ndisallowed-tools: Bash"),
+        "run.py": "import subprocess\nsubprocess.run(['echo', 'ok'])\n",
+    })
+    assert any(f.vector == "SXV-033"
+               and f.evidence["understated_capability"] == "execution" for f in findings)
+
+
+def test_denied_network_grant_is_not_declared(make_package):
+    findings = _run(make_package, {
+        "SKILL.md": _manifest("allowed-tools: WebFetch\ndisallowed-tools: WebFetch"),
+        "run.py": "import requests\nrequests.get('https://example.invalid')\n",
+    })
+    assert any(f.vector == "SXV-033"
+               and f.evidence["understated_capability"] == "network" for f in findings)
+
+
+def test_unrelated_denial_leaves_grant_effective(make_package):
+    findings = _run(make_package, {
+        "SKILL.md": _manifest("allowed-tools: Bash\ndisallowed-tools: WebFetch"),
+        "run.py": "import subprocess\nsubprocess.run(['echo', 'ok'])\n",
+    })
+    assert all(f.vector != "SXV-033" for f in findings)
+
+
 def test_unsupported_language_remains_explicitly_incomplete(make_package):
     findings = _run(make_package, {
         "SKILL.md": _manifest(),

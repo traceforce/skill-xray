@@ -1127,9 +1127,10 @@ def _network_capability_is_invalid(
             continue
         raw = dotted(node.func)
         resolved = canonical(raw) if raw else None
-        if (resolved in allowed and not _qualified_rebound(scopes, raw, line, col)
-                and not (resolved != raw
-                         and _qualified_rebound(scopes, resolved, line, col))):
+        if (resolved in allowed
+                and not _qualified_rebound(scopes, raw, line, col, unknown_is_rebound=True)
+                and not (resolved != raw and _qualified_rebound(
+                    scopes, resolved, line, col, unknown_is_rebound=True))):
             return False
         if not isinstance(node.func, ast.Attribute):
             continue
@@ -1145,9 +1146,11 @@ def _network_capability_is_invalid(
         ) if constructor else None
         if resolved_constructor in {
             "httpx.AsyncClient", "httpx.Client", "requests.Session",
-        } and node.func.attr in {
-            "delete", "get", "head", "options", "patch", "post", "put", "request", "stream",
-        } and not _qualified_rebound(
+        } and (node.func.attr in {
+            "delete", "get", "head", "options", "patch", "post", "put", "request",
+        } or (node.func.attr == "stream"
+              and resolved_constructor in {"httpx.AsyncClient", "httpx.Client"})
+        ) and not _qualified_rebound(
             scopes, constructor, constructor_line, constructor_col,
             unknown_is_rebound=True,
         ) and not (
@@ -1478,26 +1481,38 @@ def findings_from_report(
             if target.suffix == ".py":
                 cap_count = capability_postfilter_counts.get(target_name, 0)
                 capability_postfilter_counts[target_name] = cap_count + 1
-                # Bound per-target AST validation like the taint path; retain past the budget.
-                if cap_count < _MAX_POSTFILTERS_PER_TARGET:
-                    if target_name not in python_trees:
-                        artifact = (parsed.by_rel.get(target.rel)
-                                    if target.origin == "file" else None)
-                        if artifact is not None:
-                            python_trees[target_name] = artifact.py_tree
-                        else:
-                            try:
-                                python_trees[target_name] = parse_python(target.text)
-                            except (SyntaxError, ValueError, RecursionError, MemoryError):
-                                python_trees[target_name] = None
-                    tree = python_trees[target_name]
-                    column = location["start"].get("col")
-                    if tree is not None and (
-                        capability == "execution" and _sink_is_shadowed(tree, line, column)
-                        or capability == "network"
-                        and _network_capability_is_invalid(tree, line, column)
-                    ):
-                        continue
+                if cap_count >= _MAX_POSTFILTERS_PER_TARGET:
+                    # SXV-033 needs confirmed behavior; past the budget fail visible, do not assert.
+                    findings.append(Finding(
+                        vector="", rule="analysis-incomplete", severity="high",
+                        path=target.rel,
+                        message=("observed %s capability could not be validated within the "
+                                 "per-file budget" % capability),
+                        evidence={
+                            "phase": "correlation",
+                            "reason": "capability-validation-budget",
+                            "observed_capability": capability,
+                        },
+                    ))
+                    continue
+                if target_name not in python_trees:
+                    artifact = (parsed.by_rel.get(target.rel)
+                                if target.origin == "file" else None)
+                    if artifact is not None:
+                        python_trees[target_name] = artifact.py_tree
+                    else:
+                        try:
+                            python_trees[target_name] = parse_python(target.text)
+                        except (SyntaxError, ValueError, RecursionError, MemoryError):
+                            python_trees[target_name] = None
+                tree = python_trees[target_name]
+                column = location["start"].get("col")
+                if tree is not None and (
+                    capability == "execution" and _sink_is_shadowed(tree, line, column)
+                    or capability == "network"
+                    and _network_capability_is_invalid(tree, line, column)
+                ):
+                    continue
             manifest = _governing_manifest(manifests, target.rel)
             if manifest is None:
                 continue
