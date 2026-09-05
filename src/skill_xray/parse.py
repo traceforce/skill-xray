@@ -119,6 +119,7 @@ class _InspectableHTML(HTMLParser):
         self.fully_inspected = True
         self.saw_markup = False
         self.anchors = []
+        self.code_stack = []
 
     def handle_starttag(self, tag, attrs):
         self.saw_markup = True
@@ -137,6 +138,8 @@ class _InspectableHTML(HTMLParser):
                 not isinstance(name, str) or name.lower() not in allowed for name, _ in attrs)):
             self.fully_inspected = False
             return
+        if tag in {"code", "pre"}:
+            self.code_stack.append(tag)
         values = {name.lower(): value or "" for name, value in attrs}
         target = values.get("href") if tag == "a" else values.get("src")
         if target:
@@ -153,6 +156,8 @@ class _InspectableHTML(HTMLParser):
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
+        if tag.lower() in {"code", "pre"} and self.code_stack:
+            self.code_stack.pop()
         if tag.lower() == "a" and self.anchors:
             target, label, line = self.anchors.pop()
             self.md.links.append((target, "".join(label).strip(), line))
@@ -165,6 +170,11 @@ class _InspectableHTML(HTMLParser):
         self.md.html_tags.append((tag, self.line + line - 1, source_column, True, ()))
         if tag not in _PRESENTATIONAL_HTML and tag not in _PROMPT_PLACEHOLDER_HTML:
             self.fully_inspected = False
+        if tag in {"code", "pre"}:
+            if not self.code_stack or self.code_stack[-1] != tag:
+                self.fully_inspected = False
+            else:
+                self.code_stack.pop()
         if tag == "a" and self.anchors:
             target, label, anchor_line = self.anchors.pop()
             self.md.links.append((target, "".join(label).strip(), anchor_line))
@@ -197,7 +207,7 @@ def _inspect_html(fragment, line, md, column=1):
     try:
         parser.feed(fragment)
         parser.close()
-        if parser.anchors:
+        if parser.anchors or parser.code_stack:
             parser.fully_inspected = False
     except (ValueError, RecursionError):
         parser.fully_inspected = False
@@ -230,7 +240,8 @@ def _project_html(fragment):
         if token.startswith("<") and not token.startswith("<!--"):
             tag_match = re.match(r"(?is)<\s*(/?)\s*([a-z][a-z0-9-]*)", token)
             if tag_match and tag_match.group(2).lower() in {"code", "pre"}:
-                code_depth += -1 if tag_match.group(1) else 1
+                self_closing = token.rstrip().endswith("/>")
+                code_depth += -1 if tag_match.group(1) else (0 if self_closing else 1)
                 code_depth = max(code_depth, 0)
             output.append(_blank_source(token))
         elif token.startswith("&") and not code_depth:
