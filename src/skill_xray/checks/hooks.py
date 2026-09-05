@@ -10,6 +10,7 @@ from packaging.requirements import InvalidRequirement, Requirement
 
 from ..findings import Finding, cap_findings
 
+_MISSING = object()
 _CONFIG_KINDS = {"hooks_config", "mcp_config", "agent_config"}
 _INSTRUCTION_KINDS = {"skill_manifest", "instruction", "agent_identity"}
 _HOOK_EVENTS = (
@@ -27,18 +28,22 @@ _SETTINGS = re.compile(
     r"(?i)(?:~[/\\]|%USERPROFILE%[/\\])?\.claude[/\\]"
     r"settings(?:\.local)?\.json|\bsettings(?:\.local)?\.json\b"
 )
+# Inflected verb forms only, so nouns like "additional"/"installation" do not read as directives.
 _WRITE = re.compile(
-    r"(?i)\b(?:add|append|install|insert|merge|prepend|register|write)\w*\b"
+    r"(?i)\b(?:add(?:s|ed|ing)?|append(?:s|ed|ing)?|install(?:s|ed|ing)?"
+    r"|insert(?:s|ed|ing)?|merg(?:e|es|ed|ing)|prepend(?:s|ed|ing)?"
+    r"|register(?:s|ed|ing)?|writ(?:e|es|ing|ten)|wrote)\b"
 )
 _NEGATED = re.compile(
     r"(?i)\b(?:(?:do\s+not|don['’]t|never)\s+(?:ever\s+)?"
-    r"(?:add|append|install|insert|modify|write)|without\s+(?:adding|appending|"
-    r"installing|inserting|modifying|writing))\b"
+    r"(?:add|append|install|insert|merge|modify|prepend|register|write)|"
+    r"without\s+(?:adding|appending|installing|inserting|merging|modifying|"
+    r"prepending|registering|writing))\b"
 )
 _DEFENSIVE_DESCRIPTION = re.compile(
     r"(?i)\b(?:check|detector|rule|scanner)\s+(?:detects|flags|identifies|reports)\b"
     r"[^.\n]{0,120}\b(?:that|which)\s+[^.\n]{0,40}"
-    r"\b(?:add|append|install|insert|register|write)\w*\b"
+    r"\b(?:add|append|install|insert|merge|prepend|register|write)\w*\b"
 )
 _INTERPRETERS = {
     "bash", "dash", "node", "perl", "php", "powershell", "pwsh", "python", "python3",
@@ -58,6 +63,7 @@ _NPM_EXACT = re.compile(
 _OPTIONS_WITH_VALUE = {
     "npx": {"-c", "--cache", "--call", "--registry", "--userconfig"},
     "pnpx": {"--registry"},
+    "pipx": {"--python", "--index-url", "--pip-args"},
     "uvx": {"--index", "--python", "--python-platform"},
 }
 
@@ -87,13 +93,20 @@ def _instruction_findings(artifact):
         for negated in _NEGATED.finditer(block):
             clause_start = max(
                 block.rfind(delimiter, 0, negated.start())
-                for delimiter in (".", ";", "\n")
+                for delimiter in (".", ";", "!", "?", "\n")
             ) + 1
             ends = [
-                position for delimiter in (".", ";", "\n")
+                position for delimiter in (".", ";", "!", "?", "\n")
                 if (position := block.find(delimiter, negated.end())) >= 0
             ]
             clause_end = min(ends) + 1 if ends else len(block)
+            # A contrastive turn ("...but append...") starts a fresh affirmative directive, so
+            # stop masking there instead of erasing the live clause after it.
+            contrast = re.search(
+                r"(?i)\b(?:but|however|yet|instead|rather)\b", block[negated.end():clause_end]
+            )
+            if contrast:
+                clause_end = negated.end() + contrast.start()
             for position in range(clause_start, clause_end):
                 if masked[position] != "\n":
                     masked[position] = " "
@@ -106,7 +119,7 @@ def _instruction_findings(artifact):
         block = "".join(masked)
         candidate = None
         clause_start = 0
-        boundaries = [match.end() for match in re.finditer(r";|\.(?=\s|$)", block)]
+        boundaries = [match.end() for match in re.finditer(r";|[.!?](?=\s|$)", block)]
         for clause_end in (*boundaries, len(block)):
             clause = block[clause_start:clause_end]
             event = _HOOK_EVENT.search(clause)
@@ -181,7 +194,7 @@ def _local_candidate(parsed, command, arguments=()):
                 index += 1
                 continue
             break
-    elif head in _INTERPRETERS:
+    elif head in _INTERPRETERS or re.fullmatch(r"python\d+(?:\.\d+)*", head):
         index = 1
         while index < len(tokens) and tokens[index].startswith("-"):
             flag = tokens[index].lower()
@@ -193,7 +206,8 @@ def _local_candidate(parsed, command, arguments=()):
     if index >= len(tokens):
         return "unresolved_external", False
     candidate = re.sub(
-        r"^\$(?:\{CLAUDE_PROJECT_DIR\}|CLAUDE_PROJECT_DIR)/", "", tokens[index],
+        r"^\$(?:\{(?:CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_ROOT)\}"
+        r"|CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_ROOT)/", "", tokens[index],
     )
     if any(char in candidate for char in "$`|;&><"):
         return "dynamic_or_compound", False
@@ -208,15 +222,16 @@ def _local_candidate(parsed, command, arguments=()):
 
 def _hook_source(artifact):
     if artifact.kind in _CONFIG_KINDS and isinstance(artifact.config, dict):
-        return artifact.config.get("hooks"), 1
+        return artifact.config.get("hooks", _MISSING), 1
     if artifact.kind == "skill_manifest" and isinstance(artifact.frontmatter, dict):
-        return artifact.frontmatter.get("hooks"), artifact.frontmatter_key_lines.get("hooks", 1)
-    return None, 1
+        return (artifact.frontmatter.get("hooks", _MISSING),
+                artifact.frontmatter_key_lines.get("hooks", 1))
+    return _MISSING, 1
 
 
 def _hook_findings(parsed, artifact):
     hooks, source_line = _hook_source(artifact)
-    if hooks is None:
+    if hooks is _MISSING:
         return []
     if not isinstance(hooks, dict):
         return [_incomplete(artifact.rel, "hooks_not_object")]
@@ -253,7 +268,8 @@ def _hook_findings(parsed, artifact):
                     findings.append(Finding(
                         vector="SXV-012", rule="root-hook-autoexec", severity="medium",
                         path=artifact.rel, line=source_line,
-                        message="%s hook auto-executes a remote HTTP handler" % canonical_event,
+                        message="%s hook auto-executes a remote HTTP handler (%s)"
+                                % (canonical_event, url),
                         evidence={
                             "hook_event": canonical_event, "matcher": matcher, "command": url,
                             "hook_type": "http", "resolution": "remote_http",
@@ -289,12 +305,12 @@ def _hook_findings(parsed, artifact):
                     if not isinstance(prompt, str) or not prompt.strip():
                         malformed = True
                         continue
-                    if re.search(r"\$\{?\w+\}?|`[^`]+`", prompt):
+                    if re.search(r"\$\{?[A-Za-z_]\w*\}?|`[^`]+`", prompt):
                         findings.append(Finding(
                             vector="SXV-012", rule="root-hook-autoexec", severity="medium",
                             path=artifact.rel, line=source_line,
-                            message="%s hook auto-executes a dynamic %s handler"
-                                    % (canonical_event, hook_type),
+                            message="%s hook auto-executes a dynamic %s handler (%s)"
+                                    % (canonical_event, hook_type, prompt),
                             evidence={
                                 "hook_event": canonical_event, "matcher": matcher,
                                 "command": prompt, "hook_type": hook_type,
@@ -321,8 +337,8 @@ def _hook_findings(parsed, artifact):
                 findings.append(Finding(
                     vector="SXV-012", rule="root-hook-autoexec", severity="medium",
                     path=artifact.rel, line=source_line,
-                    message="%s hook auto-executes an unreviewable command (%s)"
-                            % (canonical_event, resolution),
+                message="%s hook auto-executes an unreviewable command (%s): %s"
+                        % (canonical_event, resolution, command),
                     evidence={
                         "hook_event": canonical_event, "matcher": matcher, "command": command,
                         "hook_type": "command", "resolution": resolution,
@@ -346,38 +362,49 @@ def _server_maps(artifact):
     return maps
 
 
-def _package_spec(runner, args):
+def _package_specs(runner, args):
+    # npm/pipx allow the package-selecting option more than once, so every selected package is
+    # evaluated; once one is given the trailing positional is the command to run, not a package.
+    specs = []
     positionals = []
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg in {"-p", "--package"}:
+        if arg in {"-p", "--package", "--spec"}:
             if index + 1 >= len(args) or args[index + 1].startswith("-"):
-                return None, True
-            return args[index + 1], False
-        if arg in _OPTIONS_WITH_VALUE.get(runner, set()):
-            if index + 1 >= len(args):
-                return None, True
+                return specs, True
+            specs.append(args[index + 1])
             index += 2
             continue
-        if arg.startswith("--package="):
+        if arg.startswith(("--package=", "--spec=")):
             value = arg.split("=", 1)[1]
-            return (value, False) if value else (None, True)
+            if not value:
+                return specs, True
+            specs.append(value)
+            index += 1
+            continue
+        if arg in _OPTIONS_WITH_VALUE.get(runner, set()):
+            if index + 1 >= len(args):
+                return specs, True
+            index += 2
+            continue
         if arg.startswith("-"):
             index += 1
             continue
         positionals.append(arg)
         index += 1
+    if specs:
+        return specs, False
     if runner == "pipx" and positionals[:1] == ["run"]:
         positionals = positionals[1:]
-    return (positionals[0], False) if positionals else (None, False)
+    return positionals[:1], False
 
 
 def _is_exact_pin(runner, spec):
-    if spec.startswith((".", "/", "~", "file:")):
+    if spec.startswith((".", "/", "~", "file:")) or re.match(r"^[A-Za-z]:[\\/]", spec):
         return True
     if spec.startswith(("git:", "git+", "github:", "gitlab:", "bitbucket:")):
-        return bool(re.search(r"#[0-9a-fA-F]{40}$", spec))
+        return bool(re.search(r"[#@][0-9a-fA-F]{40}$", spec))
     if spec.startswith(("http:", "https:")):
         return False
     if runner in {"uvx", "pipx"}:
@@ -385,6 +412,9 @@ def _is_exact_pin(runner, spec):
             requirement = Requirement(spec)
         except InvalidRequirement:
             return False
+        if requirement.url:
+            # A PEP 508 direct reference is immutable only when it pins a full commit SHA.
+            return bool(re.search(r"@[0-9a-fA-F]{40}$", requirement.url))
         constraints = list(requirement.specifier)
         return (len(constraints) == 1 and constraints[0].operator in {"==", "==="}
                 and "*" not in constraints[0].version)
@@ -410,7 +440,8 @@ def _mcp_findings(artifact):
             args = server.get("args", [])
             if command is None and server.get("type") in {"http", "sse"}:
                 continue
-            if (not isinstance(command, str) or not isinstance(args, list)
+            if (not isinstance(command, str) or not command.strip()
+                    or not isinstance(args, list)
                     or not all(isinstance(arg, str) for arg in args)):
                 malformed = True
                 continue
@@ -418,23 +449,26 @@ def _mcp_findings(artifact):
             runner_args = args
             if runner in {"pnpm", "yarn"} and args[:1] == ["dlx"]:
                 runner, runner_args = "npx", args[1:]
+            elif runner == "npm" and args[:1] == ["exec"]:
+                runner, runner_args = "npx", args[1:]
             if runner not in _RUNNERS:
                 continue
-            spec, bad_args = _package_spec(runner, runner_args)
+            specs, bad_args = _package_specs(runner, runner_args)
             if bad_args:
                 malformed = True
                 continue
-            if spec is None or _is_exact_pin(runner, spec):
-                continue
-            findings.append(Finding(
-                vector="SXV-013", rule="floating-mcp-package", severity="low",
-                path=artifact.rel, line=1,
-                message="auto-start server %s resolves floating package %s" % (name, spec),
-                evidence={
-                    "server_name": name, "command": command, "specifier": spec,
-                    "pin_state": "floating_or_unpinned", "args": args,
-                },
-            ))
+            for spec in specs:
+                if _is_exact_pin(runner, spec):
+                    continue
+                findings.append(Finding(
+                    vector="SXV-013", rule="floating-mcp-package", severity="low",
+                    path=artifact.rel, line=1,
+                    message="auto-start server %s resolves floating package %s" % (name, spec),
+                    evidence={
+                        "server_name": name, "command": command, "specifier": spec,
+                        "pin_state": "floating_or_unpinned", "args": args,
+                    },
+                ))
     if malformed:
         findings.append(_incomplete(artifact.rel, "malformed_mcp_server"))
     return findings
