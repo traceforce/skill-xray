@@ -421,6 +421,8 @@ def _scan_inline_preproc(
     conservative = excluded_lines is None
     if conservative and block_starts is None:
         block_starts = _fallback_block_starts(lines)
+    # The preprocessing contract is Markdown-aware: code and table content is documentation,
+    # not an executable instruction surface. Keep these exclusions aligned with that contract.
     table = _table_lines(lines) if markdown_exclusions else set()
     fenced = _fenced_lines(lines) if conservative and markdown_exclusions else set()
     excluded = set() if excluded_lines is None else excluded_lines
