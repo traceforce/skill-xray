@@ -219,7 +219,7 @@ def _inspect_html(fragment, line, md, column=1):
 
 
 _HTML_PROJECTION_TOKEN = re.compile(
-    r"<!--.*?(?:-->|$)|<[^>]*>|&(?:#[xX][0-9A-Fa-f]+|#\d+|[A-Za-z][A-Za-z0-9]+);",
+    r"<!--.*?(?:-->|$)|<[^>]*>|&(?:#[xX][0-9A-Fa-f]+;?|#\d+;?|[A-Za-z][A-Za-z0-9]+;)",
     re.S,
 )
 
@@ -245,7 +245,7 @@ def _project_html(fragment):
                 code_depth = max(code_depth, 0)
             output.append(_blank_source(token))
         elif token.startswith("&") and not code_depth:
-            decoded = unescape(token)
+            decoded = unescape(token).replace("\r", " ").replace("\n", " ")
             output.append((decoded + " " * len(token))[:len(token)])
         else:
             output.append(_blank_source(token))

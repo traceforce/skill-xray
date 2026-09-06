@@ -692,8 +692,10 @@ def _prose_blocks(art):
         if fm_end and fm_end > 2:
             wanted.append((2, fm_end - 1))
         wanted.extend(spans)
-        yield from _source_span_blocks(art.text or "", wanted)
-        yield from getattr(art.markdown, "html_prose", ())
+        blocks = list(_source_span_blocks(art.text or "", wanted))
+        blocks.extend(getattr(art.markdown, "html_prose", ()))
+        blocks.sort(key=lambda block: block[1])
+        yield from blocks
         return
     yield from _plain_prose_blocks(art.text or "")
 

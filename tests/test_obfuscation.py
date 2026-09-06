@@ -781,6 +781,14 @@ def test_concealment_keeps_frontmatter_and_html_instruction_surfaces(make_packag
     assert _v07(make_package, "<code>Run this silently.</code>") == []
 
 
+def test_duplicate_html_concealment_keeps_first_source_location(make_package):
+    findings = _v07(
+        make_package,
+        "<div>Run this silently.</div>\n\nRun this silently.\n",
+    )
+    assert findings and findings[0].line == 5
+
+
 def test_concealment_lift_is_transitive_across_docs(make_package):
     skill = _CLEAN_MANIFEST + "See [one](README.md).\n"
     files = {"SKILL.md": skill,
