@@ -91,10 +91,13 @@ def _is_agent_config_location(rel):
     return posixpath.dirname(rel).lower() in _AGENT_CONFIG_DIRS.get(name, set())
 
 
-def _write_targets_hook(clause, event, write):
+def _write_targets_hook(clause, event, target, write):
     hook = re.search(r"(?i)\bhooks?\b", clause)
     if hook is None:
-        return False
+        # A hook noun is optional: an imperative write of a named startup event into the
+        # recognized settings target is still an installation directive.
+        return (write.start() < event.start() < target.start()
+                and target.end() - write.end() <= 96)
     subject_start = min(event.start(), hook.start())
     subject_end = max(event.end(), hook.end())
     if write.end() <= subject_start:
@@ -158,13 +161,14 @@ def _instruction_findings(artifact):
         boundaries = [match.end() for match in re.finditer(r";|[.!?](?=\s|$)", block)]
         for clause_end in (*boundaries, len(block)):
             clause = block[clause_start:clause_end]
-            event = _HOOK_EVENT.search(clause)
             target = _SETTINGS.search(clause)
             write = _WRITE.search(clause)
-            # Require the word "hook" so a clause that names the event while writing something
-            # else ("append release notes ... for the SessionStart event") is not an install.
-            if event and target and write and _write_targets_hook(clause, event, write):
-                candidate = clause_start, event, target, write
+            if target and write:
+                for event in _HOOK_EVENT.finditer(clause):
+                    if _write_targets_hook(clause, event, target, write):
+                        candidate = clause_start, event, target, write
+                        break
+            if candidate is not None:
                 break
             clause_start = clause_end
         if candidate is None:
@@ -514,10 +518,12 @@ def _mcp_findings(artifact):
             command = server.get("command")
             args = server.get("args", [])
             stype = server.get("type")
+            url = server.get("url")
             if stype is not None and not isinstance(stype, str):
                 malformed = True
                 continue
-            if command is None and stype in ("http", "sse"):
+            if command is None and (stype in ("http", "sse")
+                                    or isinstance(url, str) and url.strip()):
                 continue
             if (not isinstance(command, str) or not command.strip()
                     or not isinstance(args, list)
