@@ -20,7 +20,7 @@ from .checks.code_lane import (
     _manifest_index,
     build_code_lane,
 )
-from .checks.grants import declared_capabilities, effective_grants
+from .checks.grants import declared_capabilities, denied_capabilities, effective_grants
 from .findings import Finding, cap_findings, dedupe_findings, vector_registry
 from .opengrep_runtime import OpenGrepRuntimeError, resolve_opengrep
 
@@ -1547,6 +1547,8 @@ def findings_from_report(
                         "observed_capability": capability,
                     },
                 ))
+                continue
+            if not has_allowed and capability not in denied_capabilities(grants):
                 continue
             if capability in declared_capabilities(grants):
                 continue

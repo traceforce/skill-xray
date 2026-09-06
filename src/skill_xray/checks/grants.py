@@ -354,11 +354,9 @@ def effective_grants(grants):
     ]
 
 
-def declared_capabilities(grants):
-    """Capabilities materially declared by effective allowed grants."""
-    allowed = effective_grants(grants)
+def _grant_capabilities(grants):
     execution = False
-    for grant in allowed:
+    for grant in grants:
         if grant.tool not in _EXECUTION_TOOLS:
             continue
         command, tokens = _command_tokens(grant.pattern)
@@ -370,11 +368,23 @@ def declared_capabilities(grants):
             execution |= bool(head and head not in _NON_EXECUTION_COMMANDS)
     network = any(
         _reaches_network(grant.tool, grant.pattern, _command_tokens(grant.pattern)[1])
-        for grant in allowed
+        for grant in grants
     )
     return {capability for capability, present in (
         ("execution", execution), ("network", network),
     ) if present}
+
+
+def declared_capabilities(grants):
+    """Capabilities materially declared by effective allowed grants."""
+    return _grant_capabilities(effective_grants(grants))
+
+
+def denied_capabilities(grants):
+    """Capabilities explicitly governed by parsed denial grants."""
+    return _grant_capabilities(
+        grant for grant in (grants or ()) if not grant.allowed and grant.parsed
+    )
 
 
 def _expandable_substitution(value):

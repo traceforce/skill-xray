@@ -401,6 +401,20 @@ def test_denial_only_manifest_governs_observed_execution(make_package):
     assert any(f.vector == "SXV-033" for f in findings)
 
 
+@pytest.mark.parametrize(("denial", "source"), [
+    ("WebFetch", "import subprocess\nsubprocess.run(['echo'])\n"),
+    ("Bash", "import requests\nrequests.get('https://example.invalid')\n"),
+])
+def test_unrelated_denial_only_manifest_does_not_govern_capability(
+    make_package, denial, source,
+):
+    findings = _run(make_package, {
+        "SKILL.md": "---\nname: demo\ndisallowed-tools: %s\n---\nbody\n" % denial,
+        "run.py": source,
+    })
+    assert all(f.vector != "SXV-033" for f in findings)
+
+
 def test_conditional_client_rebind_does_not_hide_network(make_package):
     source = (
         "import httpx\nclass Fake:\n    def get(self, url): return None\n"
