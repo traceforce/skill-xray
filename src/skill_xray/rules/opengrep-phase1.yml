@@ -1566,7 +1566,7 @@ rules:
           regex: '^[''"]?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))[''"]?$'
       - metavariable-regex:
           metavariable: $CONTENT
-          regex: '(?is).*(?:exec\s*\(\s*base64\.b64decode|powershell[^\n]*(?:-enc|-encodedcommand|-file)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
+          regex: '(?is).*(?:exec\s*\(\s*base64\.b64decode|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-(?:enc(?:odedcommand)?|file)\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
 
   - id: skill-xray.python-shell-startup-persistence
     mode: taint
@@ -1598,7 +1598,7 @@ rules:
           - pattern: $TARGET.write_text($CONTENT, ...)
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
       - patterns:
           - pattern: $TARGET.write_text($CONTENT, ...)
           - pattern-either:
@@ -1629,7 +1629,7 @@ rules:
               regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
 
   - id: skill-xray.python-systemd-persistence
     mode: taint
@@ -1654,7 +1654,7 @@ rules:
           - pattern: $TARGET.write_text($CONTENT, ...)
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
       - patterns:
           - pattern: open($TARGET, $MODE, ...)
           - pattern-inside: |
@@ -1666,7 +1666,7 @@ rules:
               regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
 
   - id: skill-xray.python-git-hook-persistence
     mode: taint
@@ -1694,7 +1694,7 @@ rules:
           - pattern: $TARGET.write_text($CONTENT, ...)
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
       - patterns:
           - pattern: open($TARGET, $MODE, ...)
           - pattern-inside: |
@@ -1706,7 +1706,7 @@ rules:
               regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
 
   - id: skill-xray.python-component-path-persistence
     languages: [python]
@@ -1728,7 +1728,7 @@ rules:
               regex: '(?i).+\.service["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
       - patterns:
           - pattern-inside: |
               $TARGET = Path.home() / ".config" / "autostart" / $NAME
@@ -1740,7 +1740,7 @@ rules:
               regex: '(?i).+\.desktop["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
       - patterns:
           - pattern: Path($PATH).write_text($CONTENT, ...)
           - metavariable-regex:
@@ -1748,7 +1748,7 @@ rules:
               regex: '(?i)^[rRuUbfF]*["''][A-Za-z]:[/\\]Users[/\\][^/\\]+[/\\]AppData[/\\]Roaming[/\\]Microsoft[/\\]Windows[/\\]Start Menu[/\\]Programs[/\\]Startup[/\\][^/\\]+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
 
   - id: skill-xray.bash-shell-startup-persistence
     languages: [bash]
@@ -1759,8 +1759,8 @@ rules:
       skill_xray_rule: opengrep-shell-startup-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/(?:root|home/[^/]+|Users/[^/]+))/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)"?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/(?:root|home/[^/]+|Users/[^/]+))/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)["'']?[ \t]*<<["'']?(?P<RC_END>[A-Za-z0-9_.-]+)["'']?\n(?:(?!^[ \t]*(?P=RC_END)[ \t]*$)[^\n]*\n){0,20}?[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n[ \t]*(?P=RC_END)[ \t]*(?:\n|$)'
 
   - id: skill-xray.bash-cron-persistence
     languages: [bash]
@@ -1771,9 +1771,12 @@ rules:
       skill_xray_rule: opengrep-cron-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?:https?://|powershell[ \t]+-enc)[^;\n]*(?:\|[ \t]*(?:ba)?sh|powershell|exec)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
-      - pattern-regex: '(?im)^(?![ \t]*#)[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
-      - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;\n]*(?:>>?|tee[ \t]+-a)[^;\n]*/etc/cron(?:tab|\.d/[A-Za-z0-9_-]+)["'']?\s*$'
+      - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?:https?://|(?<![A-Za-z0-9_.-])powershell[ \t]+-enc)[^;\n]*(?:\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])powershell|exec)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
+      - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
+      - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])powershell[ \t]+-enc)[^;\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;\n]*(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)[^;\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
+      - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;\n]*(?:>>?|tee[ \t]+-a)[^;\n]*/etc/cron(?:tab|\.d/[A-Za-z0-9_-]+)["'']?\s*$'
 
   - id: skill-xray.python-launchd-persistence
     mode: taint
@@ -1800,7 +1803,7 @@ rules:
           - pattern: $TARGET.write_text($CONTENT, ...)
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*<key>Program(?:Arguments)?</key>.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*<key>Program(?:Arguments)?</key>.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
       - patterns:
           - pattern: open($TARGET, $MODE, ...)
           - pattern-inside: |
@@ -1812,7 +1815,7 @@ rules:
               regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*<key>Program(?:Arguments)?</key>.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*<key>Program(?:Arguments)?</key>.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
 
   - id: skill-xray.bash-launchd-persistence
     languages: [bash]
@@ -1823,8 +1826,8 @@ rules:
       skill_xray_rule: opengrep-launchd-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*<key>Program(?:Arguments)?</key>[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee)[^;&\n]*(?:(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/Users/[^/]+)/Library/LaunchAgents|/Library/Launch(?:Agents|Daemons))/[^ /"'']+\.plist"?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee)[^\n]*Library/LaunchAgents/[^ /]+\.plist["'']?[^\n]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}[^\n]*<key>Program(?:Arguments)?</key>(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*<key>Program(?:Arguments)?</key>[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&\n]*(?:>>?|tee)[^;&\n]*(?:(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/Users/[^/]+)/Library/LaunchAgents|/Library/Launch(?:Agents|Daemons))/[^ /"'']+\.plist"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee)[^\n]*Library/LaunchAgents/[^ /]+\.plist["'']?[^\n]*<<["'']?(?P<LAUNCHD_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*<key>Program(?:Arguments)?</key>(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=LAUNCHD_END)(?:\n|$)'
 
   - id: skill-xray.bash-systemd-persistence
     languages: [bash]
@@ -1835,8 +1838,8 @@ rules:
       skill_xray_rule: opengrep-systemd-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^(?![ \t]*#)[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Service\][^;&|\n]*\\nExecStart=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&|\n]*>>?[^;&|\n]*(?:/etc/systemd/system|(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/(?:root|home/[^/]+))/\.config/systemd/user)/[^ /"'']+\.service"?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee)[^\n]*(?:/etc/systemd/system|(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/systemd/user)/[^ /"'']+\.service["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*ExecStart=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Service\][^;&|\n]*\\nExecStart=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&|\n]*>>?[^;&|\n]*(?:/etc/systemd/system|(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/(?:root|home/[^/]+))/\.config/systemd/user)/[^ /"'']+\.service"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee)[^\n]*(?:/etc/systemd/system|(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/systemd/user)/[^ /"'']+\.service["'']?[ \t]*<<["'']?(?P<SYSTEMD_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*ExecStart=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=SYSTEMD_END)(?:\n|$)'
 
   - id: skill-xray.bash-git-hook-persistence
     languages: [bash]
@@ -1847,8 +1850,8 @@ rules:
       skill_xray_rule: opengrep-git-hook-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?[ \t]*<<["'']?(?P<HOOK_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=HOOK_END)(?:\n|$)'
 
   - id: skill-xray.python-windows-run-persistence
     mode: taint
@@ -1877,7 +1880,7 @@ rules:
           - pattern: winreg.SetValueEx($KEY, ..., $VALUE)
           - metavariable-regex:
               metavariable: $VALUE
-              regex: '(?is).*(?:powershell(?:\.exe)?\s+(?:-enc|-file)|cmd(?:\.exe)?\s+/[ck]|(?:[A-Za-z]:\\|\\\\|%[A-Za-z_][A-Za-z0-9_]*%[/\\])[^\n"'']+\.(?:exe|com|bat|cmd|ps1|vbs|js|py)(?:\s|["'']|$)).*'
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-(?:enc(?:odedcommand)?|file)\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:[A-Za-z]:\\|\\\\|%[A-Za-z_][A-Za-z0-9_]*%[/\\])[^\n"'']+\.(?:exe|com|bat|cmd|ps1|vbs|js|py)(?:\s|["'']|$)).*'
 
   - id: skill-xray.python-windows-startup-persistence
     mode: taint
@@ -1906,7 +1909,7 @@ rules:
               regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
       - patterns:
           - pattern-inside: |
               $TARGET = $STARTUP / $NAME
@@ -1918,7 +1921,7 @@ rules:
               regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
       - patterns:
           - pattern: open($STARTUP / $NAME, $MODE, ...)
           - pattern-inside: |
@@ -1933,7 +1936,7 @@ rules:
               regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
       - patterns:
           - pattern: open($TARGET, $MODE, ...)
           - pattern-inside: |
@@ -1950,7 +1953,7 @@ rules:
               regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:powershell\s+-enc|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh).*'
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
 
   - id: skill-xray.python-cron-persistence
     mode: taint
@@ -1968,7 +1971,7 @@ rules:
           - pattern: $TARGET.write_text($CONTENT, ...)
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
       - patterns:
           - pattern-inside: |
               with open($TARGET, $MODE, ...) as $HANDLE:
@@ -1980,7 +1983,7 @@ rules:
               regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
 
   - id: skill-xray.python-xdg-autostart-persistence
     mode: taint
@@ -2006,7 +2009,7 @@ rules:
           - pattern: $TARGET.write_text($CONTENT, ...)
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
       - patterns:
           - pattern: open($TARGET, $MODE, ...)
           - pattern-inside: |
@@ -2018,7 +2021,7 @@ rules:
               regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
           - metavariable-regex:
               metavariable: $CONTENT
-              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|powershell\s+-enc).*'
+              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
 
   - id: skill-xray.bash-xdg-autostart-persistence
     languages: [bash]
@@ -2029,5 +2032,5 @@ rules:
       skill_xray_rule: opengrep-xdg-autostart-persistence
       skill_xray_severity: critical
     pattern-either:
-      - pattern-regex: '(?im)^(?![ \t]*#)[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Desktop Entry\][^;&|\n]*\\nExec=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^;&|\n]*>>?[^;&|\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop"?(?:[ \t]|$)'
-      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop["'']?[ \t]*<<["'']?EOF["'']?\n(?:[^\n]*\n){0,20}?[^\n]*Exec=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|powershell[ \t]+-enc)[^\n]*\nEOF(?:\n|$)'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Desktop Entry\][^;&|\n]*\\nExec=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&|\n]*>>?[^;&|\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop["'']?[ \t]*<<["'']?(?P<XDG_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*Exec=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=XDG_END)(?:\n|$)'

