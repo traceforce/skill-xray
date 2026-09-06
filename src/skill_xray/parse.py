@@ -219,7 +219,11 @@ def _inspect_html(fragment, line, md, column=1):
 
 
 _HTML_PROJECTION_TOKEN = re.compile(
-    r"<!--.*?(?:-->|$)|<[^>]*>|&(?:#[xX][0-9A-Fa-f]+;?|#\d+;?|[A-Za-z][A-Za-z0-9]+;)",
+    # A `>` inside a quoted attribute value must not end the tag, or a following `<pre>`/`<code>`
+    # lookalike would flip the projection into code mode and blank real prose after it.
+    r"<!--.*?(?:-->|$)"
+    r"|<(?:[^>\"']|\"[^\"]*\"|'[^']*')*>"
+    r"|&(?:#[xX][0-9A-Fa-f]+;?|#\d+;?|[A-Za-z][A-Za-z0-9]+;)",
     re.S,
 )
 
