@@ -11,6 +11,7 @@ from . import (
     grants,
     instruction_exfil,
     obfuscation,
+    persistence,
     preproc,
     taint_engine,
 )
@@ -22,6 +23,7 @@ _CHECKS = (
     grants.check,
     instruction_exfil.check,
     obfuscation.check,
+    persistence.check,
     preproc.check,
     taint_engine.check,
 )
