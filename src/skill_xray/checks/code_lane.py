@@ -37,6 +37,28 @@ class CodeUnit:
     dialect: str | None = None
 
 
+def _parent(rel: str) -> str:
+    return rel.rsplit("/", 1)[0] if "/" in rel else ""
+
+
+def _manifest_index(parsed):
+    index = {}
+    for artifact in parsed.artifacts:
+        if artifact.kind == "skill_manifest":
+            index.setdefault(_parent(artifact.rel), artifact)
+    return index
+
+
+def _governing_manifest(index, rel: str):
+    directory = _parent(rel)
+    while True:
+        if directory in index:
+            return index[directory]
+        if not directory:
+            return None
+        directory = _parent(directory)
+
+
 def _fence_lang(info: str):
     parts = info.split()
     if not parts:

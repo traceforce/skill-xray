@@ -41,6 +41,24 @@ def test_duplicates_do_not_consume_finding_cap():
     assert findings == [duplicate, unique]
 
 
+def test_manifest_capability_classes_are_capped_independently():
+    execution = [Finding(
+        "SXV-033", "manifest-capability-understated", "medium", "run.py",
+        "execution %d" % index, line=index + 1,
+        evidence={"understated_capability": "execution"},
+    ) for index in range(FINDING_CAP + 1)]
+    network = Finding(
+        "SXV-033", "manifest-capability-understated", "medium", "run.py",
+        "network", line=FINDING_CAP + 2,
+        evidence={"understated_capability": "network"},
+    )
+
+    findings = cap_findings(execution + [network])
+
+    assert network in findings
+    assert any(f.rule == "findings-capped" and "execution" in f.message for f in findings)
+
+
 def test_legacy_positional_finding_fields_keep_their_meaning():
     finding = Finding("SXV-001", "rule", "high", "SKILL.md", "message", 2, 9, 4, {"x": 1})
 

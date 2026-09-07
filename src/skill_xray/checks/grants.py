@@ -74,6 +74,14 @@ _NETWORK_COMMANDS = {
 _NETWORK_ONLY_COMMANDS = {"aria2c", "curl", "http", "httpie", "scp", "sftp", "wget"}
 _REMOTE_COMMANDS = _NETWORK_ONLY_COMMANDS | {"ftp", "nc", "ncat", "socat", "ssh", "telnet"}
 _GIT_REMOTE_SUBCOMMANDS = {"clone", "fetch", "pull", "push", "remote", "submodule"}
+_NON_EXECUTION_COMMANDS = _NETWORK_ONLY_COMMANDS | {
+    "alias", "bg", "break", "cd", "chmod", "chown", "command", "continue", "declare", "dirs",
+    "disown", "echo", "exit", "export", "false", "fg", "getopts", "hash", "help",
+    "history", "jobs", "local", "logout", "mapfile", "popd", "printf", "pushd", "pwd",
+    "read", "readarray", "readonly", "return", "set", "shift", "shopt", "suspend",
+    "test", "times", "true", "type", "typeset", "ulimit", "umask", "unalias", "unset",
+    "wait",
+}
 
 
 def _basename(token):
@@ -333,6 +341,50 @@ def _denial_covers(denial, grant):
         candidate = allowed[:-2].rstrip() if allowed.endswith(":*") else allowed
         return candidate == prefix or candidate.startswith(prefix + " ")
     return False
+
+
+def effective_grants(grants):
+    """Allowed, parsed grants not closed by a matching denial."""
+    values = list(grants or ())
+    denials = [grant for grant in values if not grant.allowed]
+    return [
+        grant for grant in values
+        if grant.allowed and grant.parsed
+        and not any(_denial_covers(denial, grant) for denial in denials)
+    ]
+
+
+def _grant_capabilities(grants):
+    execution = False
+    for grant in grants:
+        if grant.tool not in _EXECUTION_TOOLS:
+            continue
+        command, tokens = _command_tokens(grant.pattern)
+        execution |= grant.pattern is None or command in {"", "*", "**"}
+        for segment in _segments(tokens):
+            effective = _effective_tokens(segment)[0] or segment
+            raw_head = _basename(effective[0]) if effective else ""
+            head = _VERSION_SUFFIX.sub("", raw_head) or raw_head
+            execution |= bool(head and head not in _NON_EXECUTION_COMMANDS)
+    network = any(
+        _reaches_network(grant.tool, grant.pattern, _command_tokens(grant.pattern)[1])
+        for grant in grants
+    )
+    return {capability for capability, present in (
+        ("execution", execution), ("network", network),
+    ) if present}
+
+
+def declared_capabilities(grants):
+    """Capabilities materially declared by effective allowed grants."""
+    return _grant_capabilities(effective_grants(grants))
+
+
+def denied_capabilities(grants):
+    """Capabilities explicitly governed by parsed denial grants."""
+    return _grant_capabilities(
+        grant for grant in (grants or ()) if not grant.allowed and grant.parsed
+    )
 
 
 def _expandable_substitution(value):

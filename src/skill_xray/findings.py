@@ -192,7 +192,12 @@ def cap_findings(findings) -> list:
     """Keep at most 25 findings per path/vector and report any suppression."""
     kept, counts = [], {}
     for finding in dedupe_findings(findings):
-        key = finding.path, finding.vector or finding.rule
+        group = finding.vector or finding.rule
+        if finding.vector == "SXV-033" and isinstance(finding.evidence, dict):
+            capability = finding.evidence.get("understated_capability")
+            if isinstance(capability, str) and capability:
+                group = "%s:%s" % (group, capability)
+        key = finding.path, group
         counts[key] = counts.get(key, 0) + 1
         if counts[key] <= FINDING_CAP:
             kept.append(finding)
