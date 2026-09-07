@@ -10,6 +10,7 @@ from packaging.requirements import InvalidRequirement, Requirement
 
 from ..findings import Finding, cap_findings
 
+_MISSING = object()
 _CONFIG_KINDS = {"hooks_config", "mcp_config", "agent_config"}
 _INSTRUCTION_KINDS = {"skill_manifest", "instruction", "agent_identity"}
 _HOOK_EVENTS = (
@@ -25,20 +26,27 @@ _HOOK_EVENT = re.compile(r"\b(%s)\b" % "|".join(_HOOK_EVENTS), re.IGNORECASE)
 _CANONICAL_EVENT = {event.lower(): event for event in _HOOK_EVENTS}
 _SETTINGS = re.compile(
     r"(?i)(?:~[/\\]|%USERPROFILE%[/\\])?\.claude[/\\]"
-    r"settings(?:\.local)?\.json|\bsettings(?:\.local)?\.json\b"
+    r"settings(?:\.local)?\.json|(?<![\w/\\.])settings(?:\.local)?\.json\b"
 )
+# Inflected verb forms only, so nouns like "additional"/"installation" do not read as directives.
 _WRITE = re.compile(
-    r"(?i)\b(?:add|append|install|insert|merge|prepend|register|write)\w*\b"
+    r"(?i)\b(?:add(?:s|ed|ing)?|append(?:s|ed|ing)?|configur(?:e|es|ed|ing)"
+    r"|creat(?:e|es|ed|ing)|install(?:s|ed|ing)?|insert(?:s|ed|ing)?|merg(?:e|es|ed|ing)"
+    r"|prepend(?:s|ed|ing)?|register(?:s|ed|ing)?|sets?|setting|writ(?:e|es|ing|ten)|wrote)\b"
 )
 _NEGATED = re.compile(
-    r"(?i)\b(?:(?:do\s+not|don['’]t|never)\s+(?:ever\s+)?"
-    r"(?:add|append|install|insert|modify|write)|without\s+(?:adding|appending|"
-    r"installing|inserting|modifying|writing))\b"
+    r"(?i)\b(?:(?:do\s+not|don['’]t|never|cannot|can['’]t"
+    r"|(?:must|should|shall|would)\s+not|(?:must|should)n['’]t)\s+(?:ever\s+)?"
+    r"(?:add|append|configure|create|install|insert|merge|modify|prepend|register|set|write)|"
+    r"(?:avoid|without)\s+(?:adding|appending|configuring|creating|installing|inserting|"
+    r"merging|modifying|prepending|registering|setting|writing)|"
+    r"refrain\s+from\s+(?:adding|appending|configuring|creating|installing|inserting|"
+    r"merging|modifying|prepending|registering|setting|writing))\b"
 )
 _DEFENSIVE_DESCRIPTION = re.compile(
     r"(?i)\b(?:check|detector|rule|scanner)\s+(?:detects|flags|identifies|reports)\b"
     r"[^.\n]{0,120}\b(?:that|which)\s+[^.\n]{0,40}"
-    r"\b(?:add|append|install|insert|register|write)\w*\b"
+    r"\b(?:add|append|install|insert|merge|prepend|register|write)\w*\b"
 )
 _INTERPRETERS = {
     "bash", "dash", "node", "perl", "php", "powershell", "pwsh", "python", "python3",
@@ -48,23 +56,55 @@ _FETCHERS = {
     "aria2c", "bitsadmin", "curl", "http", "httpie", "invoke-restmethod",
     "invoke-webrequest", "irm", "iwr", "wget",
 }
-_INLINE_FLAGS = {"-c", "-e", "--eval", "-command", "-encodedcommand"}
-_INTERPRETER_FLAGS = {"-b", "-i", "-o", "-s", "-u", "--no-warnings"}
 _RUNNERS = {"bunx", "npx", "pipx", "pnpx", "uvx"}
 _NPM_EXACT = re.compile(
     r"^(?:@[^/@]+/)?[^/@]+@v?\d+\.\d+\.\d+"
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
 _OPTIONS_WITH_VALUE = {
-    "npx": {"-c", "--cache", "--call", "--registry", "--userconfig"},
+    "npx": {"-c", "--cache", "--call", "--prefix", "--registry", "--userconfig"},
     "pnpx": {"--registry"},
-    "uvx": {"--index", "--python", "--python-platform"},
+    "pipx": {"-p", "--python", "--index-url", "--pip-args"},
+    "uvx": {"-p", "--index", "--python", "--python-platform"},
+}
+_RUNNER_ALIASES = {"npm": {"exec", "x"}, "bun": {"x"}, "pnpm": {"dlx"}, "yarn": {"dlx"}}
+_GLOBAL_VALUE_OPTS = {"-c", "--prefix", "--loglevel", "--registry",
+                      "--workspace", "-w", "--dir", "--filter"}
+_AGENT_CONFIG_DIRS = {
+    ".mcp.json": {""},
+    "hooks.json": {""},
+    "settings.json": {"", ".claude"},
+    "settings.local.json": {"", ".claude"},
+    "mcp.json": {"", ".cursor", ".vscode"},
+    "claude_desktop_config.json": {""},
+    "config.toml": {".codex"},
 }
 
 
 def _portable_basename(value):
     name = value.replace("\\", "/").rsplit("/", 1)[-1].lower()
     return re.sub(r"\.(?:bat|cmd|com|exe)$", "", name)
+
+
+def _is_agent_config_location(rel):
+    name = posixpath.basename(rel).lower()
+    return posixpath.dirname(rel).lower() in _AGENT_CONFIG_DIRS.get(name, set())
+
+
+def _write_targets_hook(clause, event, target, write):
+    hook = re.search(r"(?i)\bhooks?\b", clause)
+    if hook is None:
+        # A hook noun is optional: an imperative write of a named startup event into the
+        # recognized settings target is still an installation directive.
+        return (write.start() < event.start() < target.start()
+                and target.end() - write.end() <= 96)
+    subject_start = min(event.start(), hook.start())
+    subject_end = max(event.end(), hook.end())
+    if write.end() <= subject_start:
+        return subject_end - write.end() <= 48
+    if subject_end <= write.start():
+        return write.end() - subject_start <= 48
+    return True
 
 
 def _incomplete(path, reason):
@@ -84,19 +124,31 @@ def _instruction_findings(artifact):
         block = "\n".join(lines[start - 1:end])
         original_block = block
         masked = list(block)
+        intervals = []
         for negated in _NEGATED.finditer(block):
-            clause_start = max(
-                block.rfind(delimiter, 0, negated.start())
-                for delimiter in (".", ";", "\n")
-            ) + 1
-            ends = [
-                position for delimiter in (".", ";", "\n")
-                if (position := block.find(delimiter, negated.end())) >= 0
-            ]
-            clause_end = min(ends) + 1 if ends else len(block)
-            for position in range(clause_start, clause_end):
+            # Mask only from the negation onward so an earlier affirmative directive in the same
+            # clause ("Append a hook..., but do not add...") stays analyzable.
+            clause_start = negated.start()
+            # Only sentence-ending punctuation bounds the clause; a dot inside ".claude" or
+            # "settings.json" must not cut the mask short and leave the rest of it live.
+            end_match = re.search(r"[.!?](?=\s|$)|[;\n]", block[negated.end():])
+            clause_end = negated.end() + end_match.end() if end_match else len(block)
+            # A contrastive turn ("...but append...") begins a fresh affirmative directive.
+            contrast = re.search(
+                r"(?i)\b(?:but|however|yet|instead|rather|then|next|afterwards?)\b",
+                block[negated.end():clause_end],
+            )
+            if contrast:
+                clause_end = negated.end() + contrast.start()
+            intervals.append((clause_start, clause_end))
+        # Merge intervals so a delimiter-free block with many negations stays linear, not quadratic.
+        intervals.sort()
+        merged_end = -1
+        for lo, hi in intervals:
+            for position in range(max(lo, merged_end), hi):
                 if masked[position] != "\n":
                     masked[position] = " "
+            merged_end = max(merged_end, hi)
         block = "".join(masked)
         masked = list(block)
         for defensive in _DEFENSIVE_DESCRIPTION.finditer(block):
@@ -106,14 +158,17 @@ def _instruction_findings(artifact):
         block = "".join(masked)
         candidate = None
         clause_start = 0
-        boundaries = [match.end() for match in re.finditer(r";|\.(?=\s|$)", block)]
+        boundaries = [match.end() for match in re.finditer(r";|[.!?](?=\s|$)", block)]
         for clause_end in (*boundaries, len(block)):
             clause = block[clause_start:clause_end]
-            event = _HOOK_EVENT.search(clause)
             target = _SETTINGS.search(clause)
             write = _WRITE.search(clause)
-            if event and target and write:
-                candidate = clause_start, event, target, write
+            if target and write:
+                for event in _HOOK_EVENT.finditer(clause):
+                    if _write_targets_hook(clause, event, target, write):
+                        candidate = clause_start, event, target, write
+                        break
+            if candidate is not None:
                 break
             clause_start = clause_end
         if candidate is None:
@@ -181,19 +236,36 @@ def _local_candidate(parsed, command, arguments=()):
                 index += 1
                 continue
             break
-    elif head in _INTERPRETERS:
+    elif head in _INTERPRETERS or re.fullmatch(r"python\d+(?:\.\d+)*", head):
+        is_shell = head in {"bash", "dash", "sh", "zsh"}
+        if is_shell:
+            value_opts = {"-o"}
+        elif head.startswith("python"):
+            value_opts = {"-w", "-x"}
+        elif head in {"perl", "ruby"}:
+            value_opts = {"-i"}
+        else:
+            value_opts = set()
         index = 1
         while index < len(tokens) and tokens[index].startswith("-"):
-            flag = tokens[index].lower()
-            if flag in _INLINE_FLAGS:
+            token = tokens[index].lower()
+            base = token.split("=", 1)[0]
+            if base == "-c" or (not is_shell and base in {"-e", "--eval"}):
                 return "inline_interpreter", False
-            if flag not in _INTERPRETER_FLAGS:
-                return "unresolved_external", False
-            index += 1
+            if is_shell and base == "-s":
+                # `sh -s` runs the program from stdin; the path is only $0, not the script.
+                return "dynamic_or_compound", False
+            if head == "node" and base in {"-r", "--require", "--import", "--loader",
+                                           "--experimental-loader", "--env-file",
+                                           "--env-file-if-exists"}:
+                # These auto-load an external module or env before the script; surface for review.
+                return "dynamic_or_compound", False
+            index += 2 if ("=" not in token and base in value_opts) else 1
     if index >= len(tokens):
         return "unresolved_external", False
     candidate = re.sub(
-        r"^\$(?:\{CLAUDE_PROJECT_DIR\}|CLAUDE_PROJECT_DIR)/", "", tokens[index],
+        r"^\$(?:\{(?:CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_ROOT)\}"
+        r"|CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_ROOT)/", "", tokens[index],
     )
     if any(char in candidate for char in "$`|;&><"):
         return "dynamic_or_compound", False
@@ -201,22 +273,26 @@ def _local_candidate(parsed, command, arguments=()):
     if (candidate.startswith(("/", "~")) or re.match(r"^[A-Za-z]:/", candidate)
             or normalized == ".." or normalized.startswith("../")):
         return "external_path", False
-    if normalized in parsed.by_rel:
+    art = parsed.by_rel.get(normalized)
+    if art is not None and getattr(art, "text", None) is not None:
         return "package_local:%s" % normalized, True
     return "unresolved_external", False
 
 
 def _hook_source(artifact):
     if artifact.kind in _CONFIG_KINDS and isinstance(artifact.config, dict):
-        return artifact.config.get("hooks"), 1
+        return artifact.config.get("hooks", _MISSING), 1
     if artifact.kind == "skill_manifest" and isinstance(artifact.frontmatter, dict):
-        return artifact.frontmatter.get("hooks"), artifact.frontmatter_key_lines.get("hooks", 1)
-    return None, 1
+        return (artifact.frontmatter.get("hooks", _MISSING),
+                artifact.frontmatter_key_lines.get("hooks", 1))
+    return _MISSING, 1
 
 
 def _hook_findings(parsed, artifact):
+    if artifact.kind in _CONFIG_KINDS and not _is_agent_config_location(artifact.rel):
+        return []
     hooks, source_line = _hook_source(artifact)
-    if hooks is None:
+    if hooks is _MISSING:
         return []
     if not isinstance(hooks, dict):
         return [_incomplete(artifact.rel, "hooks_not_object")]
@@ -244,6 +320,9 @@ def _hook_findings(parsed, artifact):
                     malformed = True
                     continue
                 hook_type = entry.get("type", "command")
+                if not isinstance(hook_type, str):
+                    malformed = True
+                    continue
                 if hook_type == "http":
                     url = entry.get("url")
                     if (not isinstance(url, str)
@@ -253,7 +332,8 @@ def _hook_findings(parsed, artifact):
                     findings.append(Finding(
                         vector="SXV-012", rule="root-hook-autoexec", severity="medium",
                         path=artifact.rel, line=source_line,
-                        message="%s hook auto-executes a remote HTTP handler" % canonical_event,
+                        message="%s hook auto-executes a remote HTTP handler (%s)"
+                                % (canonical_event, url),
                         evidence={
                             "hook_event": canonical_event, "matcher": matcher, "command": url,
                             "hook_type": "http", "resolution": "remote_http",
@@ -289,12 +369,12 @@ def _hook_findings(parsed, artifact):
                     if not isinstance(prompt, str) or not prompt.strip():
                         malformed = True
                         continue
-                    if re.search(r"\$\{?\w+\}?|`[^`]+`", prompt):
+                    if re.search(r"\$\{?[A-Za-z_]\w*\}?|`[^`]+`", prompt):
                         findings.append(Finding(
                             vector="SXV-012", rule="root-hook-autoexec", severity="medium",
                             path=artifact.rel, line=source_line,
-                            message="%s hook auto-executes a dynamic %s handler"
-                                    % (canonical_event, hook_type),
+                            message="%s hook auto-executes a dynamic %s handler (%s)"
+                                    % (canonical_event, hook_type, prompt),
                             evidence={
                                 "hook_event": canonical_event, "matcher": matcher,
                                 "command": prompt, "hook_type": hook_type,
@@ -321,8 +401,8 @@ def _hook_findings(parsed, artifact):
                 findings.append(Finding(
                     vector="SXV-012", rule="root-hook-autoexec", severity="medium",
                     path=artifact.rel, line=source_line,
-                    message="%s hook auto-executes an unreviewable command (%s)"
-                            % (canonical_event, resolution),
+                    message="%s hook auto-executes an unreviewable command (%s): %s"
+                    % (canonical_event, resolution, command),
                     evidence={
                         "hook_event": canonical_event, "matcher": matcher, "command": command,
                         "hook_type": "command", "resolution": resolution,
@@ -346,38 +426,58 @@ def _server_maps(artifact):
     return maps
 
 
-def _package_spec(runner, args):
+def _package_specs(runner, args):
+    # Package-selecting options differ by runner: npm uses -p/--package, pipx uses --spec, uvx
+    # uses --from. uvx/pipx -p means --python (a value option), so it is not a selector here.
+    selectors = {"--spec", "--from"} if runner in {"uvx", "pipx"} else {"-p", "--package"}
+    specs = []
     positionals = []
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg in {"-p", "--package"}:
+        if arg == "--":
+            # The terminator ends flag parsing; remaining tokens are positionals, so `npx -- pkg`
+            # still selects pkg while `npx pkg -- args` keeps pkg as the package.
+            positionals.extend(args[index + 1:])
+            break
+        if arg in selectors:
             if index + 1 >= len(args) or args[index + 1].startswith("-"):
-                return None, True
-            return args[index + 1], False
-        if arg in _OPTIONS_WITH_VALUE.get(runner, set()):
-            if index + 1 >= len(args):
-                return None, True
+                return specs, True
+            specs.append(args[index + 1])
             index += 2
             continue
-        if arg.startswith("--package="):
+        if "=" in arg and arg.split("=", 1)[0] in selectors:
             value = arg.split("=", 1)[1]
-            return (value, False) if value else (None, True)
+            if not value:
+                return specs, True
+            specs.append(value)
+            index += 1
+            continue
+        if arg in _OPTIONS_WITH_VALUE.get(runner, set()):
+            if index + 1 >= len(args):
+                return specs, True
+            index += 2
+            continue
         if arg.startswith("-"):
             index += 1
             continue
         positionals.append(arg)
         index += 1
-    if runner == "pipx" and positionals[:1] == ["run"]:
+    if specs:
+        return specs, False
+    if runner == "pipx":
+        # pipx fetches an ephemeral package only for `run`; other subcommands act on installed ones.
+        if positionals[:1] != ["run"]:
+            return [], False
         positionals = positionals[1:]
-    return (positionals[0], False) if positionals else (None, False)
+    return positionals[:1], False
 
 
 def _is_exact_pin(runner, spec):
-    if spec.startswith((".", "/", "~", "file:")):
+    if spec.startswith((".", "/", "~", "file:")) or re.match(r"^[A-Za-z]:[\\/]", spec):
         return True
     if spec.startswith(("git:", "git+", "github:", "gitlab:", "bitbucket:")):
-        return bool(re.search(r"#[0-9a-fA-F]{40}$", spec))
+        return bool(re.search(r"[#@][0-9a-fA-F]{40}(?:[#?].*)?$", spec))
     if spec.startswith(("http:", "https:")):
         return False
     if runner in {"uvx", "pipx"}:
@@ -385,13 +485,22 @@ def _is_exact_pin(runner, spec):
             requirement = Requirement(spec)
         except InvalidRequirement:
             return False
+        if requirement.url:
+            if requirement.url.startswith("file:"):
+                return True
+            # A PEP 508 direct reference is otherwise immutable only when it pins a full SHA.
+            return bool(re.search(r"@[0-9a-fA-F]{40}(?:[#?].*)?$", requirement.url))
         constraints = list(requirement.specifier)
         return (len(constraints) == 1 and constraints[0].operator in {"==", "==="}
                 and "*" not in constraints[0].version)
-    return bool(_NPM_EXACT.fullmatch(spec))
+    # npm aliases ("alias@npm:pkg@version") pin the target that follows @npm:.
+    target = spec.split("@npm:", 1)[1] if "@npm:" in spec else spec
+    return bool(_NPM_EXACT.fullmatch(target))
 
 
 def _mcp_findings(artifact):
+    if artifact.kind in _CONFIG_KINDS and not _is_agent_config_location(artifact.rel):
+        return []
     server_maps = _server_maps(artifact)
     if not server_maps:
         return []
@@ -408,33 +517,63 @@ def _mcp_findings(artifact):
                 continue
             command = server.get("command")
             args = server.get("args", [])
-            if command is None and server.get("type") in {"http", "sse"}:
+            stype = server.get("type")
+            url = server.get("url")
+            if stype is not None and not isinstance(stype, str):
+                malformed = True
                 continue
-            if (not isinstance(command, str) or not isinstance(args, list)
+            if command is None and (stype in ("http", "sse")
+                                    or isinstance(url, str) and url.strip()):
+                continue
+            if (not isinstance(command, str) or not command.strip()
+                    or not isinstance(args, list)
                     or not all(isinstance(arg, str) for arg in args)):
                 malformed = True
                 continue
             runner = _portable_basename(command)
             runner_args = args
-            if runner in {"pnpm", "yarn"} and args[:1] == ["dlx"]:
-                runner, runner_args = "npx", args[1:]
+            if runner in {"bash", "dash", "sh", "zsh"}:
+                for index, option in enumerate(args[:-1]):
+                    if option.startswith("-") and "c" in option[1:]:
+                        wrapped = _tokens(args[index + 1])
+                        if wrapped:
+                            separator = next(
+                                (i for i, token in enumerate(wrapped)
+                                 if token and set(token) <= set(";&|<>")),
+                                len(wrapped),
+                            )
+                            wrapped = wrapped[:separator]
+                        if wrapped:
+                            runner = _portable_basename(wrapped[0])
+                            runner_args = wrapped[1:]
+                        break
+            if runner in _RUNNER_ALIASES:
+                # Skip leading global flags ("npm --prefix /tmp exec ...") to find the subcommand,
+                # consuming a value for options that take one.
+                sub = 0
+                while sub < len(args) and args[sub].startswith("-"):
+                    sub += 2 if args[sub] in _GLOBAL_VALUE_OPTS else 1
+                subcommand = args[sub] if sub < len(args) else ""
+                if subcommand in _RUNNER_ALIASES[runner]:
+                    runner, runner_args = "npx", args[sub + 1:]
             if runner not in _RUNNERS:
                 continue
-            spec, bad_args = _package_spec(runner, runner_args)
+            specs, bad_args = _package_specs(runner, runner_args)
             if bad_args:
                 malformed = True
                 continue
-            if spec is None or _is_exact_pin(runner, spec):
-                continue
-            findings.append(Finding(
-                vector="SXV-013", rule="floating-mcp-package", severity="low",
-                path=artifact.rel, line=1,
-                message="auto-start server %s resolves floating package %s" % (name, spec),
-                evidence={
-                    "server_name": name, "command": command, "specifier": spec,
-                    "pin_state": "floating_or_unpinned", "args": args,
-                },
-            ))
+            for spec in specs:
+                if _is_exact_pin(runner, spec):
+                    continue
+                findings.append(Finding(
+                    vector="SXV-013", rule="floating-mcp-package", severity="low",
+                    path=artifact.rel, line=1,
+                    message="auto-start server %s resolves floating package %s" % (name, spec),
+                    evidence={
+                        "server_name": name, "command": command, "specifier": spec,
+                        "pin_state": "floating_or_unpinned", "args": args,
+                    },
+                ))
     if malformed:
         findings.append(_incomplete(artifact.rel, "malformed_mcp_server"))
     return findings
