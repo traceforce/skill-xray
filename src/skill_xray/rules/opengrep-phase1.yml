@@ -1466,3 +1466,571 @@ rules:
           - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^>#\n]*(?:''[^''\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session))[^''\n]*''|"[^"\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session))[^"\n]*")[^>#\n]*>>?\s*[^\n]*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?(?:[\s;#]|$).*$'
           - pattern-regex: '(?im)^\s*(?:echo|printf)\b(?=[^#;&|>\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)))[^#;&|>\n]*>>?\s*[^\n]*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?(?:[\s;#]|$).*$'
       - pattern-not-regex: '(?m)^\s*(?:echo|printf)\b(?:''[^''\n]*''|"[^"\n]*"|[^;''"\n])*;[^\n]*>>?[^\n]*$'
+  - id: skill-xray.python-remote-shell-rc-persistence
+    languages: [python]
+    message: A downloaded executable is installed into a shell startup file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-remote-shell-rc-persistence
+      skill_xray_severity: critical
+    patterns:
+      - pattern: os.chmod($PAYLOAD_PATH, $MODE)
+      - metavariable-regex:
+          metavariable: $WRITE_MODE
+          regex: '^["'']?(?:[wax](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+      - metavariable-regex:
+          metavariable: $APPEND_MODE
+          regex: '^["'']?a(?:[bt]\+?|\+[bt]?)?["'']?$'
+      - metavariable-regex:
+          metavariable: $STARTUP_NAME
+          regex: '^["'']?\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)["'']?$'
+      - metavariable-pattern:
+          metavariable: $STARTUP_CONTENT
+          patterns:
+            - pattern-either:
+                - pattern: $PAYLOAD_PATH
+                - pattern: |
+                    f"...{$PAYLOAD_PATH}..."
+                - pattern: |
+                    "..." + $PAYLOAD_PATH + "..."
+      - pattern-either:
+          - pattern-inside: |
+              def $FUNC(...):
+                ...
+                $PAYLOAD = urllib.request.urlopen(...).read(...)
+                ...
+                with open($PAYLOAD_PATH, $WRITE_MODE) as $PAYLOAD_FILE:
+                  ...
+                  $PAYLOAD_FILE.write($PAYLOAD)
+                  ...
+                ...
+                os.chmod($PAYLOAD_PATH, $MODE)
+                ...
+                $STARTUP_PATH = os.path.join(os.path.expanduser("~"), $STARTUP_NAME)
+                ...
+                with open($STARTUP_PATH, $APPEND_MODE) as $STARTUP_FILE:
+                  ...
+                  $STARTUP_FILE.write($STARTUP_CONTENT)
+                  ...
+          - patterns:
+              - pattern-inside: |
+                  def $FUNC(...):
+                    ...
+                    $RESPONSE = requests.$HTTP_METHOD(...)
+                    ...
+                    $PAYLOAD = $RESPONSE.content
+                    ...
+                    with open($PAYLOAD_PATH, $WRITE_MODE) as $PAYLOAD_FILE:
+                      ...
+                      $PAYLOAD_FILE.write($PAYLOAD)
+                      ...
+                    ...
+                    os.chmod($PAYLOAD_PATH, $MODE)
+                    ...
+                    $STARTUP_PATH = os.path.join(os.path.expanduser("~"), $STARTUP_NAME)
+                    ...
+                    with open($STARTUP_PATH, $APPEND_MODE) as $STARTUP_FILE:
+                      ...
+                      $STARTUP_FILE.write($STARTUP_CONTENT)
+                      ...
+              - metavariable-regex:
+                  metavariable: $HTTP_METHOD
+                  regex: '^(?:get|post|put|request)$'
+
+  - id: skill-xray.python-windows-startup-write
+    languages: [python]
+    message: Python code writes executable content into the Windows per-user Startup directory.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-windows-startup-write
+      skill_xray_severity: critical
+    patterns:
+      - pattern-inside: |
+          $STARTUP = ... / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+          ...
+          $TARGET = $STARTUP / $NAME
+          ...
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: '(?i).+\.(?:bat|cmd|exe|js|jse|lnk|ps1|py|vbs|wsf)["'']?$'
+      - pattern-inside: |
+          with open($TARGET, $MODE, ...) as $FILE:
+            ...
+            $FILE.write($CONTENT)
+            ...
+      - pattern: open($TARGET, $MODE, ...)
+      - metavariable-regex:
+          metavariable: $MODE
+          regex: '^[''"]?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))[''"]?$'
+      - metavariable-regex:
+          metavariable: $CONTENT
+          regex: '(?is).*(?:exec\s*\(\s*base64\.b64decode|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-(?:enc(?:odedcommand)?|file)\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+
+  - id: skill-xray.python-shell-startup-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is written to a shell startup file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-shell-startup-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern-either:
+                      - pattern: Path.home() / $PATH
+                      - pattern: Path($PATH).expanduser()
+                      - pattern: os.path.expanduser($PATH)
+                  - metavariable-regex:
+                      metavariable: $PATH
+                      regex: '(?i).*(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config[/\\]fish[/\\]config\.fish|Documents[/\\](?:WindowsPowerShell|PowerShell)[/\\](?:Microsoft\.)?PowerShell_profile\.ps1)["'']?$'
+              - patterns:
+                  - pattern: Path($PATH)
+                  - metavariable-regex:
+                      metavariable: $PATH
+                      regex: '(?i)^[rRuUbfF]*["''](?:/(?:root|home/[^/]+|Users/[^/]+)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish)|[A-Za-z]:[/\\]Users[/\\][^/\\]+[/\\]Documents[/\\](?:WindowsPowerShell|PowerShell)[/\\](?:Microsoft\.)?PowerShell_profile\.ps1)["'']$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  $CONTENT = 'curl ' + $URL + ' | sh'
+                  ...
+              - pattern-inside: |
+                  $CONTENT = "curl " + $URL + " | sh"
+                  ...
+              - patterns:
+                  - pattern-inside: |
+                      $CONTENT = requests.$HTTP_METHOD(...).text
+                      ...
+                  - metavariable-regex:
+                      metavariable: $HTTP_METHOD
+                      regex: '^(?:get|post|put|request)$'
+              - pattern-inside: |
+                  $CONTENT = urllib.request.urlopen(...).read()
+                  ...
+      - patterns:
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - pattern: open($TARGET, $MODE, ...)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.python-systemd-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is written to a systemd unit.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-systemd-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH)
+              - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:\.config/systemd/user|/etc/systemd/system)/.*\.service["'']?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.python-git-hook-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is installed as a Git hook.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-git-hook-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern: Path($PATH)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*\.git[/\\]hooks[/\\](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?$'
+      - pattern-regex: 'Path\([^\n)]*\)\s*/\s*["'']\.git["'']\s*/\s*["'']hooks["'']\s*/\s*["''](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']'
+      - patterns:
+          - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^["''].*\.git[/\\]hooks[/\\](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.python-component-path-persistence
+    languages: [python]
+    message: Executable remote content is written to a component-built persistence path.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-component-path-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - patterns:
+          - pattern-inside: |
+              $TARGET = Path.home() / ".config" / "systemd" / "user" / $NAME
+              ...
+              $TARGET.write_text($CONTENT, ...)
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.service["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern-inside: |
+              $TARGET = Path.home() / ".config" / "autostart" / $NAME
+              ...
+              $TARGET.write_text($CONTENT, ...)
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.desktop["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: Path($PATH).write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^[rRuUbfF]*["''][A-Za-z]:[/\\]Users[/\\][^/\\]+[/\\]AppData[/\\]Roaming[/\\]Microsoft[/\\]Windows[/\\]Start Menu[/\\]Programs[/\\]Startup[/\\][^/\\]+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+
+  - id: skill-xray.bash-shell-startup-persistence
+    languages: [bash]
+    message: Executable remote content is appended to a shell startup file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-shell-startup-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/(?:root|home/[^/]+|Users/[^/]+))/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)["'']?[ \t]*<<["'']?(?P<RC_END>[A-Za-z0-9_.-]+)["'']?\n(?:(?!^[ \t]*(?P=RC_END)[ \t]*$)[^\n]*\n){0,20}?[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n[ \t]*(?P=RC_END)[ \t]*(?:\n|$)'
+
+  - id: skill-xray.bash-cron-persistence
+    languages: [bash]
+    message: Executable remote content is installed into crontab.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-cron-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?:https?://|(?<![A-Za-z0-9_.-])powershell[ \t]+-enc)[^;\n]*(?:\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])powershell|exec)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
+      - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
+      - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])powershell[ \t]+-enc)[^;\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;\n]*(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)[^;\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
+      - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;\n]*(?:>>?|tee[ \t]+-a)[^;\n]*/etc/cron(?:tab|\.d/[A-Za-z0-9_-]+)["'']?\s*$'
+
+  - id: skill-xray.python-launchd-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is installed as a LaunchAgent.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-launchd-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH)
+              - pattern: Path($PATH).expanduser()
+              - pattern: os.path.expanduser($PATH)
+              - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:Library/LaunchAgents|/Library/LaunchDaemons)/[^/\\]+\.plist["'']?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*<key>Program(?:Arguments)?</key>.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*<key>Program(?:Arguments)?</key>.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.bash-launchd-persistence
+    languages: [bash]
+    message: Executable remote content is installed as a LaunchAgent.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-launchd-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*<key>Program(?:Arguments)?</key>[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&\n]*(?:>>?|tee)[^;&\n]*(?:(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/Users/[^/]+)/Library/LaunchAgents|/Library/Launch(?:Agents|Daemons))/[^ /"'']+\.plist"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee)[^\n]*Library/LaunchAgents/[^ /]+\.plist["'']?[^\n]*<<["'']?(?P<LAUNCHD_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*<key>Program(?:Arguments)?</key>(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=LAUNCHD_END)(?:\n|$)'
+
+  - id: skill-xray.bash-systemd-persistence
+    languages: [bash]
+    message: Executable remote content is written to a systemd unit.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-systemd-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Service\][^;&|\n]*\\nExecStart=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&|\n]*>>?[^;&|\n]*(?:/etc/systemd/system|(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/(?:root|home/[^/]+))/\.config/systemd/user)/[^ /"'']+\.service"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee)[^\n]*(?:/etc/systemd/system|(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/systemd/user)/[^ /"'']+\.service["'']?[ \t]*<<["'']?(?P<SYSTEMD_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*ExecStart=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=SYSTEMD_END)(?:\n|$)'
+
+  - id: skill-xray.bash-git-hook-persistence
+    languages: [bash]
+    message: Executable remote content is installed as a Git hook.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-git-hook-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?[ \t]*<<["'']?(?P<HOOK_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=HOOK_END)(?:\n|$)'
+
+  - id: skill-xray.python-windows-run-persistence
+    mode: taint
+    languages: [python]
+    message: An executable command is installed in a Windows Run key.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-windows-run-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: winreg.OpenKey($HIVE, $PATH, ...)
+              - pattern: winreg.OpenKeyEx($HIVE, $PATH, ...)
+              - pattern: winreg.CreateKey($HIVE, $PATH, ...)
+              - pattern: winreg.CreateKeyEx($HIVE, $PATH, ...)
+          - metavariable-regex:
+              metavariable: $HIVE
+              regex: '^(?:winreg\.)?HKEY_(?:CURRENT_USER|LOCAL_MACHINE)$'
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^[rRuUbfF]*["'']Software\\Microsoft\\Windows\\CurrentVersion\\Run(?:Once)?["'']$'
+    pattern-sinks:
+      - patterns:
+          - pattern: winreg.SetValueEx($KEY, ..., $VALUE)
+          - metavariable-regex:
+              metavariable: $VALUE
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-(?:enc(?:odedcommand)?|file)\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:[A-Za-z]:\\|\\\\|%[A-Za-z_][A-Za-z0-9_]*%[/\\])[^\n"'']+\.(?:exe|com|bat|cmd|ps1|vbs|js|py)(?:\s|["'']|$)).*'
+
+  - id: skill-xray.python-windows-startup-persistence
+    mode: taint
+    languages: [python]
+    message: Executable content is written into the Windows Startup directory.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-windows-startup-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH)
+              - pattern: Path($PATH).expanduser()
+              - pattern: os.path.expanduser($PATH)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*AppData[/\\]Roaming[/\\]Microsoft[/\\]Windows[/\\]Start Menu[/\\]Programs[/\\]Startup["'']?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: ($STARTUP / $NAME).write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+      - patterns:
+          - pattern-inside: |
+              $TARGET = $STARTUP / $NAME
+              ...
+              $TARGET.write_text($CONTENT, ...)
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+      - patterns:
+          - pattern: open($STARTUP / $NAME, $MODE, ...)
+          - pattern-inside: |
+              with open($STARTUP / $NAME, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              $TARGET = $STARTUP / $NAME
+              ...
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+
+  - id: skill-xray.python-cron-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is installed into a cron file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-cron-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - pattern-regex: '["'']/etc/cron(?:tab|\.d/[A-Za-z0-9_-]+)["'']'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - pattern: open($TARGET, $MODE, ...)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.python-xdg-autostart-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is written to an XDG autostart entry.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-xdg-autostart-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH).expanduser()
+              - pattern: os.path.expanduser($PATH)
+              - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*\.config[/\\]autostart[/\\][^/\\]+\.desktop["'']?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.bash-xdg-autostart-persistence
+    languages: [bash]
+    message: Executable remote content is written to an XDG autostart entry.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-xdg-autostart-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Desktop Entry\][^;&|\n]*\\nExec=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&|\n]*>>?[^;&|\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop["'']?[ \t]*<<["'']?(?P<XDG_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*Exec=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=XDG_END)(?:\n|$)'

