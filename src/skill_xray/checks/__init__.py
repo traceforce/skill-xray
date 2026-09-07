@@ -10,6 +10,7 @@ from . import (
     coverage,
     instruction_exfil,
     obfuscation,
+    preproc,
     taint_engine,
 )
 from .code_lane import build_code_lane
@@ -19,6 +20,7 @@ _CHECKS = (
     coverage.check,
     instruction_exfil.check,
     obfuscation.check,
+    preproc.check,
     taint_engine.check,
 )
 

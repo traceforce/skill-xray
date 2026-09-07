@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from skill_xray import cli, ingest
 from skill_xray.findings import Finding
 from skill_xray.llm import LLMConfigError
+
+
+def test_text_finding_location_includes_column(capsys):
+    finding = Finding(
+        vector="SXV-001", rule="preproc-inline-bang", severity="critical",
+        path="SKILL.md", message="inline preprocessing", line=4, column=7,
+    )
+    cli._print_findings(SimpleNamespace(name="demo"), [finding])
+    assert "L4:7" in capsys.readouterr().out
 
 
 def test_cli_reports_inventory_and_ledger(make_package, capsys):

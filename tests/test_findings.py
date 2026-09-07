@@ -39,3 +39,9 @@ def test_duplicates_do_not_consume_finding_cap():
     findings = cap_findings([duplicate] * FINDING_CAP + [unique])
 
     assert findings == [duplicate, unique]
+
+
+def test_legacy_positional_finding_fields_keep_their_meaning():
+    finding = Finding("SXV-001", "rule", "high", "SKILL.md", "message", 2, 9, 4, {"x": 1})
+
+    assert (finding.line, finding.offset, finding.length, finding.evidence) == (2, 9, 4, {"x": 1})
