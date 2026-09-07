@@ -209,7 +209,10 @@ def _prose_blocks(p):
                     yield " " * idx + fval + " " * (len(src) - idx - len(fval)), kline
                 else:
                     yield fval, kline           # folded/block scalar: key line, approximate column
-        yield from _source_span_blocks(p.text or "", wanted)
+        blocks = list(_source_span_blocks(p.text or "", wanted))
+        blocks.extend(getattr(markdown, "html_prose", ()))
+        blocks.sort(key=lambda block: block[1])
+        yield from blocks
         return
     yield from _plain_prose_blocks(p.text or "")
 

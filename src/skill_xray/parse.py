@@ -17,6 +17,8 @@ import tomllib
 import unicodedata
 import warnings
 from dataclasses import dataclass, field
+from html import unescape
+from html.parser import HTMLParser
 from urllib.parse import unquote
 
 import tree_sitter_bash
@@ -65,7 +67,7 @@ class Preproc:
 @dataclass
 class Markdown:
     """Line-anchored markdown: links, fenced/indented code, prose and reference-definition source
-    spans (so a prose check can skip code without reconstructing Markdown), preproc, has_html."""
+    spans, preprocessing, and source-mapped inspectable HTML."""
 
     links: list = field(default_factory=list)
     fences: list = field(default_factory=list)
@@ -74,11 +76,219 @@ class Markdown:
     reference_spans: list = field(default_factory=list)
     preproc: list = field(default_factory=list)
     preproc_counts: dict = field(default_factory=lambda: {"inline": 0, "fenced": 0})
+    html_comments: list = field(default_factory=list)
+    html_tags: list = field(default_factory=list)
+    html_prose: list = field(default_factory=list)
+    html_uninspectable: list = field(default_factory=list)
     has_html: bool = False
+    has_uninspectable_html: bool = False
 
 
-def _scan_inline(inline, line, md):
+_PRESENTATIONAL_HTML = {
+    "a", "abbr", "b", "bdi", "bdo", "blockquote", "br", "caption", "cite", "code",
+    "col", "colgroup", "dd", "del", "details", "dfn", "div", "dl", "dt", "em",
+    "figcaption", "figure", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img",
+    "ins", "kbd", "li", "mark", "ol", "p", "picture", "pre", "q", "rp", "rt",
+    "ruby", "s", "samp", "small", "source", "span", "strong", "sub", "summary", "sup",
+    "table", "tbody", "td", "tfoot", "th", "thead", "time", "tr", "u", "ul", "var",
+    "wbr",
+}
+_GLOBAL_HTML_ATTRS = {"class", "dir", "id", "lang", "role", "title"}
+_PROMPT_PLACEHOLDER_HTML = {"subject"}
+_TAG_HTML_ATTRS = {
+    "a": {"href", "rel", "target"},
+    "blockquote": {"cite"}, "q": {"cite"},
+    "col": {"span"}, "colgroup": {"span"},
+    "details": {"open"},
+    "img": {"alt", "height", "loading", "src", "width"},
+    "source": {"height", "media", "src", "type", "width"},
+    "td": {"colspan", "headers", "rowspan"},
+    "th": {"abbr", "colspan", "headers", "rowspan", "scope"},
+    "time": {"datetime"},
+}
+
+
+class _InspectableHTML(HTMLParser):
+    """Recognize inert presentation markup; anything behavior-bearing remains a gap."""
+
+    def __init__(self, line, column, md):
+        super().__init__(convert_charrefs=True)
+        self.line = line
+        self.column = column
+        self.md = md
+        self.fully_inspected = True
+        self.saw_markup = False
+        self.anchors = []
+        self.code_stack = []
+
+    def handle_starttag(self, tag, attrs):
+        self.saw_markup = True
+        tag = tag.lower()
+        line, column = self.getpos()
+        normalized_attrs = tuple((name.lower(), value or "") for name, value in attrs)
+        source_column = column + (self.column if line == 1 else 1)
+        self.md.html_tags.append((
+            tag, self.line + line - 1, source_column, False, normalized_attrs,
+        ))
+        names = [name for name, _value in normalized_attrs]
+        if len(names) != len(set(names)):
+            self.fully_inspected = False
+        allowed = _GLOBAL_HTML_ATTRS | _TAG_HTML_ATTRS.get(tag, set())
+        if (not (tag in _PRESENTATIONAL_HTML or tag in _PROMPT_PLACEHOLDER_HTML) or any(
+                not isinstance(name, str) or name.lower() not in allowed for name, _ in attrs)):
+            self.fully_inspected = False
+            return
+        if tag in {"code", "pre"}:
+            self.code_stack.append(tag)
+        values = {name.lower(): value or "" for name, value in attrs}
+        target = values.get("href") if tag == "a" else values.get("src")
+        if target:
+            compact_target = re.sub(r"[\x00-\x20]+", "", target).lower()
+            if (":" in compact_target
+                    and compact_target.partition(":")[0] in {"data", "javascript", "vbscript"}):
+                self.fully_inspected = False
+            if tag in {"img", "source"} and (
+                    compact_target.startswith("//")
+                    or re.match(r"^[a-z][a-z0-9+.-]*:", compact_target)):
+                self.fully_inspected = False
+            if tag == "a":
+                self.anchors.append([target, [], self.line + self.getpos()[0] - 1])
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag.lower() in {"code", "pre"} and self.code_stack:
+            self.code_stack.pop()
+        if tag.lower() == "a" and self.anchors:
+            target, label, line = self.anchors.pop()
+            self.md.links.append((target, "".join(label).strip(), line))
+
+    def handle_endtag(self, tag):
+        self.saw_markup = True
+        tag = tag.lower()
+        line, column = self.getpos()
+        source_column = column + (self.column if line == 1 else 1)
+        self.md.html_tags.append((tag, self.line + line - 1, source_column, True, ()))
+        if tag not in _PRESENTATIONAL_HTML and tag not in _PROMPT_PLACEHOLDER_HTML:
+            self.fully_inspected = False
+        if tag in {"code", "pre"}:
+            if not self.code_stack or self.code_stack[-1] != tag:
+                self.fully_inspected = False
+            else:
+                self.code_stack.pop()
+        if tag == "a" and self.anchors:
+            target, label, anchor_line = self.anchors.pop()
+            self.md.links.append((target, "".join(label).strip(), anchor_line))
+
+    def handle_data(self, data):
+        for _target, label, _line in self.anchors:
+            label.append(data)
+
+    def handle_comment(self, data):
+        self.saw_markup = True
+        line, column = self.getpos()
+        source_column = column + (self.column if line == 1 else 1)
+        self.md.html_comments.append((data, self.line + line - 1, source_column))
+
+    def handle_decl(self, _decl):
+        self.saw_markup = True
+        self.fully_inspected = False
+
+    def handle_pi(self, _data):
+        self.saw_markup = True
+        self.fully_inspected = False
+
+    def unknown_decl(self, _data):
+        self.saw_markup = True
+        self.fully_inspected = False
+
+
+def _inspect_html(fragment, line, md, column=1):
+    parser = _InspectableHTML(line, column, md)
+    try:
+        parser.feed(fragment)
+        parser.close()
+        if parser.anchors or parser.code_stack:
+            parser.fully_inspected = False
+    except (ValueError, RecursionError):
+        parser.fully_inspected = False
+    if not parser.saw_markup or not parser.fully_inspected:
+        md.has_uninspectable_html = True
+        md.html_uninspectable.append((fragment, line, column))
+    else:
+        md.html_prose.append((_project_html(fragment), line))
+
+
+_HTML_PROJECTION_TOKEN = re.compile(
+    # A `>` inside a quoted attribute value must not end the tag, or a following `<pre>`/`<code>`
+    # lookalike would flip the projection into code mode and blank real prose after it.
+    r"<!--.*?(?:-->|$)"
+    r"|<(?:[^>\"']|\"[^\"]*\"|'[^']*')*>"
+    r"|&(?:#[xX][0-9A-Fa-f]+;?|#\d+;?|[A-Za-z][A-Za-z0-9]+;)",
+    re.S,
+)
+
+
+def _blank_source(value):
+    return "".join("\n" if char == "\n" else " " for char in value)
+
+
+def _project_html(fragment):
+    """Rendered prose with source width/newlines retained for exact finding locations."""
+    output = []
+    position = 0
+    code_depth = 0
+    for match in _HTML_PROJECTION_TOKEN.finditer(fragment):
+        text = fragment[position:match.start()]
+        output.append(_blank_source(text) if code_depth else text)
+        token = match.group(0)
+        if token.startswith("<") and not token.startswith("<!--"):
+            tag_match = re.match(r"(?is)<\s*(/?)\s*([a-z][a-z0-9-]*)", token)
+            if tag_match and tag_match.group(2).lower() in {"code", "pre"}:
+                self_closing = token.rstrip().endswith("/>")
+                code_depth += -1 if tag_match.group(1) else (0 if self_closing else 1)
+                code_depth = max(code_depth, 0)
+            output.append(_blank_source(token))
+        elif token.startswith("&") and not code_depth:
+            decoded = unescape(token).replace("\r", " ").replace("\n", " ")
+            output.append((decoded + " " * len(token))[:len(token)])
+        else:
+            output.append(_blank_source(token))
+        position = match.end()
+    tail = fragment[position:]
+    output.append(_blank_source(tail) if code_depth else tail)
+    return "".join(output)
+
+
+def _mask_inline_code(source, children):
+    masked = list(source)
+    cursor = 0
+    for child in children:
+        if child.type != "code_inline":
+            continue
+        marker = child.markup or "`"
+        needle = marker + (child.content or "") + marker
+        start = source.find(needle, cursor)
+        if start < 0:
+            start = source.find(marker, cursor)
+            end = source.find(marker, start + len(marker)) if start >= 0 else -1
+        else:
+            end = start + len(needle) - len(marker)
+        if start < 0 or end < 0:
+            continue
+        stop = end + len(marker)
+        for index in range(start, stop):
+            if masked[index] != "\n":
+                masked[index] = " "
+        cursor = stop
+    return "".join(masked)
+
+
+def _scan_inline(inline, line, md, source=None):
     children = inline.children or []
+    source = source if source is not None else (inline.content or "")
+    if any(child.type == "html_inline" for child in children):
+        md.has_html = True
+        _inspect_html(_mask_inline_code(source, children), line, md)
     for j, c in enumerate(children):
         if c.type in ("softbreak", "hardbreak"):
             line += 1                     # inline children carry no map; count line breaks
@@ -90,8 +300,6 @@ def _scan_inline(inline, line, md):
                     break
                 txt += children[k].content or ""
             md.links.append((href, txt, line))
-        elif c.type == "html_inline":
-            md.has_html = True                    # opaque to CommonMark; a check reads .text
 
 
 _FENCE_OPEN_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
@@ -567,14 +775,19 @@ def parse_markdown(text, line_offset=0):
                     ))
         elif tok.type == "html_block":
             md.has_html = True
+            raw = "\n".join(source_lines[tok.map[0]:tok.map[1]]) if tok.map else tok.content
+            _inspect_html(raw, line, md)
             if tok.map:
-                md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
                 block_starts.add(tok.map[0])
         elif tok.type == "inline":
-            if tok.map:
+            has_inline_html = any(
+                child.type == "html_inline" for child in (tok.children or ())
+            )
+            if tok.map and not has_inline_html:
                 md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
                 block_starts.add(tok.map[0])
-            _scan_inline(tok, line, md)
+            raw = "\n".join(source_lines[tok.map[0]:tok.map[1]]) if tok.map else tok.content
+            _scan_inline(tok, line, md, raw)
         elif tok.type == "table_open" and tok.map:
             preproc_excluded.update(range(tok.map[0], tok.map[1]))
     # A CommonMark link reference definition (`[label]: url "title"`) emits no token, so its title
@@ -1086,7 +1299,7 @@ def _parse_python(p, text):
 
 
 def _parse_md(p, text, strip_fm=True):
-    """Markdown into the IR; raw HTML flagged. strip_fm=False for a doc (no frontmatter)."""
+    """Markdown into the IR; uninspectable HTML flagged. Docs have no frontmatter."""
     if p.rel.lower().endswith(".rst"):
         p.diagnostics.append(("unsupported_markup", "rst"))    # reStructuredText is not CommonMark
     body, off = _body_and_offset(text) if strip_fm else (text, 0)
@@ -1133,7 +1346,7 @@ def _parse_md(p, text, strip_fm=True):
         p.markdown.preproc_counts = dict(p.preprocessing_counts)
     if mderr:
         p.diagnostics.append(("markdown_parse_error", mderr))
-    elif p.markdown is not None and p.markdown.has_html:
+    elif p.markdown is not None and p.markdown.has_uninspectable_html:
         p.diagnostics.append(("raw_html", None))
 
 

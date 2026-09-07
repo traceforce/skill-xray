@@ -575,14 +575,24 @@ def _list_intro_index(raws, n):
 
 
 def _hidden_comment_findings(art):
-    """SXV-027: directive text hidden in an HTML comment, scanned on the raw .text."""
+    """SXV-027: directives in real HTML comments, excluding Markdown code examples."""
     out = []
     total = 0
-    text = art.text
-    line, cursor = 1, 0                          # running newline count; O(N), not O(N*matches)
-    for start, raw_body in _html_comments(text):
-        line += text.count("\n", cursor, start)
-        cursor = start
+    markdown = getattr(art, "markdown", None)
+    if markdown is None:
+        fragments = [(art.text, 1, 1)]
+        comments = []
+    else:
+        fragments = markdown.html_uninspectable
+        comments = list(markdown.html_comments)
+    for fragment, base_line, base_column in fragments:
+        for start, raw_body in _html_comments(fragment):
+            preceding = fragment[:start]
+            relative_line = preceding.count("\n")
+            last_break = preceding.rfind("\n")
+            column = (base_column + start) if relative_line == 0 else (start - last_break)
+            comments.append((raw_body, base_line + relative_line, column))
+    for raw_body, line, column in sorted(set(comments), key=lambda value: (value[1], value[2])):
         body = raw_body.strip()
         if not body or not _comment_is_directive(body):
             continue
@@ -592,11 +602,11 @@ def _hidden_comment_findings(art):
         one_line = body.replace("\n", " ")
         out.append(Finding(
             vector="SXV-027", rule="hidden-html-comment", severity="high",
-            path=art.rel, line=line,
+            path=art.rel, line=line, column=column,
             message=("an HTML comment in this instruction file carries a directive to the "
                      "agent: \"%s\". A markdown renderer hides it, so a human reviewer sees a "
                      "clean page while the model still reads it" % one_line[:160]),
-            evidence={"comment_body": body[:400], "line": line,
+            evidence={"comment_body": body[:400], "line": line, "column": column,
                       "selector": "hidden-comment:%s" %
                       hashlib.sha256(body.encode("utf-8")).hexdigest()[:12],
                       "snippet": one_line[:200]}))
@@ -682,7 +692,10 @@ def _prose_blocks(art):
         if fm_end and fm_end > 2:
             wanted.append((2, fm_end - 1))
         wanted.extend(spans)
-        yield from _source_span_blocks(art.text or "", wanted)
+        blocks = list(_source_span_blocks(art.text or "", wanted))
+        blocks.extend(getattr(art.markdown, "html_prose", ()))
+        blocks.sort(key=lambda block: block[1])
+        yield from blocks
         return
     yield from _plain_prose_blocks(art.text or "")
 
