@@ -7,6 +7,7 @@ advisory semantic pass is folded in on top of the deterministic findings. It rea
 
 from __future__ import annotations
 
+from .analyze import analyze_package
 from .checks import run_checks
 from .findings import Finding, dedupe_findings
 from .llm import adjudicate
@@ -20,7 +21,16 @@ def scan(parsed, *, client=None, opengrep_executable=None) -> list:
     Deterministic by default. When `client` is a configured LLM client (opt-in, the operator's
     own key), an advisory semantic-prompt-injection pass is added on top; it never removes or
     blocks a deterministic finding and fails closed on error."""
-    findings = list(run_checks(parsed, opengrep_executable=opengrep_executable))
+    # Byte-forensics reads the raw bytes the IR carries and is fail-closed per artifact. Guard the
+    # package-level call too, so a malformed IR is recorded as an error rather than aborting the
+    # scan (silence is not clean), matching run_checks' per-check isolation.
+    try:
+        findings = list(analyze_package(parsed))
+    except Exception as exc:
+        findings = [Finding(vector="", rule="analyzer-error", severity="low", path="",
+                            message="byte-forensics pass failed (%s); IR checks stand"
+                                    % type(exc).__name__)]
+    findings += list(run_checks(parsed, opengrep_executable=opengrep_executable))
     if client is not None:
         # The advisory pass is contracted never to raise, but it must never be ABLE to discard the
         # deterministic findings either: on any unexpected error keep them and record a low coverage
