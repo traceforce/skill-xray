@@ -67,3 +67,11 @@ def test_scan_isolates_a_raising_adjudicate(make_package, monkeypatch):
     findings = scanmod.scan(parsed, client=object())      # client only needs to be non-None
     assert any(f.vector == "SXV-008" for f in findings)
     assert any(f.rule == "llm-error" and f.path == "" for f in findings)
+
+
+def test_scan_includes_byte_forensics_findings(make_package):
+    elf = (b"\x7fELF\x02\x01\x01" + b"\x00" * 13 + (1).to_bytes(4, "little")
+           + b"\x00" * 28 + (64).to_bytes(2, "little") + b"\x00" * 10)
+    parsed = parse_package(build_package(make_package({"SKILL.md": _M, "notes.md": elf})))
+    findings = scan(parsed)
+    assert any(f.vector == "SXV-035" and f.path == "notes.md" for f in findings)
