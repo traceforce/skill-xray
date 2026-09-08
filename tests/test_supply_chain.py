@@ -492,3 +492,52 @@ def test_pip_option_line_is_not_a_dependency(make_package):
     f = [x for x in _check(make_package, {"requirements.txt": req})
          if x.vector == "SXV-016" and x.rule == "install-from-url"]
     assert f == []
+
+
+def test_long_private_keys_and_boundary_isolation(make_package):
+    for label in ("OPENSSH PRIVATE KEY", "PGP PRIVATE KEY BLOCK"):
+        header, footer = "-----BEGIN %s-----" % label, "-----END %s-----" % label
+        body = header + "\n" + "QUJDREVGR0hJSktMTU5PUA==\n" * 240
+        findings = _by_vector(_check(make_package, {"secret.pem": body + footer}), "SXV-017")
+        assert len(findings) == 1
+        hit = findings[0]
+        assert (hit.path, hit.line, hit.column, hit.severity) == ("secret.pem", 1, None, "high")
+        assert hit.evidence["rule"] == "private-key" and not hit.evidence["fenced_example"]
+        for broken in (body, body + "-----END RSA PRIVATE KEY-----",
+                       body + header + "\n" + footer):
+            assert not _by_vector(_check(make_package, {"secret.pem": broken}), "SXV-017")
+
+
+def test_credential_cap_retains_high_severity_after_fenced_examples(make_package):
+    examples = "\n".join("ghp_%036d" % i for i in range(FINDING_CAP + 2))
+    for prefix, suffix in (("```\n" + examples + "\n```\n", _AWS),
+                           (_AWS + "\n```\n", examples + "\n```")):
+        findings = _check(make_package, {"GUIDE.md": prefix + suffix})
+        hits = _by_vector(findings, "SXV-017")
+        assert len(hits) == FINDING_CAP
+        high = [f for f in hits if f.severity == "high"]
+        assert len(high) == 1 and high[0].evidence["rule"] == "aws-access-key-id"
+        assert high[0].line == (FINDING_CAP + 5 if prefix.startswith("```") else 1)
+        assert len([f for f in findings if f.rule == "findings-capped"]) == 1
+
+
+def test_credential_shaped_dependency_names_are_redacted(make_package):
+    for spec in ("*", "https://host/package.tgz"):
+        pkg = json.dumps({"dependencies": {_GHP: spec}})
+        findings = _check(make_package, {"package.json": pkg})
+        assert _by_vector(findings, "SXV-016") and _by_vector(findings, "SXV-017")
+        assert _GHP not in json.dumps([f.to_dict() for f in findings])
+
+
+def test_pep508_extras_do_not_duplicate_direct_reference(make_package):
+    req = "requests[socks] @ https://host/pkg.whl\n"
+    hits = _by_vector(_check(make_package, {"requirements.txt": req}), "SXV-016")
+    assert len(hits) == 1
+    assert (hits[0].rule, hits[0].severity, hits[0].line) == ("install-from-url", "medium", 1)
+
+
+def test_npm_direct_reference_does_not_invent_a_location(make_package):
+    pkg = json.dumps({"dependencies": {"library": "https://host/package.tgz"}}, indent=2)
+    hits = _by_vector(_check(make_package, {"package.json": pkg}), "SXV-016")
+    assert len(hits) == 1 and hits[0].path == "package.json"
+    assert hits[0].line is None and hits[0].column is None

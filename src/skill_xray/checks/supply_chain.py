@@ -23,9 +23,10 @@ from __future__ import annotations
 
 import re
 from bisect import bisect_right
+from heapq import nsmallest
 from urllib.parse import urlsplit, urlunsplit
 
-from ..findings import FINDING_CAP, Finding, cap_findings
+from ..findings import FINDING_CAP, SEVERITY_RANK, Finding, cap_findings
 
 # Severity strings the IR uses (lowercase).
 _HIGH = "high"
@@ -126,35 +127,30 @@ def _is_placeholder(rule_id, token):
     return rule_id == "slack-token" and bool(_SLACK_ZERO_PLACEHOLDER.fullmatch(token))
 
 
-def _valid_private_key_block(lines, header_index, header):
-    end_marker = header.replace("-----BEGIN ", "-----END ", 1)
-    saw_encoded = False
-    for line in lines[header_index + 1:header_index + 202]:
-        if end_marker in line:
-            return saw_encoded
-        encoded = line.strip()
-        if len(encoded) >= 16 and re.fullmatch(r"[A-Za-z0-9+/=]+", encoded):
-            saw_encoded = True
-    return False
-
-
 def _scan_secrets(text, in_fence):
-    """Yield (rule_id, lineno, matched, severity) for each committed credential.
-
-    A whole-line placeholder match suppresses the hit; a fenced hit is demoted to
-    MEDIUM rather than dropped. `in_fence` is None (no demotion) or a predicate."""
-    lines = text.split("\n")
-    for lineno, line in enumerate(lines, 1):
+    """Yield credential shapes, retaining only one pending private-key boundary."""
+    pending, saw_encoded = None, False
+    for lineno, line in enumerate(text.split("\n"), 1):
         for rule_id, rx, sev in _SECRET_RULES:
             for m in rx.finditer(line):
                 token = m.group(0)
                 if token in _KNOWN_EXAMPLE or _is_placeholder(rule_id, token):
                     continue                        # published example / placeholder token
-                if rule_id == "private-key" and not _valid_private_key_block(
-                        lines, lineno - 1, token):
+                if rule_id == "private-key":
+                    pending = (lineno, token, token.replace("-----BEGIN ", "-----END ", 1))
+                    saw_encoded = False
                     continue
                 fenced = bool(in_fence and in_fence(lineno))
                 yield rule_id, lineno, token, (_MEDIUM if fenced else sev)
+        if pending and lineno > pending[0]:
+            if pending[2] in line:
+                if saw_encoded:
+                    start, token, _end = pending
+                    fenced = bool(in_fence and in_fence(start))
+                    yield "private-key", start, token, (_MEDIUM if fenced else _HIGH)
+                pending = None
+            elif len(line.strip()) >= 16 and re.fullmatch(r"[A-Za-z0-9+/=]+", line.strip()):
+                saw_encoded = True
 
 
 def _sca_findings(parsed):
@@ -175,7 +171,7 @@ def _sca_findings(parsed):
                 continue                            # reported as install-from-url (medium), not low
             if eco == "PyPI" and _VCS_INSTALL_RE.search(dep.get("raw") or ""):
                 continue                            # a `name @ url` direct ref: medium, not low
-            name = dep.get("name")
+            name = _redact_source_secrets(dep.get("name") or "dependency")
             out.append(Finding(
                 vector="SXV-016", rule="unpinned-dependency", severity=_LOW,
                 path=p.rel,
@@ -195,12 +191,10 @@ def _secret_findings(parsed):
         in_fence = None
         if p.kind in _MARKDOWN_LANE and p.markdown is not None:
             in_fence = _fence_predicate(p.markdown)
-        emitted = 0
-        suppressed = 0
-        for rule_id, lineno, matched, sev in _scan_secrets(p.text, in_fence):
-            if emitted >= FINDING_CAP:
-                suppressed += 1
-                continue
+        # Keep memory bounded without letting early fenced examples hide later credentials.
+        selected = nsmallest(FINDING_CAP + 1, _scan_secrets(p.text, in_fence),
+                             key=lambda hit: (SEVERITY_RANK[hit[3]], hit[1]))
+        for rule_id, lineno, matched, sev in selected[:FINDING_CAP]:
             redacted = _redact(matched)
             out.append(Finding(
                 vector="SXV-017", rule="committed-credential", severity=sev,
@@ -210,8 +204,7 @@ def _secret_findings(parsed):
                 line=lineno, offset=None, length=None,
                 evidence={"rule": rule_id, "redacted": redacted,
                           "fenced_example": sev == _MEDIUM}))
-            emitted += 1
-        if suppressed:
+        if len(selected) > FINDING_CAP:
             out.append(Finding(
                 vector="", rule="findings-capped", severity=_LOW, path=p.rel,
                 message=("Additional committed-credential findings were suppressed after "
@@ -288,6 +281,7 @@ def _redact_source_secrets(source):
 
 def _install_finding(rel, name, source, line):
     safe_source = _sanitize_source(source)
+    name = _redact_source_secrets(name or "dependency")
     return Finding(
         vector="SXV-016", rule="install-from-url", severity=_MEDIUM, path=rel,
         message=("Dependency `%s` installs directly from a VCS/URL source (`%s`): the code "
@@ -328,7 +322,7 @@ def _vcs_install_findings(parsed):
             for dep in p.deps:
                 source = _npm_install_source(dep.get("specifier") or "")
                 if source:
-                    out.append(_install_finding(p.rel, dep.get("name"), source, 1))
+                    out.append(_install_finding(p.rel, dep.get("name"), source, dep.get("line")))
             continue
         seen = set()
         if _is_requirements_manifest(base) and p.text:
@@ -346,7 +340,7 @@ def _vcs_install_findings(parsed):
                 if m:
                     src = m.group(0).lstrip("@ ")
                     before = line[:m.start()].strip()
-                    name = re.split(r"[\s@<>=!~;]", before, maxsplit=1)[0]
+                    name = re.split(r"[\s@<>=!~;\[]", before, maxsplit=1)[0]
                     if not name or name in {"-e", "--editable"}:
                         name = "dependency"
                     seen.add((name, src))
