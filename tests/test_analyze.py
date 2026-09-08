@@ -8,6 +8,8 @@ import struct
 import zipfile
 import zlib
 
+import pytest
+
 from skill_xray import ingest, parse
 from skill_xray.analyze import analyze_artifact, analyze_package, sniff_magic
 from skill_xray.findings import SEVERITY_RANK
@@ -89,6 +91,7 @@ def test_executable_masquerades_are_high():
 def test_matching_image_and_compiled_formats_are_clean():
     assert analyze_artifact("icon.png", "asset", None, _PNG) == []
     assert analyze_artifact("lib/ext.so", "native_code", None, _ELF) == []
+    assert analyze_artifact("a.zip", "nested_archive", None, _make_zip({"a.txt": "hi"})) == []
 
 
 def test_script_renamed_to_image_is_flagged_as_text():
@@ -255,11 +258,6 @@ def test_truncated_gzip_is_not_a_valid_embedded_payload():
                 if f.evidence.get("detail") == "gzip"]
 
 
-def test_zip_that_ends_exactly_is_clean():
-    zb = _make_zip({"a.txt": "hi"})
-    assert _v(analyze_artifact("bundle.zip", "nested_archive", None, zb), "SXV-037") == []
-
-
 def test_zip_comment_is_part_of_the_logical_archive_end():
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
@@ -333,3 +331,42 @@ def test_ingest_retains_raw_reaches_analyzer(make_package):
     by_rel = {a.rel: a for a in pkg.artifacts}
     assert by_rel["logo.png"].raw == b"\x89PNG\r\n\x1a\n"     # asset bytes kept for forensics
     assert by_rel["logo.png"].text is None                   # but still not decoded text
+
+
+@pytest.mark.parametrize("start", [b"PK\x03\x04", b"PK\x07\x08", b"PK\x05\x06"])
+@pytest.mark.parametrize("end", [b"", b"PK\x05\x06" + b"\x01" * 18])
+def test_incomplete_zip_signatures_are_reported(start, end):
+    raw = start + b"\x00" * 8 + end
+    hits = _v(analyze_artifact("broken.zip", "nested_archive", None, raw), "SXV-037")
+    assert len(hits) == 1 and hits[0].severity == "low"
+    assert (hits[0].path, hits[0].offset, hits[0].length) == ("broken.zip", 0, len(raw))
+    assert "malformed or unsupported" in hits[0].message
+
+
+@pytest.mark.parametrize("name", ["x.pyc", "x.pyo", "x.wasm", "x.a", "lib.so.1.2"])
+def test_all_compiled_declarations_reject_zip_bytes(make_package, name):
+    raw = _make_zip({"x": "y"})
+    hits = _v(_analyzed(make_package, {"SKILL.md": _M, name: raw}), "SXV-035")
+    assert len(hits) == 1 and hits[0].severity == "high"
+    assert (hits[0].path, hits[0].offset, hits[0].length) == (name, 0, len(raw))
+    assert hits[0].evidence == {"detail": "zip"}
+    assert not _v(analyze_artifact("lib.so.1.2", "native_code", None, _ELF), "SXV-035")
+
+
+@pytest.mark.parametrize("name,raw", [
+    ("x.pyc", b"\xcb\x0d\x0d\x0a" + b"\x00" * 16),
+    ("x.pyo", b"\xcb\x0d\x0d\x0a" + b"\x00" * 16),
+    ("x.wasm", b"\x00asm\x01\x00\x00\x00"), ("x.a", b"!<arch>\n"),
+])
+def test_unrecognized_compiled_formats_are_not_invented_mismatches(make_package, name, raw):
+    assert not _v(_analyzed(make_package, {"SKILL.md": _M, name: raw}), "SXV-035")
+
+
+@pytest.mark.parametrize("carrier", [_PNG, _GIF, _JPEG])
+def test_padded_image_zip_payload_has_exact_high_severity_span(carrier):
+    payload = _make_zip({"payload": "inert"})
+    raw = carrier + b"padding" + payload
+    hits = _v(analyze_artifact("image.png", "asset", None, raw), "SXV-037")
+    hits = [f for f in hits if f.evidence.get("detail") == "zip"]
+    assert len(hits) == 1 and hits[0].severity == "high"
+    assert (hits[0].offset, hits[0].length) == (len(carrier) + 7, len(payload))

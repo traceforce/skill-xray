@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
+import re
 import zlib
-from dataclasses import replace
 
 from .findings import Finding, dedupe_findings
 
@@ -39,6 +39,7 @@ _EXT_EXPECT = {".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".gif": "gif"}
 _ARCHIVE_EXT_EXPECT = {".zip": "zip", ".whl": "zip", ".gz": "gzip", ".gzip": "gzip",
                        ".tgz": "gzip", ".7z": "sevenzip"}
 _COMPILED_EXT_EXPECT = {".jar": {"zip"}, ".war": {"zip"}, ".class": set(),
+    ".pyc": set(), ".pyo": set(), ".wasm": set(), ".a": set(),
     ".so": _EXECUTABLE, ".node": _EXECUTABLE, ".o": _EXECUTABLE,
     ".dylib": {"macho", "macho_fat"}, ".dll": {"pe"}, ".exe": {"pe"}, ".pyd": {"pe"}}
 
@@ -190,6 +191,12 @@ def _embedded_dangerous(raw: bytes):
     executable = _embedded_executable(raw)
     capped = executable is _CAPPED
     found = [executable]                                  # ELF / Mach-O / PE, header-validated
+    zip_info = _find_eocd(raw)
+    if isinstance(zip_info, dict):
+        start = zip_info["eocd"] - zip_info["cd_size"] - zip_info["cd_offset"]
+        if start > 0:
+            found.append((start, "zip"))
+    capped |= zip_info is _CAPPED
     for magic, validator, kind, cap in _EMBED_ARCHIVE_CHECKS:
         r = _first_validated(raw, magic, validator, kind, cap)
         if r is _CAPPED:
@@ -426,7 +433,7 @@ def _zip_findings(rel: str, raw: bytes) -> list:
             "an unusually large number of ZIP end-record signatures prevented complete "
             "validation", detail="capped")]
     if info is None:
-        if raw.startswith((b"PK\x03\x04", b"PK\x05\x06")):
+        if raw.startswith((b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")):
             return [_F(
                 "unreferenced-bytes", "low", rel,
                 "the ZIP structure is malformed or unsupported; trailing bytes could not "
@@ -529,85 +536,39 @@ def _png_findings(rel: str, raw: bytes) -> list:
 
 
 def _magic_mismatch(rel, declared, ext, detected, raw) -> list:
-    out = []
-    if declared == "text":
-        if _looks_textual(raw):
-            return out
-        if detected in _DANGEROUS:
-            out.append(_F(
-                "magic-mismatch", "high", rel,
-                "declared as readable text/code but the bytes are %s "
-                "(executable or archive masquerading as text)" % detected, detail=detected))
-        elif detected in _IMAGE_FORMATS:
-            out.append(_F(
-                "magic-mismatch", "low", rel,
-                "declared as text/code but the bytes are %s-format image data" % detected,
-                detail=detected))
-    elif declared == "image":
-        expect = _EXT_EXPECT.get(ext)
-        if detected in _DANGEROUS:
-            out.append(_F(
-                "magic-mismatch", "high", rel,
-                "an inert %s asset by name, but the bytes are %s "
-                "(executable or archive hidden as an asset)" % (ext or "binary", detected),
-                detail=detected))
-        elif detected is None and _looks_textual(raw):
-            out.append(_F(
-                "magic-mismatch", "medium", rel,
-                "an inert %s asset by name, but the bytes are text or a script"
-                % (ext or "binary"), detail="text"))
-        elif detected in _IMAGE_FORMATS and detected != expect:
-            out.append(_F(
-                "magic-mismatch", "low", rel,
-                "labeled %s but the bytes are %s-format image data" % (ext, detected),
-                detail=detected))
-    elif declared in {"svg", "pdf"}:
-        if detected in _DANGEROUS:
-            out.append(_F(
-                "magic-mismatch", "high", rel,
-                "an active document by name, but the bytes are %s "
-                "(executable or archive hidden as a document)" % detected, detail=detected))
-        elif detected in _IMAGE_FORMATS:
-            out.append(_F("magic-mismatch", "low", rel,
-                          "an active document by name, but the bytes are %s image data" % detected,
-                          detail=detected))
-    elif declared == "archive":
-        if detected in _EXECUTABLE:
-            out.append(_F(
-                "magic-mismatch", "high", rel,
-                "an archive by name, but the bytes are %s (an executable)" % detected,
-                detail=detected))
-        else:
-            expect = _ARCHIVE_EXT_EXPECT.get(ext)
-            if detected in _ARCHIVE and detected != expect:
-                out.append(_F(
-                    "magic-mismatch", "medium", rel,
-                    "labeled %s but the bytes are a %s archive" % (ext, detected),
-                    detail=detected))
-            elif detected in _IMAGE_FORMATS or (detected is None and _looks_textual(raw)):
-                actual = detected or "text"
-                out.append(_F(
-                    "magic-mismatch", "medium", rel,
-                    "an archive by name, but the bytes are %s" % actual, detail=actual))
-    elif declared == "compiled":
-        expected = _COMPILED_EXT_EXPECT.get(ext)
-        if detected in _DANGEROUS and expected is not None and detected not in expected:
-            out.append(_F(
-                "magic-mismatch", "high", rel,
-                "a compiled %s artifact contains %s bytes" % (ext, detected), detail=detected))
-    if not out and detected in _EXECUTABLE and declared != "compiled":
-        out.append(_F(
-            "magic-mismatch", "high", rel,
-            "named/declared as %s (%s) but the bytes are a %s executable"
-            % (declared, ext or "no extension", detected), detail=detected))
-    return [replace(finding, offset=0, length=len(raw)) for finding in out]
+    if declared == "text" and _looks_textual(raw):
+        return []
+    severity, detail = None, detected
+    if declared == "compiled":
+        if detected in _DANGEROUS and detected not in _COMPILED_EXT_EXPECT.get(ext, ()):
+            severity = "high"
+    elif detected in _EXECUTABLE:
+        severity = "high"
+    elif detected in _ARCHIVE:
+        if declared in {"text", "image", "svg", "pdf"}:
+            severity = "high"
+        elif declared == "archive" and detected != _ARCHIVE_EXT_EXPECT.get(ext):
+            severity = "medium"
+    elif detected in _IMAGE_FORMATS:
+        if (declared in {"text", "svg", "pdf"}
+                or declared == "image" and detected != _EXT_EXPECT.get(ext)):
+            severity = "low"
+        elif declared == "archive":
+            severity = "medium"
+    elif detected is None and declared in {"image", "archive"} and _looks_textual(raw):
+        severity, detail = "medium", "text"
+    if severity is None:
+        return []
+    return [_F("magic-mismatch", severity, rel,
+               "declared %s (%s), but bytes are %s" % (declared, ext or "no extension", detail),
+               offset=0, length=len(raw), detail=detail)]
 
 
 def analyze_artifact(rel: str, kind: str, text, raw: bytes) -> list:
     if not raw:
         return []
     try:
-        ext = os.path.splitext(rel)[1].lower()
+        ext = os.path.splitext(re.sub(r"\.so(?:\.\d+)+$", ".so", rel.lower()))[1]
         declared = _declared(kind, ext, text)
         detected = sniff_magic(raw)
         out = _magic_mismatch(rel, declared, ext, detected, raw)
@@ -615,7 +576,7 @@ def analyze_artifact(rel: str, kind: str, text, raw: bytes) -> list:
         if detected == "png":
             out += _png_findings(rel, raw)
 
-        if b"PK\x05\x06" in raw:
+        if b"PK\x05\x06" in raw or raw.startswith((b"PK\x03\x04", b"PK\x07\x08")):
             out += _zip_findings(rel, raw)
 
         if detected in _IMAGE_FORMATS or declared == "image":
