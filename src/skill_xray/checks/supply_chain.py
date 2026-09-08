@@ -15,15 +15,17 @@ Two sibling detections that share this module, both reading the parsed IR only:
 
 Precision is carried by structure, not entropy: only prefix/shape-verifiable
 credential rules fire (a bare 40-hex git SHA is intentionally NOT a rule), and a
-whole line that reads as a placeholder (`AKIA...EXAMPLE`, `<YOUR_KEY>`, `xxxx`)
-suppresses the hit. The network OSV/advisory arm is outside this offline,
-ledger-free `check` contract, so a pinned dependency contributes no finding."""
+small set of exact published examples and family-specific placeholder shapes is
+suppressed. The network OSV/advisory arm is outside this offline, ledger-free
+`check` contract, so a pinned dependency contributes no finding."""
 
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
+from urllib.parse import urlsplit, urlunsplit
 
-from ..findings import Finding
+from ..findings import FINDING_CAP, Finding, cap_findings
 
 # Severity strings the IR uses (lowercase).
 _HIGH = "high"
@@ -59,7 +61,8 @@ _SECRET_RULES = (
     # any PEM private-key label: bare PKCS#8, RSA/EC/DSA/DH, ENCRYPTED, OPENSSH, or PGP ... BLOCK.
     ("private-key",
      re.compile(r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"), _HIGH),
-    ("google-api-key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"), _HIGH),
+    ("google-api-key",
+     re.compile(r"(?<![0-9A-Za-z_-])AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])"), _HIGH),
     ("stripe-secret", re.compile(r"\b(?:sk|rk)_live_[0-9A-Za-z]{16,}\b"), _HIGH),
     # npm automation token (npm_ + 36 base62); PyPI upload token (pypi- + the fixed base64 of
     # "pypi.org", AgEIcHlwaS5vcmc, then the macaroon); Azure Storage/Service-Bus shared key
@@ -70,25 +73,14 @@ _SECRET_RULES = (
      re.compile(r"\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{32,}={0,2}"), _HIGH),
 )
 
-# A value that is obviously a placeholder is documentation, not a leak. Matched against the
-# TOKEN, not the whole line: the giveaway is INSIDE the token (AKIAIOSFODNN7EXAMPLE is AWS's
-# own doc key with no break before "EXAMPLE"). Line-scoping was wrong -- an unrelated "example"
-# in a trailing comment (`AKIA...  # cdn.example.com`) silently dropped a real credential.
-_PLACEHOLDER = re.compile(
-    r"(?i)(?:example|sample|dummy|placeholder|your[_-]?\w+|xxx+|redacted|"
-    r"replace[_-]?me|changeme|test[_-]?token|here\b|<[^>]+>|\.\.\.|(\d)\1{7,})"
-    # (\d)\1{7,}: a run of 8+ identical digits (0000000000, 1111...) is the numeric-zero
-    # placeholder convention (e.g. a xoxb-0000000000-... fake in a .env.example), never a real key.
+_SLACK_ZERO_PLACEHOLDER = re.compile(
+    r"^xox[abeprs]-0{10}-0{13}-[A-Za-z0-9-]+$"
 )
-# A credential-shaped token written as a truncated pattern example -- `ghp_abc...`,
-# `xoxb-1-2-abc...` in a reference table or docs -- is illustrative, never a live secret (a real
-# committed key is written whole so it works). Matched on the bytes right AFTER the token: an
-# ellipsis (`...` or the unicode `…`, past optional spaces) marks the truncation.
-_TRUNCATED = re.compile(r"\s*(?:\.\.\.|\u2026)")
 
 # Well-known PUBLISHED example credentials (docs/tutorials copy these verbatim); they carry no
 # in-token placeholder marker but are not live. An attacker uses a real key, never these.
 _KNOWN_EXAMPLE = frozenset({
+    "AKIAIOSFODNN7EXAMPLE",                       # AWS documentation key ID
     "ghp_16C7e42F292c6912E7710c838347Ae178B4a",   # GitHub's canonical PAT-format example
     # the Azurite / Azure Storage Emulator development key: a single global public constant baked
     # into every install and every Azure Functions sample's local.settings.json (devstoreaccount1).
@@ -102,7 +94,7 @@ _KNOWN_EXAMPLE = frozenset({
 
 # Markdown-lane kinds carry a fence predicate (fenced hits demote to MEDIUM); a
 # script, config, or raw secret_material file has no fence context (all HIGH).
-_MARKDOWN_LANE = {"skill_manifest", "instruction", "doc"}
+_MARKDOWN_LANE = {"skill_manifest", "instruction", "doc", "agent_identity"}
 
 
 def _ecosystem(rel):
@@ -119,22 +111,31 @@ def _redact(secret):
 
 
 def _fence_predicate(markdown):
-    """Reconstruct in_fence(lineno)->bool from markdown.fences.
+    """Return a predicate over exact fenced-block source spans."""
+    spans = tuple(markdown.fence_spans)
+    starts = tuple(start for start, _end in spans)
 
-    Each fence tuple is (info, content, line) with `line` the opening delimiter
-    (file-relative, 1-based, already offset past frontmatter -- matching the
-    line numbering used to scan the full .text). The opening marker, the body,
-    AND the closing marker are in-fence, so cover `line .. line + content.count
-    ('\\n') + 1` inclusive for each fence."""
-    fenced = set()
-    for _info, content, line in (markdown.fences or []):
-        if not isinstance(line, int) or line < 1:
-            continue                                # a mapless token has line 0: not a real fence
-        body_lines = (content or "").count("\n")
-        # opening (line) + body_lines + closing (one more) are all in-fence.
-        for n in range(line, line + body_lines + 2):
-            fenced.add(n)
-    return fenced.__contains__
+    def contains(line):
+        index = bisect_right(starts, line) - 1
+        return index >= 0 and line <= spans[index][1]
+
+    return contains
+
+
+def _is_placeholder(rule_id, token):
+    return rule_id == "slack-token" and bool(_SLACK_ZERO_PLACEHOLDER.fullmatch(token))
+
+
+def _valid_private_key_block(lines, header_index, header):
+    end_marker = header.replace("-----BEGIN ", "-----END ", 1)
+    saw_encoded = False
+    for line in lines[header_index + 1:header_index + 202]:
+        if end_marker in line:
+            return saw_encoded
+        encoded = line.strip()
+        if len(encoded) >= 16 and re.fullmatch(r"[A-Za-z0-9+/=]+", encoded):
+            saw_encoded = True
+    return False
 
 
 def _scan_secrets(text, in_fence):
@@ -142,14 +143,16 @@ def _scan_secrets(text, in_fence):
 
     A whole-line placeholder match suppresses the hit; a fenced hit is demoted to
     MEDIUM rather than dropped. `in_fence` is None (no demotion) or a predicate."""
-    for lineno, line in enumerate(text.split("\n"), 1):
+    lines = text.split("\n")
+    for lineno, line in enumerate(lines, 1):
         for rule_id, rx, sev in _SECRET_RULES:
             for m in rx.finditer(line):
                 token = m.group(0)
-                if token in _KNOWN_EXAMPLE or _PLACEHOLDER.search(token):
+                if token in _KNOWN_EXAMPLE or _is_placeholder(rule_id, token):
                     continue                        # published example / placeholder token
-                if _TRUNCATED.match(line[m.end():]):
-                    continue                        # truncated pattern example (`ghp_abc...`): docs
+                if rule_id == "private-key" and not _valid_private_key_block(
+                        lines, lineno - 1, token):
+                    continue
                 fenced = bool(in_fence and in_fence(lineno))
                 yield rule_id, lineno, token, (_MEDIUM if fenced else sev)
 
@@ -178,7 +181,7 @@ def _sca_findings(parsed):
                 path=p.rel,
                 message=("Dependency `%s` is declared without an exact version, so the "
                          "code installed is not the code reviewed." % name),
-                line=1, offset=None, length=None,
+                line=dep.get("line"), offset=None, length=None,
                 evidence={"ecosystem": eco, "package": name, "pin_state": "unpinned"}))
     return out
 
@@ -192,7 +195,12 @@ def _secret_findings(parsed):
         in_fence = None
         if p.kind in _MARKDOWN_LANE and p.markdown is not None:
             in_fence = _fence_predicate(p.markdown)
+        emitted = 0
+        suppressed = 0
         for rule_id, lineno, matched, sev in _scan_secrets(p.text, in_fence):
+            if emitted >= FINDING_CAP:
+                suppressed += 1
+                continue
             redacted = _redact(matched)
             out.append(Finding(
                 vector="SXV-017", rule="committed-credential", severity=sev,
@@ -202,6 +210,12 @@ def _secret_findings(parsed):
                 line=lineno, offset=None, length=None,
                 evidence={"rule": rule_id, "redacted": redacted,
                           "fenced_example": sev == _MEDIUM}))
+            emitted += 1
+        if suppressed:
+            out.append(Finding(
+                vector="", rule="findings-capped", severity=_LOW, path=p.rel,
+                message=("Additional committed-credential findings were suppressed after "
+                         "the per-file limit of %d." % FINDING_CAP)))
     return out
 
 
@@ -217,6 +231,7 @@ _VCS_INSTALL_RE = re.compile(
 
 _NPM_SHORTHAND_RE = re.compile(r"^(?:github|gitlab|bitbucket|gist):", re.I)
 _NPM_OWNER_REPO_RE = re.compile(r"^[A-Za-z0-9][\w.-]*/[\w.-]+(?:#.+)?$")
+_NPM_SCP_RE = re.compile(r"^git@[^:\s]+:[^\s]+$", re.I)
 
 
 def _npm_install_source(spec):
@@ -233,16 +248,68 @@ def _npm_install_source(spec):
         return s
     if _NPM_OWNER_REPO_RE.match(s):                   # bare owner/repo GitHub shorthand
         return s                                      # (a version/range/tag/file: spec has no '/')
+    if _NPM_SCP_RE.match(s):                          # git@github.com:owner/repo.git
+        return s
     return None
 
 
+def _sanitize_source(source):
+    """Remove URL credentials and opaque query/fragment values from report output."""
+    prefix = ""
+    candidate = source
+    if candidate.startswith("git+"):
+        prefix, candidate = "git+", candidate[4:]
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        parsed = None
+    if parsed and parsed.scheme and parsed.netloc:
+        host = parsed.hostname or ""
+        try:
+            port = parsed.port
+        except ValueError:
+            port = None
+        if port is not None:
+            host = "%s:%d" % (host, port)
+        safe = prefix + urlunsplit((parsed.scheme, host, parsed.path, "", ""))
+        return _redact_source_secrets(safe)
+    # Even malformed URLs must not retain opaque values in reports. Split these before the
+    # conservative userinfo fallback because urlsplit can reject malformed IPv6 authorities.
+    candidate = candidate.split("#", 1)[0].split("?", 1)[0]
+    candidate = re.sub(r"(?i)([a-z][a-z0-9+.-]*://)[^/@\s]+@", r"\1***@", candidate)
+    return _redact_source_secrets(prefix + candidate)
+
+
+def _redact_source_secrets(source):
+    for _rule_id, pattern, _severity in _SECRET_RULES:
+        source = pattern.sub(lambda match: _redact(match.group(0)), source)
+    return source
+
+
 def _install_finding(rel, name, source, line):
+    safe_source = _sanitize_source(source)
     return Finding(
         vector="SXV-016", rule="install-from-url", severity=_MEDIUM, path=rel,
         message=("Dependency `%s` installs directly from a VCS/URL source (`%s`): the code "
-                 "fetched is not a reviewed, pinned registry release." % (name, source[:120])),
+                 "fetched is not a reviewed, pinned registry release."
+                 % (name, safe_source[:120])),
         line=line, offset=None, length=None,
-        evidence={"install_source": source[:200], "pin_state": "vcs_or_url"})
+        evidence={"install_source": safe_source[:200], "pin_state": "vcs_or_url"})
+
+
+def _logical_requirement_lines(text):
+    """Yield pip continuation-joined lines with their first physical line."""
+    buf = ""
+    start = None
+    for number, raw in enumerate(text.split("\n") + [""], 1):
+        stripped = raw.rstrip()
+        if stripped.endswith("\\") and not stripped.lstrip().startswith("#"):
+            start = start or number
+            buf += stripped[:-1]
+            continue
+        yield start or number, buf + raw
+        buf = ""
+        start = None
 
 
 def _vcs_install_findings(parsed):
@@ -265,11 +332,11 @@ def _vcs_install_findings(parsed):
             continue
         seen = set()
         if _is_requirements_manifest(base) and p.text:
-            # A pip requirements file is line-oriented: raw-scan physical lines (accurate line
-            # numbers) for a bare archive URL, `-e <url>`, or a git+... line the parser drops. Skip
+            # Raw-scan logical pip lines for a bare archive URL, `-e <url>`, or a git+... line the
+            # parser drops. Preserve the first physical line across continuations. Skip
             # a pip GLOBAL OPTION line (--find-links / --index-url / -r / ...): it is configuration,
             # not a dependency -- only -e/--editable is an install directive.
-            for n, raw in enumerate(p.text.split("\n"), 1):
+            for n, raw in _logical_requirement_lines(p.text):
                 line = re.split(r"\s#", raw.strip(), maxsplit=1)[0].strip()   # drop inline comment
                 if not line or line.startswith("#"):
                     continue
@@ -278,8 +345,11 @@ def _vcs_install_findings(parsed):
                 m = _VCS_INSTALL_RE.search(line)
                 if m:
                     src = m.group(0).lstrip("@ ")
-                    seen.add(src)
-                    name = re.split(r"[\s@<>=!~;]", line, maxsplit=1)[0] or "dependency"
+                    before = line[:m.start()].strip()
+                    name = re.split(r"[\s@<>=!~;]", before, maxsplit=1)[0]
+                    if not name or name in {"-e", "--editable"}:
+                        name = "dependency"
+                    seen.add((name, src))
                     out.append(_install_finding(p.rel, name, src, n))
         # Classify PARSED deps (requirements AND pyproject): a PEP 508 `name @ url` direct ref
         # parses into .deps with dep.raw = the JOINED requirement (pip backslash-continuations
@@ -289,9 +359,10 @@ def _vcs_install_findings(parsed):
             m = _VCS_INSTALL_RE.search(dep.get("raw") or "")
             if m:
                 src = m.group(0).lstrip("@ ")
-                if src not in seen:
-                    out.append(_install_finding(p.rel, dep.get("name"), src, 1))
-                    seen.add(src)
+                if (dep.get("name"), src) not in seen:
+                    out.append(_install_finding(
+                        p.rel, dep.get("name"), src, dep.get("line")
+                    ))
     return out
 
 
@@ -299,4 +370,5 @@ def check(parsed) -> list:
     """Run supply-chain hygiene over the IR: unpinned deps (SXV-016) and committed
     credentials (SXV-017). Reads the parsed IR only -- no filesystem, no re-parse,
     no network."""
-    return _sca_findings(parsed) + _vcs_install_findings(parsed) + _secret_findings(parsed)
+    dependencies = cap_findings(_sca_findings(parsed) + _vcs_install_findings(parsed))
+    return dependencies + _secret_findings(parsed)

