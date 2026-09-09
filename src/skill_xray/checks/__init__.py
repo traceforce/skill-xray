@@ -15,6 +15,7 @@ from . import (
     obfuscation,
     persistence,
     preproc,
+    supply_chain,
     taint_engine,
 )
 from .code_lane import build_code_lane
@@ -29,6 +30,7 @@ _CHECKS = (
     obfuscation.check,
     persistence.check,
     preproc.check,
+    supply_chain.check,
     taint_engine.check,
 )
 

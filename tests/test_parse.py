@@ -40,6 +40,13 @@ def test_markdown_links_and_fences():
     assert any(info == "bash" and "echo hi" in code for info, code, _l in md.fences)
 
 
+def test_markdown_distinguishes_fenced_and_indented_code_spans():
+    md, error = parse.parse_markdown("```\ninside\n```\n\n    indented\n")
+    assert error is None
+    assert md.code_spans == [(1, 3), (5, 5)]
+    assert md.fence_spans == [(1, 3)]
+
+
 def test_markdown_indented_code_block_captured():
     # a 4-space indented code block is executable content markdown-it emits as a
     # code_block (no info string); it must be captured, never invisible (`curl|sh`).

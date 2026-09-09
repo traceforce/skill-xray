@@ -71,6 +71,7 @@ class Markdown:
 
     links: list = field(default_factory=list)
     fences: list = field(default_factory=list)
+    fence_spans: list = field(default_factory=list)
     code_spans: list = field(default_factory=list)
     prose_spans: list = field(default_factory=list)
     reference_spans: list = field(default_factory=list)
@@ -762,6 +763,10 @@ def parse_markdown(text, line_offset=0):
             md.fences.append((info, tok.content, line))
             if tok.map:
                 md.code_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
+                if tok.type == "fence":
+                    md.fence_spans.append(
+                        (tok.map[0] + 1 + line_offset, tok.map[1] + line_offset)
+                    )
             if info.startswith("!"):
                 source_line = source_lines[tok.map[0]] if tok.map else ""
                 marker = source_line.find(tok.markup)
@@ -1098,31 +1103,37 @@ def classify_manifest(config):
     return "generic"
 
 
-def _req_dep(raw):
+def _req_dep(raw, line=None):
     """A requirements/pyproject line -> dep dict or None; pinned = exact ==/=== (not `1.*`)."""
     try:
         req = Requirement(raw)
     except InvalidRequirement:
         return None
     pinned = any(s.operator in ("==", "===") and "*" not in s.version for s in req.specifier)
-    return {"name": req.name, "specifier": str(req.specifier), "pinned": pinned, "raw": raw}
+    return {"name": req.name, "specifier": str(req.specifier), "pinned": pinned,
+            "raw": raw, "line": line}
 
 
 def _parse_requirements(text):
-    deps, unhandled, buf = [], [], ""
-    for raw in text.split("\n") + [""]:        # trailing "" flushes a dangling `\` continuation
+    deps, unhandled, buf, start_line = [], [], "", None
+    lines = text.split("\n")
+    for line, raw in enumerate(lines + [""], 1):
         stripped = raw.rstrip()
         # A comment line is never a continuation, even ending in "\": pip's join_lines guards the
         # rule with COMMENT_RE, so "# note \" does not swallow the next dependency. Detecting the
         # comment BEFORE honoring "\" closes an evasion (hide a dep behind a backslash comment).
         if stripped.endswith("\\") and not stripped.lstrip().startswith("#"):
+            if not buf:
+                start_line = line
             buf += stripped[:-1]               # pip line continuation: accumulate, never rescan buf
             continue                            # (rescanning the whole buffer each line is O(n^2))
         s = re.split(r"\s(?:#|--)", buf + raw, maxsplit=1)[0].strip()   # drop trailing comment/opts
         buf = ""
+        dep_line = start_line or line
+        start_line = None
         if not s or s.startswith("#"):
             continue
-        dep = _req_dep(s)
+        dep = _req_dep(s, dep_line)
         if dep is not None:
             deps.append(dep)
         else:
