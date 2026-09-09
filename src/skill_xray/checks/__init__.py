@@ -5,6 +5,7 @@ IR-selected code into an isolated temporary directory; no check reopens package 
 
 from __future__ import annotations
 
+from ..analyze import analyze_package
 from ..findings import Finding
 from . import (
     coverage,
@@ -22,6 +23,7 @@ from .code_lane import build_code_lane
 
 # Registered checks, in a stable order. Each is a module-level check(parsed)->[Finding].
 _CHECKS = (
+    analyze_package,
     coverage.check,
     grants.check,
     hooks.check,
