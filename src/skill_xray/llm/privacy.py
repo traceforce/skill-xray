@@ -7,11 +7,12 @@ from ..checks.supply_chain import _SECRET_RULES, _sanitize_source
 _PEM = re.compile(
     r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----.*?"
     r"(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|\Z)", re.DOTALL)
-_AUTH = re.compile(r"\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
+_AUTH = re.compile(r"\b(?:Bearer|Basic)[ \t]+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
+_VALUE_GAP = r"[ \t]*(?:\n(?:[ \t]*\n)*[ \t]+)?"
 _NAMED = re.compile(
     r'''(?ims)((?<![\w-])(?=[\w-]*(?:token|password|passwd|secret|api[_-]?key|authorization))'''
     r'''[\w-]+'''
-    r"""["']?\s*[:=]\s*)(?:[!&][^\s]*\s+){0,2}(?:"""
+    r"""["']?[ \t]*[:=]""" + _VALUE_GAP + r")(?:[!&][^\s]*" + _VALUE_GAP + r"){0,2}(?:"
     r'[>|][1-9+-]*[^\n]*\n(?:[ \t]+[^\n]*(?:\n|\Z)|\n)*|'
     r'"""(?:\\.|(?!""").)*(?:"""|\Z)|'
     r"'''(?:\\.|(?!''').)*(?:'''|\Z)|"
