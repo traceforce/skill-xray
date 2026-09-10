@@ -7,6 +7,7 @@ import unicodedata
 from urllib.parse import unquote, urlsplit
 
 from ..checks.code_lane import _governing_manifest, _manifest_index
+from ..checks.instruction_exfil import _flatten_prose, _source_position
 from ..findings import vector_meta
 from .client import LLMError, LLMResponseError
 from .privacy import redact
@@ -126,6 +127,18 @@ def _proposal(reply, candidate_id, snippet):
     return obj
 
 
+def _directive_quote(lines, line, column, anchor):
+    if type(column) is not int or not 1 <= column <= len(lines[line - 1]):
+        return None
+    source = "\n".join(lines[line - 1:])[column - 1:]
+    if not source.startswith(anchor[:1]) or not _flatten_prose(source, 1).startswith(anchor):
+        return None
+    end_line, end_column = _source_position(source, 1, len(anchor) - 1)
+    parts = source.split("\n")
+    quote = "\n".join(parts[:end_line - 1] + [parts[end_line - 1][:end_column]])
+    return quote if _flatten_prose(quote, 1) == anchor else None
+
+
 def judge_candidates(parsed, candidates, triads, session, *, apply_review=False):
     decisions = []
     reviewed = {}
@@ -174,28 +187,28 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
         manifest = _governing_manifest(manifests, path)
         context = triads.get(manifest.rel if manifest else "")
         text = artifact.text if artifact else None
+        source_lines = text.split("\n") if isinstance(text, str) and len(text) <= 20000 else []
         decision.update(status="incomplete-context", reason="Missing or incomplete source context")
         if (context is None or not isinstance(text, str) or type(line) is not int or line < 1
-                or line > len(text.splitlines()) or len(text) > 20000
+                or line > len(source_lines) or len(text) > 20000
                 or "" in gaps or path in gaps or (manifest and manifest.rel in gaps)
                 or evidence.get("truncated")):
             continue
+        column = finding.get("column", evidence.get("col"))
+        quote = _directive_quote(source_lines, line, column, anchor)
         if apply_review:
             model = reviewer["model"]
             if not isinstance(model, str) or model.strip().lower() in {"", "unknown"}:
                 decision["reason"] = "Configured model identity unavailable; retained"
                 continue
-            column = finding.get("column", evidence.get("col"))
-            source_line = text.splitlines()[line - 1]
-            if (gaps or context.limitations or type(column) is not int or column < 1
-                    or source_line[column - 1:column - 1 + len(anchor)] != anchor):
+            if gaps or context.limitations or quote is None:
                 continue
         # Redact the full source before selecting a window, including keys spanning that window.
         redacted_source = redact(text)
         if apply_review and redacted_source != text:
             decision["reason"] = "Redaction removed source context; retained"
             continue
-        lines = redacted_source.splitlines()
+        lines = redacted_source.split("\n")
         start, end = max(0, line - 9), min(len(lines), line + 8)
         if artifact.markdown is not None:
             for lo, hi in artifact.markdown.prose_spans:
@@ -204,7 +217,7 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
         if apply_review:
             start, end = 0, len(lines)
         snippet = "\n".join(lines[start:end])
-        if len(snippet) > 6000 or redact(anchor) not in snippet:
+        if len(snippet) > 6000 or redact(anchor) not in _flatten_prose(snippet, start + 1):
             continue
         description = (manifest.frontmatter or {}).get("description") if manifest else None
         description = redact(description) if isinstance(description, str) else None
@@ -239,11 +252,12 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
                    "capabilities": {leg: getattr(context, leg) for leg in
                                     ("claimed", "declared", "observed")} if context else None}
         request["candidate"]["candidate_id"] = candidate["candidate_id"]
-        request["candidate"].update(path=redact(path), column=finding.get("column"),
+        request["candidate"].update(path=redact(path), column=column,
                                     title=vector_meta(finding["vector"])["title"],
-                                    evidence={"directive_text": redact(anchor)})
+                                    evidence={"directive_text": redact(anchor),
+                                              **({"directive_source": redact(quote)}
+                                                 if quote is not None else {})})
         if apply_review:
-            request["candidate"]["column"] = column
             request["manifest"]["source"] = manifest_source
         user = json.dumps(request, sort_keys=True, ensure_ascii=False)
         decision.update(request=request, request_sha256=hashlib.sha256(user.encode()).hexdigest())
