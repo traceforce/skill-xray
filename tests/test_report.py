@@ -21,6 +21,9 @@ def test_report_preserves_raw_and_detaches_evidence(make_package, monkeypatch):
     assert [c["finding"] for c in report.raw_candidates] == [f.to_dict() for f in raw]
     assert len({c["candidate_id"] for c in report.raw_candidates}) == len(raw)
     report.to_dict()["raw_candidates"][0]["finding"]["evidence"].clear()
+    serialized = report.to_dict()
+    assert json.loads(json.dumps(serialized))["findings"] == [f.to_dict() for f in report.findings]
+    serialized["findings"][0]["evidence"].clear()
     assert finding.evidence == {"original": True}
 
 
@@ -34,6 +37,7 @@ def test_report_context_failure_retains_findings(make_package, monkeypatch):
     report = scanmod.scan_report(parsed)
     assert report.findings == raw and report.context_errors
     assert report.raw_candidates[0]["coverage"] == "incomplete"
+    assert report.to_dict()["findings"] == [f.to_dict() for f in raw]
 
 
 def test_report_cli_and_public_api(make_package, capsys):
@@ -46,6 +50,7 @@ def test_report_cli_and_public_api(make_package, capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["findings"] == [f.to_dict() for f in report.findings]
     assert data["enrichment"]["raw_candidates"] == report.raw_candidates
+    assert "findings" not in data["enrichment"]
 
 
 def test_raw_scope_is_deterministic_with_additive_llm(make_package, monkeypatch):
@@ -60,3 +65,4 @@ def test_raw_scope_is_deterministic_with_additive_llm(make_package, monkeypatch)
     assert all(c["provenance"] == "deterministic-check-output" for c in report.raw_candidates)
     assert report.findings == dedupe_findings(raw + advisory)
     assert report.findings == scanmod.scan(parsed, client=object())
+    assert report.to_dict()["findings"] == [f.to_dict() for f in report.findings]

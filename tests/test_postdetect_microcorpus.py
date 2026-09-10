@@ -49,6 +49,11 @@ def test_native_report_preserves_every_emitted_candidate(make_package, monkeypat
     report = scanmod.scan_report(parsed)
     assert [c["finding"] for c in report.raw_candidates] == [f.to_dict() for f in raw]
     assert report.findings == dedupe_findings(raw)
+    if name == "benign":
+        assert not any(f.vector for f in raw)
+    if name == "directive":
+        assert any((f.vector, f.path, f.line, f.severity) ==
+                   ("SXV-028", "SKILL.md", 5, "high") for f in raw)
     if name == "understated_network":
         assert any(f.vector == "SXV-033" for f in raw)
     if name == "tainted_execution":

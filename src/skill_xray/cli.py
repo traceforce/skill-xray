@@ -183,6 +183,7 @@ def main(argv=None) -> int:
                 report = result if args.enrich else None
                 findings = report.findings if report else result
                 if args.json:
+                    enrichment = report.to_dict() if report else {}
                     analysis = {"opengrepVersion": OPENGREP_VERSION}
                     if client is not None:
                         analysis["llmCoverage"] = coverage_summary(parsed, findings)
@@ -190,8 +191,9 @@ def main(argv=None) -> int:
                         "package": pkg.name, "identity": pkg.identity,
                         "source": args.package, "kind": r.kind,
                         "analysis": analysis,
-                        "findings": findings_to_dicts(findings), "ledger": ledger,
-                        **({"enrichment": report.to_dict()} if report else {}),
+                        "findings": (enrichment.pop("findings") if report
+                                     else findings_to_dicts(findings)), "ledger": ledger,
+                        **({"enrichment": enrichment} if report else {}),
                     }, indent=2) + "\n")
                 else:
                     _print_findings(pkg, findings)

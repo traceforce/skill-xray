@@ -55,6 +55,7 @@ class ScanReport:
 
     def to_dict(self):
         return deepcopy({"schema_version": "context-v1",
+                         "findings": [finding.to_dict() for finding in self.findings],
                          "raw_scope": "emitted-check-results-before-reporting-deduplication",
                          "raw_candidates": self.raw_candidates,
                          "triads": {key: asdict(value) for key, value in self.triads.items()},
