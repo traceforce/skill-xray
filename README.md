@@ -53,7 +53,9 @@ use the network; each enforces size, count and SSRF limits and fails closed.
 ### Capability context and raw findings
 
 Use `--analyze --json --enrich` to include manifest-scoped capability context and
-every emitted raw candidate before reporting deduplication. Unknown is not safe.
+every emitted deterministic candidate before reporting deduplication. Unknown is not safe.
+With `--llm`, additive LLM findings and error notes remain in `findings`, not in the
+deterministic `raw_candidates` snapshot.
 Claims require complete supported English statements; unmodeled grants stay unknown.
 The existing `scan()` API and findings remain available; `scan_report()` adds context.
 Context failures remain visible and cannot remove findings. Candidate IDs are scan-local.

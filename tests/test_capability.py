@@ -60,6 +60,8 @@ def test_explicit_claims_and_uncertainty(make_package, description, state):
     ("allowed-tools: {invalid: value}", "unknown"), ("", "unknown"),
     ("disallowed-tools: WebFetch(**)", "denied"),
     ("disallowed-tools: WebFetch( * )", "denied"),
+    ("disallowed-tools: WebFetch(domain:*)", "denied"),
+    ("allowed-tools: WebFetch\ndisallowed-tools: WebFetch(DOMAIN:*)", "denied"),
 ])
 def test_grants_reuse_parser_and_explicit_states(make_package, grants, state):
     parsed = _parsed(make_package, {"SKILL.md": _manifest(grants=grants)})
@@ -309,3 +311,26 @@ def test_multiline_claim_excerpt_keeps_field_anchor(make_package, newline):
     hit = next(e for e in triad.evidence if e.get("capability") == "network")
     assert hit["text"] == "Uploads diagnostic logs." and hit["line"] == 3
     assert triad.claimed == {"execution": "present", "network": "present"}
+
+
+@pytest.mark.parametrize("capability,denial,understated", [
+    ("execution", "Bash(rm:*)", False), ("execution", "Bash(python:*)", False),
+    ("execution", "Bash(curl:*)", False), ("execution", "Bash", True),
+    ("network", "WebFetch(domain:*)", True),
+    ("network", "WebFetch(domain:example.invalid)", False),
+])
+def test_denial_scope_preserves_validated_observations(
+        make_package, capability, denial, understated):
+    code = ("import subprocess\nsubprocess.run(['echo', 'ok'])\n" if capability == "execution"
+            else "import requests\nrequests.get('https://example.invalid')\n")
+    parsed = _parsed(make_package, {
+        "SKILL.md": _manifest(grants="disallowed-tools: " + denial), "run.py": code})
+    observations = []
+    findings = findings_from_report({"results": [_result(capability)]},
+                                    {"0000.py": SelectedCode("run.py", code, "file")},
+                                    parsed=parsed, observations=observations)
+    assert bool([f for f in findings if f.vector == "SXV-033"]) is understated
+    assert _triads(parsed, observations)["SKILL.md"].observed[capability] == "present"
+    if understated:
+        assert (findings[0].path, findings[0].line, findings[0].severity) == ("run.py", 2, "high")
+        assert findings[0].evidence["understated_capability"] == capability

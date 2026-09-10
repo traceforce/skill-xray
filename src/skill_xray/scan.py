@@ -62,7 +62,7 @@ class ScanReport:
 
 
 def scan_report(parsed, *, client=None, opengrep_executable=None) -> ScanReport:
-    """Report emitted raw candidates and manifest context without changing findings."""
+    """Report deterministic raw candidates and context; additive LLM output stays in findings."""
     observations = []
     raw = _collect(parsed, opengrep_executable, observations)
     gaps = {f.path for f in raw if not f.vector}

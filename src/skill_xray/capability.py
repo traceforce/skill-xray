@@ -108,9 +108,7 @@ def _declarations(manifest, triad):
         triad.limitations.append("declaration-unparsed")
         return
     allowed = declared_capabilities(grants)
-    # A denial of one URL or command does not deny the entire capability axis.
-    denied = denied_capabilities(
-        g for g in grants if (g.pattern or "").strip() in {"", "*", "**", ":*"})
+    denied = denied_capabilities(grants)
     uncertain = set()
     for grant in effective_grants(grants):
         if grant.tool in _EXECUTION_TOOLS:

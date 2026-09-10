@@ -46,3 +46,17 @@ def test_report_cli_and_public_api(make_package, capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["findings"] == [f.to_dict() for f in report.findings]
     assert data["enrichment"]["raw_candidates"] == report.raw_candidates
+
+
+def test_raw_scope_is_deterministic_with_additive_llm(make_package, monkeypatch):
+    parsed = parse.parse_package(ingest.build_package(make_package({"SKILL.md": "# Test\n"})))
+    raw = [Finding("SXV-028", "instruction-override", "high", "SKILL.md", "live directive")]
+    advisory = [Finding("SXV-038", "llm-prompt-injection", "medium", "SKILL.md", "advisory"),
+                Finding("", "llm-error", "low", "", "incomplete advisory")]
+    monkeypatch.setattr(scanmod, "run_checks", lambda *_a, **_kw: raw)
+    monkeypatch.setattr(scanmod, "_advisory", lambda *_a: advisory)
+    report = scanmod.scan_report(parsed, client=object())
+    assert [c["finding"] for c in report.raw_candidates] == [f.to_dict() for f in raw]
+    assert all(c["provenance"] == "deterministic-check-output" for c in report.raw_candidates)
+    assert report.findings == dedupe_findings(raw + advisory)
+    assert report.findings == scanmod.scan(parsed, client=object())

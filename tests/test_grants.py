@@ -17,6 +17,9 @@ def test_network_denials_survive_both_capability_passes():
 @pytest.mark.parametrize("tool,capabilities", [
     ("Bash", {"execution"}), ("WebFetch(domain:example.invalid)", set()),
     ("WebFetch( * )", {"network"}), ("WebSearch(**)", {"network"}),
+    ("Bash(curl:*)", set()), ("Bash(rm:*)", set()), ("Shell(python:*)", set()),
+    ("Bash( ** )", {"execution"}), ("Shell(:*)", {"execution"}),
+    ("WebFetch(domain:*)", {"network"}), ("WebSearch(DOMAIN:*)", {"network"}),
 ])
 def test_denials_do_not_forbid_indirect_or_partially_scoped_capabilities(tool, capabilities):
     assert denied_capabilities(parse.parse_grants({"disallowed-tools": tool})) == capabilities
