@@ -259,7 +259,7 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
                                                  if quote is not None else {})})
         if apply_review:
             request["manifest"]["source"] = manifest_source
-        user = json.dumps(request, sort_keys=True, ensure_ascii=False)
+        user = json.dumps(request, sort_keys=True, ensure_ascii=True)
         decision.update(request=request, request_sha256=hashlib.sha256(user.encode()).hexdigest())
         if apply_review:
             decision["reviewer"] = reviewer
