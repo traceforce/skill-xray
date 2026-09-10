@@ -15,6 +15,7 @@ def check(
     opengrep_runner=None,
     code_units=None,
     lane_notes=None,
+    observations=None,
 ) -> list[Finding]:
     """Analyze the shared Python and shell lane in one OpenGrep process."""
     findings = list(lane_notes or ())
@@ -25,6 +26,7 @@ def check(
             runner=opengrep_runner,
             code_units=code_units,
             languages=("python", "shell"),
+            **({"observations": observations} if observations is not None else {}),
         ))
     except Exception as exc:
         findings.append(Finding(

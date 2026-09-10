@@ -39,7 +39,7 @@ _CHECKS = (
 __all__ = ["run_checks"]
 
 
-def run_checks(parsed, *, opengrep_executable=None) -> list:
+def run_checks(parsed, *, opengrep_executable=None, observations=None) -> list:
     """Run every registered check over the parsed package and return combined findings.
     Per-check isolated: one check raising cannot suppress the others."""
     findings = []
@@ -59,6 +59,7 @@ def run_checks(parsed, *, opengrep_executable=None) -> list:
                     executable=opengrep_executable,
                     code_units=code_units,
                     lane_notes=lane_notes,
+                    **({"observations": observations} if observations is not None else {}),
                 ) or [])
             else:
                 findings.extend(check(parsed) or [])

@@ -50,6 +50,14 @@ skill-xray <target> --json          # JSON output
 Directory, file and zip are fully offline. URL and git are the only inputs that
 use the network; each enforces size, count and SSRF limits and fails closed.
 
+### Capability context and raw findings
+
+Use `--analyze --json --enrich` to include manifest-scoped capability context and
+every emitted raw candidate before reporting deduplication. Unknown is not safe.
+Claims require complete supported English statements; unmodeled grants stay unknown.
+The existing `scan()` API and findings remain available; `scan_report()` adds context.
+Context failures remain visible and cannot remove findings. Candidate IDs are scan-local.
+
 ## Develop
 
 Requires Python 3.12.4 or newer: the junction check uses `os.path.isjunction`

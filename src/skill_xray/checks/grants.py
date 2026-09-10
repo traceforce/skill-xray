@@ -355,6 +355,7 @@ def effective_grants(grants):
 
 
 def _grant_capabilities(grants):
+    grants = list(grants)
     execution = False
     for grant in grants:
         if grant.tool not in _EXECUTION_TOOLS:
@@ -382,9 +383,15 @@ def declared_capabilities(grants):
 
 def denied_capabilities(grants):
     """Capabilities explicitly governed by parsed denial grants."""
-    return _grant_capabilities(
+    denials = [
         grant for grant in (grants or ()) if not grant.allowed and grant.parsed
-    )
+    ]
+    capabilities = _grant_capabilities(denials)
+    # Denying a shell (or one URL) is not a blanket denial of network APIs.
+    if not any(grant.tool in _NETWORK_TOOLS
+               and (grant.pattern or "").strip() in {"", "*", "**", ":*"} for grant in denials):
+        capabilities.discard("network")
+    return capabilities
 
 
 def _expandable_substitution(value):

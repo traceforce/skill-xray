@@ -1391,18 +1391,40 @@ def _scrub(value: object, prefixes=()) -> str:
     return text
 
 
+def _validated_capability(target, name, capability, line, column, parsed, trees):
+    if target.suffix != ".py":
+        return True
+    if name not in trees:
+        artifact = parsed.by_rel.get(target.rel) if target.origin == "file" else None
+        if artifact is not None:
+            trees[name] = artifact.py_tree
+        else:
+            try:
+                trees[name] = parse_python(target.text)
+            except (SyntaxError, ValueError, RecursionError, MemoryError):
+                trees[name] = None
+    tree = trees[name]
+    if tree is None:
+        return None
+    return not (capability == "execution" and _sink_is_shadowed(tree, line, column)
+                or capability == "network" and _network_capability_is_invalid(tree, line, column))
+
+
 def findings_from_report(
     report: dict,
     targets: dict[str, SelectedCode],
     *,
     parsed=None,
     redactions=(),
+    observations=None,
 ) -> list[Finding]:
     """Translate OpenGrep's stable JSON result shape into native findings."""
     findings = []
     python_trees: dict[str, ast.Module | None] = {}
     postfilter_counts: dict[str, int] = {}
     capability_postfilter_counts: dict[str, int] = {}
+    observation_trees: dict[str, ast.Module | None] = {}
+    observation_counts: dict[str, int] = {}
     known_vectors = vector_registry()
     manifests = _manifest_index(parsed) if parsed is not None else {}
     results = report.get("results", [])
@@ -1501,6 +1523,30 @@ def findings_from_report(
                     path=target.rel, severity="high",
                 ))
                 continue
+            if observations is not None:
+                # Optional context cannot consume finding-validation budgets or populate its cache.
+                count = observation_counts.get(target_name, 0)
+                observation_counts[target_name] = count + 1
+                valid = None
+                reason = "validation-budget"
+                if count < _MAX_POSTFILTERS_PER_TARGET:
+                    reason = "observation-unvalidated"
+                    try:
+                        valid = _validated_capability(
+                            target, target_name, capability, line, location["start"].get("col"),
+                            parsed, observation_trees,
+                        ) if not malformed_metavars else None
+                    except Exception:
+                        reason = "validation-error"
+                if valid is not False and count <= _MAX_POSTFILTERS_PER_TARGET:
+                    observations.append({
+                        "path": target.rel, "line": line,
+                        "column": location["start"].get("col"),
+                        "capability": capability, "state": "present" if valid else "unknown",
+                        "analyzer": "opengrep", "rule": rule, "vector": vector,
+                        "engine_rule": _rule_id(result.get("check_id")), "origin": target.origin,
+                        **({"reason": reason} if not valid else {}),
+                    })
             manifest = _governing_manifest(manifests, target.rel)
             if manifest is None:
                 continue
@@ -1570,25 +1616,10 @@ def findings_from_report(
                         },
                     ))
                     continue
-                if target_name not in python_trees:
-                    artifact = (parsed.by_rel.get(target.rel)
-                                if target.origin == "file" else None)
-                    if artifact is not None:
-                        python_trees[target_name] = artifact.py_tree
-                    else:
-                        try:
-                            python_trees[target_name] = parse_python(target.text)
-                        except (SyntaxError, ValueError, RecursionError, MemoryError):
-                            python_trees[target_name] = None
-                tree = python_trees[target_name]
-                if tree is None:
-                    # Without an AST the observation cannot be validated; the parse diagnostic
-                    # already records the incomplete analysis, so do not assert SXV-033.
-                    continue
-                column = location["start"].get("col")
-                if (capability == "execution" and _sink_is_shadowed(tree, line, column)
-                        or capability == "network"
-                        and _network_capability_is_invalid(tree, line, column)):
+                if not _validated_capability(
+                    target, target_name, capability, line, location["start"].get("col"),
+                    parsed, python_trees,
+                ):
                     continue
             declared = sorted(grant.tool for grant in effective_grants(grants) if grant.tool)
         python_candidate = vector in _PY_TAINT_VECTORS and target.suffix == ".py"
@@ -1764,6 +1795,7 @@ def check(
     runner=None,
     code_units=None,
     languages=("python",),
+    observations=None,
 ) -> list[Finding]:
     """Run OpenGrep and translate its report into native findings."""
     selected = select_executable_code(parsed, code_units, languages=languages)
@@ -1884,6 +1916,7 @@ def check(
             )]
         return cap_findings(
             findings_from_report(
-                report, targets, parsed=parsed, redactions=(root, rule_path, source_root)
+                report, targets, parsed=parsed, redactions=(root, rule_path, source_root),
+                observations=observations,
             ) + _coverage_from_report(report, targets)
         )
