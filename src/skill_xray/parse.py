@@ -83,6 +83,7 @@ class Markdown:
     html_uninspectable: list = field(default_factory=list)
     has_html: bool = False
     has_uninspectable_html: bool = False
+    paragraph_spans: list = field(default_factory=list)
 
 
 _PRESENTATIONAL_HTML = {
@@ -754,7 +755,7 @@ def parse_markdown(text, line_offset=0):
     source_lines = text.split("\n")
     preproc_excluded = set()
     block_starts = set()
-    for tok in tokens:
+    for index, tok in enumerate(tokens):
         line = (tok.map[0] + 1 + line_offset) if tok.map else 0
         if tok.type in ("fence", "code_block"):
             if tok.map:
@@ -790,6 +791,8 @@ def parse_markdown(text, line_offset=0):
             )
             if tok.map and not has_inline_html:
                 md.prose_spans.append((tok.map[0] + 1 + line_offset, tok.map[1] + line_offset))
+                if index and tokens[index - 1].type == "paragraph_open" and tok.level == 1:
+                    md.paragraph_spans.append(md.prose_spans[-1])
                 block_starts.add(tok.map[0])
             raw = "\n".join(source_lines[tok.map[0]:tok.map[1]]) if tok.map else tok.content
             _scan_inline(tok, line, md, raw)

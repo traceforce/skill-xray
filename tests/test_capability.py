@@ -155,6 +155,34 @@ def test_manifest_prose_claims_use_existing_markdown(make_package, body, state):
     assert _triads(parsed)["SKILL.md"].claimed["network"] == state
 
 
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+@pytest.mark.parametrize("body,network,execution", [
+    ("This skill uploads diagnostic logs.\nThis is an example, not a capability.",
+     "unknown", "unknown"),
+    ("This skill uploads diagnostic logs.\n\nThis is an example, not a capability.",
+     "unknown", "unknown"),
+    ("This skill uploads diagnostic logs.\n\n\n\nThis is an example, not a capability.",
+     "unknown", "unknown"),
+    ("Example text follows.\n\nThis skill uploads diagnostic logs.", "unknown", "unknown"),
+    ("This skill uploads diagnostic logs.\n\nThis skill runs scripts.", "present", "present"),
+    ("# Capabilities\n\nThis skill uploads diagnostic logs.", "present", "unknown"),
+    ("This skill uploads diagnostic logs.\n\n# Usage\n\nFormat local text.", "present", "unknown"),
+    ("This skill uploads diagnostic logs.\n\n```text\nThis is an example.\n```",
+     "present", "unknown"),
+])
+def test_prose_paragraph_context_and_anchors(make_package, newline, body, network, execution):
+    content = _manifest() + body + "\n"
+    parsed = _parsed(make_package, {"SKILL.md": content.replace("\n", newline)})
+    triad = _triads(parsed)["SKILL.md"]
+    assert triad.claimed == {"execution": execution, "network": network}
+    claims = [hit for hit in triad.evidence if hit.get("leg") == "claimed"]
+    if network == execution == "unknown":
+        assert not claims
+    for hit in claims:
+        assert hit["path"] == "SKILL.md"
+        assert content.splitlines()[hit["line"] - 1] == hit["text"]
+
+
 def test_partial_denial_does_not_deny_entire_axis(make_package):
     parsed = _parsed(make_package, {
         "SKILL.md": _manifest(grants="disallowed-tools: WebFetch(domain:example.invalid)"),

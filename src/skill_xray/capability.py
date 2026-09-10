@@ -48,19 +48,32 @@ def _claims(manifest, triad):
     description = (manifest.frontmatter or {}).get("description")
     sources = []
     if isinstance(description, str):
-        sources.append((description, manifest.frontmatter_key_lines.get("description")))
+        sources.append((description, manifest.frontmatter_key_lines.get("description"), False))
     if manifest.markdown is not None:
         lines = (manifest.text or "").splitlines()
-        for start, end in manifest.markdown.prose_spans:
+        spans = []
+        for start, end in manifest.markdown.paragraph_spans:
+            # Blank lines do not separate a claim from its qualification.
+            if spans and not any(part.strip() for part in lines[spans[-1][1]:start - 1]):
+                spans[-1] = (spans[-1][0], end)
+            else:
+                spans.append((start, end))
+        for start, end in spans:
             block = lines[start - 1:min(end, len(lines))]
             if block and block[0].lower().startswith("this skill "):
-                sources.append(("\n".join(block), start))
+                sources.append(("\n".join(block), start, True))
     states = {axis: set() for axis in AXES}
-    for text, line in sources:
+    for text, line, prose in sources:
         evidence = []
         supported = True
+        position = 0
         # A matching prefix cannot excuse an unsupported qualification elsewhere in the source.
         for statement in re.split(r"(?<=[.!])\s+", text.strip()):
+            start = text.index(statement, position)
+            statement_line = line + text.count("\n", position, start) if prose else line
+            if prose:
+                line = statement_line + statement.count("\n")
+            position = start + len(statement)
             sentence = " ".join(statement.lower().split()).rstrip(".!")
             clauses = sentence.split(" and ")
             if len(statement) > 400 or (len(clauses) > 1 and re.search(
@@ -78,7 +91,7 @@ def _claims(manifest, triad):
                     supported = False
                     break
                 for axis in matched:
-                    evidence.append({"path": manifest.rel, "line": line,
+                    evidence.append({"path": manifest.rel, "line": statement_line,
                                      "leg": "claimed", "capability": axis,
                                      "state": "denied" if negative else "present",
                                      "text": statement})
