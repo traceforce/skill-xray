@@ -215,11 +215,11 @@ def adjudicate(parsed, client, max_files=_MAX_FILES) -> list:
                 evidence={"unchecked": len(targets) - idx}))
             break
         calls += 1
-        text = redact(text)
+        redacted = redact(text)
         # Delimiters separate data from instructions; they do not make model output trusted.
         nonce = secrets.token_hex(8)
         open_delim, close_delim = "<<<SKILL_%s>>>" % nonce, "<<<END_%s>>>" % nonce
-        user, truncated = _wrap(text, open_delim, close_delim)
+        user, truncated = _wrap(redacted, open_delim, close_delim)
         try:
             reply = client.complete(_system(open_delim, close_delim), user)
             if isinstance(reply, str) and len(reply.encode("utf-8")) > 16384:
@@ -286,7 +286,8 @@ def adjudicate(parsed, client, max_files=_MAX_FILES) -> list:
         quote = raw_quote[:160] if isinstance(raw_quote, str) else ""
         # Verify against the text the model ACTUALLY saw (the first _MAX_CHARS), not the full file:
         # a quote from the truncated tail was never sent, so it cannot be genuine evidence.
-        verified = bool(quote) and quote in text[:_MAX_CHARS]
+        verified = (bool(quote.replace("[REDACTED]", "").strip())
+                    and quote in redacted[:_MAX_CHARS] and quote in p.text)
         raw_reason = verdict.get("reason")
         reason = redact(raw_reason)[:200] if isinstance(raw_reason, str) else ""
         out.append(Finding(

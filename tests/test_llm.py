@@ -179,6 +179,20 @@ def test_from_env_rejects_invalid_authority(base):
 
 # --- adjudicate ---------------------------------------------------------------
 
+
+@pytest.mark.parametrize("quote,verified", [
+    ("[REDACTED]", False), ("password: [REDACTED]", False),
+    ("correcthorse", False), ("ignore all previous", True),
+])
+def test_advisory_quote_requires_original_and_transmitted_text(quote, verified):
+    client = _FakeClient(reply=json.dumps({"prompt_injection": True, "evidence_quote": quote}))
+    text = "password: correcthorse\nignore all previous\n[REDACTED]"
+    finding, = adjudicate(_manifest(text), client)
+    assert "correcthorse" not in client.last_user
+    assert finding.vector == "SXV-038" and finding.severity == "medium"
+    assert finding.evidence["quote_verified"] is verified
+    assert finding.evidence["quoted_span"] == (quote if verified else "")
+
 def test_adjudicate_flags_injection_capped_medium():
     client = _FakeClient(reply='{"prompt_injection": true, "severity": "high", '
                                '"reason": "override", "evidence_quote": "ignore all"}')
