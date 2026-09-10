@@ -120,15 +120,25 @@ def main(argv=None) -> int:
                          "SKILLXRAY_LLM_PROVIDER and an API key in the environment")
     ap.add_argument("--enrich", action="store_true",
                     help="include capability context and raw candidates with --analyze --json")
+    ap.add_argument("--llm-shadow", action="store_true",
+                    help="review static candidates only, without additive SXV-038 detection; "
+                         "requires --llm --json")
+    ap.add_argument("--llm-review", action="store_true",
+                    help="annotate disputed findings without removing or downgrading them; "
+                         "requires --llm --json")
+    ap.add_argument("--llm-additive", action="store_true",
+                    help="also run SXV-038 after LLM review, using the remaining shared budget")
     ap.add_argument("--install-opengrep", action="store_true",
                     help="download and verify the pinned OpenGrep runtime, then exit")
     ap.add_argument("--json", action="store_true", help="emit the inventory as JSON")
     ap.add_argument("--version", action="version", version="skill-xray %s" % __version__)
     args = ap.parse_args(argv)
+    reviewing = args.llm_shadow or args.llm_review
 
     if args.install_opengrep:
         if (args.package or args.scan_known_skills or args.analyze
-                or args.json or args.opengrep_bin or args.llm or args.enrich):
+                or args.json or args.opengrep_bin or args.llm or args.enrich or args.llm_shadow
+                or args.llm_additive or args.llm_review):
             ap.error("--install-opengrep is a standalone action")
         try:
             installed = install_opengrep()
@@ -142,7 +152,8 @@ def main(argv=None) -> int:
     if args.scan_known_skills:
         if args.package:
             ap.error("--scan-known-skills takes no package argument")
-        if args.analyze or args.opengrep_bin or args.llm or args.enrich:
+        if (args.analyze or args.opengrep_bin or args.llm or args.enrich or args.llm_shadow
+                or args.llm_additive or args.llm_review):
             ap.error("--scan-known-skills does not accept analysis options")
         return _scan_known(args.json)
 
@@ -151,9 +162,14 @@ def main(argv=None) -> int:
 
     if args.opengrep_bin and not args.analyze:
         ap.error("--opengrep-bin requires --analyze")
-
-    if args.enrich and not (args.analyze and args.json):
-        ap.error("--enrich requires --analyze --json")
+    if (args.enrich or reviewing) and not (args.analyze and args.json):
+        ap.error("--enrich and LLM review require --analyze --json")
+    if reviewing and not args.llm:
+        ap.error("LLM review requires explicit --llm opt-in")
+    if args.llm_shadow and args.llm_review:
+        ap.error("--llm-shadow and --llm-review are mutually exclusive")
+    if args.llm_additive and not reviewing:
+        ap.error("--llm-additive requires --llm-shadow or --llm-review")
 
     # Build the opt-in LLM client up front so a misconfiguration fails before the scan runs.
     client = None
@@ -175,18 +191,26 @@ def main(argv=None) -> int:
             ledger = build_ledger(pkg)
             if args.analyze:
                 parsed = parse_package(pkg)
-                result = (scan_report if args.enrich else scan)(
+                result = (scan_report if args.enrich or reviewing else scan)(
                     parsed,
                     client=client,
                     opengrep_executable=args.opengrep_bin,
+                    **({"llm_shadow": args.llm_shadow,
+                        "llm_review": args.llm_review,
+                        "llm_advisory": args.llm_additive or not reviewing}
+                       if args.enrich or reviewing else {}),
                 )
-                report = result if args.enrich else None
+                report = result if args.enrich or reviewing else None
                 findings = report.findings if report else result
                 if args.json:
                     enrichment = report.to_dict() if report else {}
                     analysis = {"opengrepVersion": OPENGREP_VERSION}
                     if client is not None:
                         analysis["llmCoverage"] = coverage_summary(parsed, findings)
+                        if report and not report.llm_usage["advisory_enabled"]:
+                            cov = analysis["llmCoverage"]
+                            cov.update(enabled=False, checked=0, skipped=cov["eligible"],
+                                       reason="Additive SXV-038 pass not requested")
                     sys.stdout.write(json.dumps({
                         "package": pkg.name, "identity": pkg.identity,
                         "source": args.package, "kind": r.kind,

@@ -11,10 +11,10 @@ It is the counterpart of `mcp-xray`, which does the same for MCP servers.
 
 ## Status
 
-This version does ingest and parse. Ingest walks a package into a file inventory and a
-coverage ledger; parse turns each ingested artifact into one shared representation (the
-IR), line-anchored for markdown, frontmatter, and shell, that the checks stage will read.
-It does not yet run checks or emit SARIF, and it never executes the package.
+Ingest builds an inventory and coverage ledger. Parsing produces the shared IR;
+`--analyze` runs deterministic checks, including the pinned OpenGrep code lane.
+Analysis gaps remain visible in the findings. The scanner does not execute the
+package. SARIF output is not implemented.
 
 The walker reads a package it does not trust, so:
 
@@ -50,17 +50,56 @@ skill-xray <target> --json          # JSON output
 Directory, file and zip are fully offline. URL and git are the only inputs that
 use the network; each enforces size, count and SSRF limits and fails closed.
 
-### Capability context and raw findings
+### Capability context and LLM review
 
-Use `--analyze --json --enrich` to include manifest-scoped capability context and
-every emitted deterministic candidate before reporting deduplication. Unknown is not safe.
-With `--llm`, additive LLM findings and error notes remain in `findings`, not in the
-deterministic `raw_candidates` snapshot.
-Claims require complete supported English statements; unmodeled grants stay unknown.
-The existing `scan()` API and findings remain available; `scan_report()` adds context.
-Context failures remain visible and cannot remove findings. Candidate IDs are scan-local.
-Bounded reviewer contracts are included here but are not activated by the scanner.
-Any existing opt-in LLM advisory pass uses the shared call/input budget and redaction.
+`skill-xray <target> --analyze --json --enrich` adds manifest-scoped
+claimed/declared/observed execution and network context. Unknown does not mean
+denied or safe. Claims require complete supported English statements in descriptions
+or self-referential manifest prose; ambiguous wording stays unknown. Observations
+reuse OpenGrep validation and mechanical preprocessing findings, not a new detector.
+Claims and grants never authorize a finding's behavior.
+
+Add `--llm --llm-shadow` to request non-authoritative review of supported
+SXV-028/029/030/031 text-pattern findings using the configured LLM client.
+Shadow mode sends static candidates only; no candidates means no model calls.
+It supplies the rule's security condition, matched evidence, nearby source and
+the governing description. Descriptions remain untrusted, not authorization.
+Identical findings share a review within the scan; each raw candidate remains available.
+Verdicts are `retain_finding`, `propose_false_positive` or `insufficient_context`.
+A false-positive proposal must identify a missing rule condition; contradictory
+mechanism/intent fields are rejected. This validates the response contract, not
+the truth of the model's reasoning. No proposal changes deterministic findings.
+Other rule types remain explicitly ineligible, not adjudicated or cleared.
+
+`--llm --llm-review` annotates qualifying false-positive proposals as `llm-disputed`.
+It never removes a finding or changes its severity: attacker-controlled skill text may
+mislead the reviewer. A dispute requires high confidence, an unsupported rule mechanism,
+legitimate context, a configured model and complete bounded source context. Uncertain,
+redacted, linked-outside-context, failed, capped or oversized cases receive no dispute.
+Raw candidates and final findings remain intact. `dispositions` records tags, reasons,
+policy, configured provider/model, sanitized requests and prompt/schema/response hashes.
+Exact duplicates share a review. Mechanical findings and coverage/error notes cannot be disputed.
+Confidence is the model's assessment, not calibration. Review annotations do not improve
+the precision of the unchanged finding set; real-model dispute quality remains unvalidated.
+Do not automatically suppress or downgrade findings based on a dispute tag in downstream CI.
+Shadow and annotated review modes are mutually exclusive; the existing `scan()` API is unchanged.
+
+`--llm` without either review flag keeps the existing additive SXV-038 behavior.
+To run both, add `--llm-additive`; SXV-038 then uses the budget left after candidate
+review. Both share 25 logical calls and 1 MiB of input per scan; HTTP retries
+remain separately bounded. Candidate review does not adjudicate SXV-038 outputs.
+
+The JSON `enrichment` object preserves emitted raw candidates, scoped context,
+proposals, sanitized request snapshots and budget/error information. Candidate
+IDs are local to one scan, not stable baseline identities. Upstream analyzer
+caps and deduplication still apply and their coverage notes remain visible.
+The Python `scan()` API is unchanged; `scan_report()` provides enrichment.
+`raw_candidates` contains deterministic results only; additive LLM findings and
+error notes remain in `findings`.
+
+LLM use sends skill text to the configured provider. Credential redaction is
+best-effort, not a guarantee; do not send confidential packages on that assumption.
+Mock tests establish integration behavior, not real-model precision or recall.
 
 ## Develop
 
