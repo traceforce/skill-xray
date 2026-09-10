@@ -1,5 +1,6 @@
 """Direct review-policy, transport and privacy contracts; no report API dependency."""
 
+import errno
 import json
 import os
 from contextlib import nullcontext
@@ -39,8 +40,13 @@ def test_native_review_uses_parser_lines_and_exact_quotes(
     if os.name == "nt" and "\udcff" in path:
         pytest.skip("surrogate-escaped byte filenames are POSIX-only")
     text = "---\nname: demo\n---\n" + prefix + "Please " + quote + ".\n"
-    parsed = parse.parse_package(ingest.build_package(make_package({
-        path: text.replace("\n", newline)})))
+    try:
+        root = make_package({path: text.replace("\n", newline)})
+    except OSError as exc:
+        if "\udcff" not in path or exc.errno != errno.EILSEQ:
+            raise
+        pytest.skip("filesystem rejects non-UTF-8 filenames")
+    parsed = parse.parse_package(ingest.build_package(root))
     finding = next(f for f in directive_check(parsed) if f.vector == "SXV-028")
     candidates = [{"candidate_id": "candidate-000000", "finding": finding.to_dict()}]
     saved = deepcopy(candidates)
