@@ -240,6 +240,32 @@ def test_decorated_secret_redaction_reaches_outbound_advisory(make_package):
     assert _TEXT in requests[0]
 
 
+@pytest.mark.parametrize("scalar", [
+    "correct horse battery staple", "correct horse\n  battery staple",
+    "correct horse\n\n  battery staple", "correct, horse; battery staple",
+    "!!str &credential correct horse\n  battery staple",
+    "Bearer correct horse battery staple",
+])
+def test_plain_yaml_credential_is_fully_redacted_before_transmission(make_package, scalar):
+    field = "password: " + scalar + "\n"
+    value = YAML(typ="safe").load(field)["password"]
+    assert all(part in value for part in ("correct", "horse", "battery", "staple"))
+    source = "---\nname: demo\n" + field + "---\n" + _TEXT
+    redacted = redact(source)
+    assert redacted.count("\n") == source.count("\n") and _TEXT in redacted
+    assert not any(part in redacted for part in ("correct", "horse", "battery", "staple"))
+    parsed = parse.parse_package(ingest.build_package(make_package({"SKILL.md": source})))
+    requests = []
+
+    def complete(system, user):
+        requests.append(user)
+        return '{"prompt_injection": false}'
+
+    assert adjudicate(parsed, LLMSession(SimpleNamespace(complete=complete))) == []
+    assert len(requests) == 1 and _TEXT in requests[0]
+    assert not any(part in requests[0] for part in ("correct", "horse", "battery", "staple"))
+
+
 def test_decorated_multiline_redaction_is_bounded_and_keeps_following_text():
     source = 'password: !!str &credential "' + "opaque-value\n" * 2000 + '"\n' + _TEXT
     start = perf_counter()
