@@ -6,7 +6,7 @@ directive regexes cannot generalise to). It is ADVISORY and opt-in:
 
   - runs only when the operator passed a client (their own key, their choice of vendor);
   - treats the skill text as UNTRUSTED DATA and instructs the model never to follow it,
-    so a skill cannot manipulate its own adjudication (meta-injection);
+    but model compliance is not a security guarantee;
   - caps a finding at 'medium' -- an LLM judgement with no mechanical anchor is a
     candidate/warning, never a proven critical;
   - fails CLOSED: an unreachable endpoint, a per-file error, a truncated or budget-skipped file,
@@ -22,6 +22,8 @@ import secrets
 
 from ..findings import Finding
 from .client import LLMError, LLMResponseError
+from .privacy import redact
+from .session import LLMBudgetError
 
 __all__ = ["adjudicate", "coverage_summary", "INSTRUCTION_KINDS"]
 
@@ -213,13 +215,21 @@ def adjudicate(parsed, client, max_files=_MAX_FILES) -> list:
                 evidence={"unchecked": len(targets) - idx}))
             break
         calls += 1
-        # Per-call random nonce delimiters: the skill text cannot forge them to break out of the
-        # UNTRUSTED-DATA section and inject instructions into the classifier.
+        text = redact(text)
+        # Delimiters separate data from instructions; they do not make model output trusted.
         nonce = secrets.token_hex(8)
         open_delim, close_delim = "<<<SKILL_%s>>>" % nonce, "<<<END_%s>>>" % nonce
         user, truncated = _wrap(text, open_delim, close_delim)
         try:
             reply = client.complete(_system(open_delim, close_delim), user)
+            if isinstance(reply, str) and len(reply.encode("utf-8")) > 16384:
+                raise LLMResponseError("LLM response exceeded text budget")
+        except LLMBudgetError:
+            out.append(Finding(
+                vector="", rule="llm-budget", severity="low", path=p.rel,
+                message="Shared LLM budget exhausted; remaining instruction files unchecked",
+                evidence={"unchecked": len(targets) - idx}))
+            break
         except LLMResponseError as exc:
             # The endpoint answered but this response was unusable (not JSON / wrong shape /
             # non-text). The endpoint is alive, so note THIS file and keep checking later ones.
@@ -235,7 +245,7 @@ def adjudicate(parsed, client, max_files=_MAX_FILES) -> list:
                 vector="", rule="llm-unavailable", severity="low", path=p.rel,
                 message="LLM adjudication did not complete (%s); deterministic findings stand "
                         "and this file and any later instruction files were not LLM-checked"
-                        % str(exc),
+                        % type(exc).__name__,
                 evidence={"unchecked": len(targets) - idx}))
             break
         except Exception as exc:
@@ -278,7 +288,7 @@ def adjudicate(parsed, client, max_files=_MAX_FILES) -> list:
         # a quote from the truncated tail was never sent, so it cannot be genuine evidence.
         verified = bool(quote) and quote in text[:_MAX_CHARS]
         raw_reason = verdict.get("reason")
-        reason = raw_reason[:200] if isinstance(raw_reason, str) else ""
+        reason = redact(raw_reason)[:200] if isinstance(raw_reason, str) else ""
         out.append(Finding(
             vector="SXV-038", rule="semantic-prompt-injection",
             severity=_severity(verdict.get("severity")), path=p.rel,

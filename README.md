@@ -59,6 +59,8 @@ deterministic `raw_candidates` snapshot.
 Claims require complete supported English statements; unmodeled grants stay unknown.
 The existing `scan()` API and findings remain available; `scan_report()` adds context.
 Context failures remain visible and cannot remove findings. Candidate IDs are scan-local.
+Bounded reviewer contracts are included here but are not activated by the scanner.
+Any existing opt-in LLM advisory pass uses the shared call/input budget and redaction.
 
 ## Develop
 
