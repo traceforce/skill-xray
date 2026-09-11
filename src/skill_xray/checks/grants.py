@@ -329,12 +329,18 @@ def _command_substitution_head(tokens):
     return substitution
 
 
+def _blanket_grant(grant):
+    pattern = (grant.pattern or "").strip().lower()
+    return pattern in {"", "*", "**", ":*"} or (
+        grant.tool in _NETWORK_TOOLS and pattern == "domain:*")
+
+
 def _denial_covers(denial, grant):
     if denial.tool != grant.tool or denial.allowed or not denial.parsed:
         return False
     denied = (denial.pattern or "").strip()
     allowed = (grant.pattern or "").strip()
-    if not denied or denied.lower() in {"*", "**", ":*"} or denied == allowed:
+    if _blanket_grant(denial) or denied == allowed:
         return True
     if denied.endswith(":*"):
         prefix = denied[:-2].rstrip()
@@ -355,6 +361,7 @@ def effective_grants(grants):
 
 
 def _grant_capabilities(grants):
+    grants = list(grants)
     execution = False
     for grant in grants:
         if grant.tool not in _EXECUTION_TOOLS:
@@ -381,10 +388,11 @@ def declared_capabilities(grants):
 
 
 def denied_capabilities(grants):
-    """Capabilities explicitly governed by parsed denial grants."""
-    return _grant_capabilities(
-        grant for grant in (grants or ()) if not grant.allowed and grant.parsed
-    )
+    """Axis-wide denials only; a forbidden command or URL does not deny its entire axis."""
+    tools = {grant.tool for grant in (grants or ())
+             if not grant.allowed and grant.parsed and _blanket_grant(grant)}
+    return {axis for axis, names in (("execution", _EXECUTION_TOOLS), ("network", _NETWORK_TOOLS))
+            if tools & names}
 
 
 def _expandable_substitution(value):

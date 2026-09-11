@@ -23,7 +23,7 @@ from .opengrep_runtime import VERSION as OPENGREP_VERSION
 from .opengrep_runtime import OpenGrepRuntimeError, install_opengrep
 from .parse import parse_package
 from .resolve import IngestLimitExceededError, UnsafeInputError, resolved_input
-from .scan import scan
+from .scan import scan, scan_report
 
 
 def _artifact_rows(pkg):
@@ -118,6 +118,8 @@ def main(argv=None) -> int:
                          "SENDS THE TEXT of the scanned skill files to the configured third-party "
                          "LLM provider, so do not use it on confidential packages. Requires "
                          "SKILLXRAY_LLM_PROVIDER and an API key in the environment")
+    ap.add_argument("--enrich", action="store_true",
+                    help="include capability context and raw candidates with --analyze --json")
     ap.add_argument("--install-opengrep", action="store_true",
                     help="download and verify the pinned OpenGrep runtime, then exit")
     ap.add_argument("--json", action="store_true", help="emit the inventory as JSON")
@@ -126,7 +128,7 @@ def main(argv=None) -> int:
 
     if args.install_opengrep:
         if (args.package or args.scan_known_skills or args.analyze
-                or args.json or args.opengrep_bin or args.llm):
+                or args.json or args.opengrep_bin or args.llm or args.enrich):
             ap.error("--install-opengrep is a standalone action")
         try:
             installed = install_opengrep()
@@ -140,7 +142,7 @@ def main(argv=None) -> int:
     if args.scan_known_skills:
         if args.package:
             ap.error("--scan-known-skills takes no package argument")
-        if args.analyze or args.opengrep_bin or args.llm:
+        if args.analyze or args.opengrep_bin or args.llm or args.enrich:
             ap.error("--scan-known-skills does not accept analysis options")
         return _scan_known(args.json)
 
@@ -149,6 +151,9 @@ def main(argv=None) -> int:
 
     if args.opengrep_bin and not args.analyze:
         ap.error("--opengrep-bin requires --analyze")
+
+    if args.enrich and not (args.analyze and args.json):
+        ap.error("--enrich requires --analyze --json")
 
     # Build the opt-in LLM client up front so a misconfiguration fails before the scan runs.
     client = None
@@ -170,12 +175,15 @@ def main(argv=None) -> int:
             ledger = build_ledger(pkg)
             if args.analyze:
                 parsed = parse_package(pkg)
-                findings = scan(
+                result = (scan_report if args.enrich else scan)(
                     parsed,
                     client=client,
                     opengrep_executable=args.opengrep_bin,
                 )
+                report = result if args.enrich else None
+                findings = report.findings if report else result
                 if args.json:
+                    enrichment = report.to_dict() if report else {}
                     analysis = {"opengrepVersion": OPENGREP_VERSION}
                     if client is not None:
                         analysis["llmCoverage"] = coverage_summary(parsed, findings)
@@ -183,7 +191,9 @@ def main(argv=None) -> int:
                         "package": pkg.name, "identity": pkg.identity,
                         "source": args.package, "kind": r.kind,
                         "analysis": analysis,
-                        "findings": findings_to_dicts(findings), "ledger": ledger,
+                        "findings": (enrichment.pop("findings") if report
+                                     else findings_to_dicts(findings)), "ledger": ledger,
+                        **({"enrichment": enrichment} if report else {}),
                     }, indent=2) + "\n")
                 else:
                     _print_findings(pkg, findings)
@@ -194,7 +204,7 @@ def main(argv=None) -> int:
                             "%d skipped, %d errored, %d flagged\n" % (
                                 cov["eligible"], cov["checked"], cov["truncated"],
                                 cov["skipped"], cov["errored"], cov["flagged"]))
-                if any(
+                if (report and report.context_errors) or any(
                     not finding.vector and finding.severity in {"critical", "high"}
                     for finding in findings
                 ):

@@ -27,7 +27,7 @@ from .resolve import (
     UnsafeInputError,
     resolved_input,
 )
-from .scan import scan
+from .scan import scan, scan_report
 
 __version__ = "0.1.0"
 
@@ -42,6 +42,7 @@ __all__ = [
     "ParsedArtifact",
     "run_checks",
     "scan",
+    "scan_report",
     "vector_registry",
     "findings_to_dicts",
     "Finding",
