@@ -144,6 +144,7 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
     reviewed = {}
     manifests = _manifest_index(parsed)
     gaps = {c["finding"]["path"] for c in candidates if not c["finding"]["vector"]}
+    gap_rules = {c["finding"]["rule"] for c in candidates if not c["finding"]["vector"]}
     reviewer = {key: session.usage()[key] for key in ("provider", "model")}
     reviewer.update(prompt_sha256=hashlib.sha256(_SYSTEM.encode()).hexdigest(),
                     schema_sha256=hashlib.sha256(json.dumps(
@@ -201,7 +202,8 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
             if not isinstance(model, str) or model.strip().lower() in {"", "unknown"}:
                 decision["reason"] = "Configured model identity unavailable; retained"
                 continue
-            if gaps or context.limitations or quote is None:
+            # Coverage gaps are path-scoped above; other semantic limitations still block review.
+            if set(context.limitations) - gap_rules or quote is None:
                 continue
         # Redact the full source before selecting a window, including keys spanning that window.
         redacted_source = redact(text)
