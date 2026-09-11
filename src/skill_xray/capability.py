@@ -53,8 +53,14 @@ def _claims(manifest, triad):
         lines = (manifest.text or "").splitlines()
         spans = []
         for start, end in manifest.markdown.paragraph_spans:
-            # Blank lines do not separate a claim from its qualification.
-            if spans and not any(part.strip() for part in lines[spans[-1][1]:start - 1]):
+            qualifier = re.match(r"(?i)^(?:this (?:is|was)\b|that\b|these\b|those\b|"
+                                 r"but\b|however\b|unless\b|except\b|only\b|not\b|never\b|"
+                                 r"does not\b)",
+                                 lines[start - 1].strip())
+            example = spans and re.match(r"(?i)^(?:(?:for )?example\b|the following example\b)",
+                                         lines[spans[-1][0] - 1].strip())
+            if spans and (qualifier or example) and not any(
+                    part.strip() for part in lines[spans[-1][1]:start - 1]):
                 spans[-1] = (spans[-1][0], end)
             else:
                 spans.append((start, end))
