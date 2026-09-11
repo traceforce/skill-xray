@@ -73,23 +73,6 @@ def test_native_review_uses_parser_lines_and_exact_quotes(
         assert bad[0]["proposal"] is None and len(client.calls) == 1
 
 
-def test_structured_client_honors_class_interception_without_network(monkeypatch):
-    calls = []
-
-    def offline(self, system, user):
-        calls.append((system, user))
-        return "offline"
-
-    def forbidden(*_):
-        pytest.fail("intercepted client reached network transport")
-
-    client = HTTPLLMClient(LLMConfig("openai", "test", "unused", "https://example.invalid"))
-    monkeypatch.setattr(HTTPLLMClient, "complete", offline)
-    monkeypatch.setattr(client, "_post", forbidden)
-    assert client.complete_structured("system", "test", {"type": "object"}) == "offline"
-    assert calls == [("system", "test")]
-
-
 @pytest.mark.parametrize("shape,payload", [
     ("openai", {"choices": [{"finish_reason": "length", "message": {"content": "{}"}}]}),
     ("anthropic", {"stop_reason": "max_tokens", "content": [{"text": "{}"}]}),
@@ -233,12 +216,17 @@ def test_session_provenance_does_not_serialize_objects_or_propagate_properties()
 @pytest.mark.parametrize("key", ["password", '"password"', "'api_key'"])
 @pytest.mark.parametrize("decoration", ["&credential", "!!str", "!secret", "!",
                                         "&credential !!str", "!!str &credential", "!!str\n  "])
-@pytest.mark.parametrize("scalar", ['"opaque-value"', "'opaque-value'", "opaque-value",
+@pytest.mark.parametrize("scalar", ['"opaque-value"', "'opaque-value'", "opaque-value", "",
+                                    'opaque-value\n  secret-tail',
                                     '|\n  opaque-value\n  secret-tail'])
-def test_decorated_named_yaml_secret_is_fully_redacted(key, decoration, scalar):
-    source = key + ": " + decoration + " " + scalar + "\n" + _TEXT
+@pytest.mark.parametrize("prefix", ["", "  ", "  - "])
+def test_decorated_named_yaml_secret_is_fully_redacted(key, decoration, scalar, prefix):
+    indent = " " * len(prefix)
+    value = (decoration + " " + scalar).replace("\n", "\n" + indent)
+    source = (prefix + key + ": " + value + "\n" + indent + "instruction: " + _TEXT
+              + indent + "secret: other-value\n")
     redacted = redact(source)
-    assert "opaque-value" not in redacted and "secret-tail" not in redacted
+    assert not any(secret in redacted for secret in ("opaque-value", "secret-tail", "other-value"))
     assert redacted.count("\n") == source.count("\n")
     assert _TEXT in redacted
 

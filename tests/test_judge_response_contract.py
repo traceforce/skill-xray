@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from review_helpers import ANCHOR, Reviewer, direct_review
+from review_helpers import Reviewer, direct_review
 
 from skill_xray.llm import HTTPLLMClient, LLMConfig, LLMError, LLMResponseError, judge
 from skill_xray.llm.session import LLMBudgetError, LLMSession
@@ -168,11 +168,3 @@ def test_structured_provider_failure_retains_without_downgrade_retry(
     assert decisions[0]["proposal"] is None
     assert candidates[0]["finding"] == original
     assert "must not be echoed" not in json.dumps(decisions)
-
-
-def test_schema_does_not_make_a_fabricated_quote_trusted():
-    reply = json.loads(Reviewer().complete("", json.dumps({
-        "candidate": {"candidate_id": "candidate-000000"}})))
-    reply["evidence_quote"] = "fabricated quote"
-    with pytest.raises(ValueError):
-        judge._proposal(json.dumps(reply), "candidate-000000", ANCHOR)

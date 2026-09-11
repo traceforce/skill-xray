@@ -287,7 +287,7 @@ def adjudicate(parsed, client, max_files=_MAX_FILES) -> list:
         # Verify against the text the model ACTUALLY saw (the first _MAX_CHARS), not the full file:
         # a quote from the truncated tail was never sent, so it cannot be genuine evidence.
         verified = (bool(quote.replace("[REDACTED]", "").strip())
-                    and quote in redacted[:_MAX_CHARS] and quote in p.text)
+                    and quote in redacted[:_MAX_CHARS] and quote in text)
         raw_reason = verdict.get("reason")
         reason = redact(raw_reason)[:200] if isinstance(raw_reason, str) else ""
         out.append(Finding(
