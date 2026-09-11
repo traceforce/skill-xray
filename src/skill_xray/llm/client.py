@@ -80,6 +80,16 @@ class HTTPLLMClient(LLMClient):
         self._opener = urllib.request.build_opener(_NoRedirectHandler())
 
     def complete(self, system: str, user: str) -> str:
+        return self._complete(system, user)
+
+    def complete_structured(self, system: str, user: str, schema: dict) -> str:
+        # Existing interceptors may enforce offline operation, routing or redaction.
+        if getattr(self.complete, "__func__", None) is not _ORIGINAL_HTTP_COMPLETE:
+            return self.complete(system, user)
+        # Do not assume another provider supports OpenAI's strict schema contract.
+        return self._complete(system, user, schema if self.cfg.provider == "openai" else None)
+
+    def _complete(self, system: str, user: str, schema=None) -> str:
         if self.cfg.provider == "anthropic":
             url = self.cfg.base_url + "/v1/messages"
             headers = {"x-api-key": self.cfg.api_key, "anthropic-version": "2023-06-01",
@@ -94,6 +104,9 @@ class HTTPLLMClient(LLMClient):
         body = {"model": self.cfg.model, _openai_token_field(self.cfg): self.cfg.max_tokens,
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": user}]}
+        if schema is not None:
+            body["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": "finding_review", "strict": True, "schema": schema}}
         return self._extract(self._post(url, headers, body), "openai")
 
     def _read_bounded(self, req):
@@ -128,6 +141,8 @@ class HTTPLLMClient(LLMClient):
                     break
                 chunks.append(chunk)
                 total += len(chunk)
+            if total >= _MAX_RESPONSE_BYTES:
+                raise LLMResponseError("LLM response exceeded byte budget")
             return b"".join(chunks)
 
     @staticmethod
@@ -181,17 +196,25 @@ class HTTPLLMClient(LLMClient):
     def _extract(payload, shape):
         try:
             if shape == "anthropic":
+                if payload.get("stop_reason") == "max_tokens":
+                    raise LLMResponseError("LLM response was truncated")
                 parts = payload["content"]
                 text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
             else:
+                if payload["choices"][0].get("finish_reason") in {"length", "content_filter"}:
+                    raise LLMResponseError("LLM response was truncated or filtered")
                 text = payload["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
+        except (KeyError, IndexError, TypeError, AttributeError) as exc:
             raise LLMResponseError("bad LLM response shape: %s" % type(exc).__name__) from None
         if not isinstance(text, str):
             # structurally present but non-text content (a list/object) from an odd endpoint: a
             # per-response error, not a transport failure -- the caller notes it and continues.
             raise LLMResponseError("LLM response content was not text (%s)" % type(text).__name__)
         return text
+
+
+# Capture once: replacing the class method must not bypass an installed interceptor.
+_ORIGINAL_HTTP_COMPLETE = HTTPLLMClient.complete
 
 
 def build_client(config: LLMConfig) -> LLMClient:

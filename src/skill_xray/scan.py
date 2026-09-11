@@ -14,6 +14,7 @@ from .capability import build_triads
 from .checks import run_checks
 from .findings import Finding, dedupe_findings
 from .llm import adjudicate
+from .llm.session import LLMSession
 
 __all__ = ["scan", "scan_report", "ScanReport"]
 
@@ -41,7 +42,7 @@ def scan(parsed, *, client=None, opengrep_executable=None) -> list:
     blocks a deterministic finding and fails closed on error."""
     findings = _collect(parsed, opengrep_executable)
     if client is not None:
-        findings += _advisory(parsed, client)
+        findings += _advisory(parsed, LLMSession(client))
     return dedupe_findings(findings)
 
 
@@ -62,7 +63,8 @@ class ScanReport:
                          "llm_usage": self.llm_usage, "context_errors": self.context_errors})
 
 
-def scan_report(parsed, *, client=None, opengrep_executable=None) -> ScanReport:
+def scan_report(parsed, *, client=None, opengrep_executable=None,
+                max_llm_calls=25) -> ScanReport:
     """Report deterministic raw candidates and context; additive LLM output stays in findings."""
     observations = []
     raw = _collect(parsed, opengrep_executable, observations)
@@ -81,6 +83,8 @@ def scan_report(parsed, *, client=None, opengrep_executable=None) -> ScanReport:
         triads = {}
         errors.append("capability-context-error: %s" % type(exc).__name__)
     findings = list(raw)
-    if client is not None:
-        findings += _advisory(parsed, client)
-    return ScanReport(dedupe_findings(findings), candidates, triads, {}, errors)
+    session = LLMSession(client, max_calls=max_llm_calls) if client is not None else None
+    if session is not None:
+        findings += _advisory(parsed, session)
+    return ScanReport(dedupe_findings(findings), candidates, triads,
+                      session.usage() if session else {}, errors)
