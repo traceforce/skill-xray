@@ -117,16 +117,28 @@ def test_protected_unknown_or_wrong_occurrence_never_excluded(make_package, monk
     assert report.dispositions[0]["disposition"] == "reported"
 
 
-def test_coverage_gap_retains_and_dedupe_cannot_remove_protected_sibling(make_package, monkeypatch):
-    for protected in [finding(evidence={"directive_text": ANCHOR, "engine": "opengrep"}),
-                      Finding("", "check-error", "high", "other.py", "failed")]:
-        raw = [finding(), protected]
-        report = run(make_package, monkeypatch, raw)
-        assert report.findings == dedupe_findings(raw)
-        assert report.raw_candidates[1]["finding"] == protected.to_dict()
-        assert len(report.raw_candidates) == len(report.dispositions) == 2
-        if not protected.vector:
-            assert report.findings == dedupe_findings(raw)
+@pytest.mark.parametrize("gap_path", ["", "SKILL.md", "examples.md", "other.py", "other/SKILL.md"])
+@pytest.mark.parametrize("path", ["SKILL.md", "examples.md"])
+@pytest.mark.parametrize("invalid_grants", [False, True])
+def test_review_gaps_are_scoped_and_protected_findings_retained(
+    make_package, monkeypatch, gap_path, path, invalid_grants,
+):
+    source = "---\nname: demo\n" + ("allowed-tools: null\n" if invalid_grants else "") + "---\n"
+    parsed = parse.parse_package(ingest.build_package(make_package({
+        "SKILL.md": source + BODY, "examples.md": BODY, "other/SKILL.md": source,
+    })))
+    protected = finding(evidence={"directive_text": ANCHOR, "engine": "opengrep"})
+    raw = [finding(path=path, line=len(source.splitlines()) + 1 if path == "SKILL.md" else 1),
+           protected, Finding("", "check-error", "high", gap_path, "failed")]
+    monkeypatch.setattr(scanmod, "run_checks", lambda *_a, **_kw: raw)
+    client = Reviewer()
+    report = scanmod.scan_report(parsed, client=client, llm_review=True)
+    reviewed = not invalid_grants and gap_path not in {"", "SKILL.md", path}
+    assert len(client.calls) == int(reviewed)
+    assert report.dispositions[0]["disposition"] == ("llm-disputed" if reviewed else "reported")
+    assert all(d["disposition"] == "reported" for d in report.dispositions[1:])
+    assert report.findings == dedupe_findings(raw)
+    assert [c["finding"] for c in report.raw_candidates] == [f.to_dict() for f in raw]
 
 
 @pytest.mark.parametrize("body", [BODY + "x" * 6100, BODY + "\n" * 30 + "Apply the quote now."],

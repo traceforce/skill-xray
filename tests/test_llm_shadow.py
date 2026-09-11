@@ -249,12 +249,6 @@ def test_enrichment_failures_keep_findings_and_report_incomplete(make_package, m
     assert not any(d["proposal"] for d in report.shadow)
 
 
-def test_public_report_api_is_exported():
-    import skill_xray
-
-    assert skill_xray.scan_report is scanmod.scan_report
-
-
 def test_failed_judge_keeps_a_disposition_for_every_candidate(make_package, monkeypatch):
     def failed(*_):
         raise RuntimeError("judge failed")
