@@ -251,7 +251,8 @@ def test_returned_response_provenance_survives_even_invalid_json(
 
 @pytest.mark.parametrize("mutation", ["identity", "missing", "duplicate", "proposal-id",
     "duplicate-link", "authority", "disposition", "verdict", "confidence", "status",
-    "missing-proposal", "disputed-unknown", "shadow-dispute", "hidden-dispute"])
+    "missing-proposal", "disputed-unknown", "shadow-dispute", "hidden-dispute",
+    "audit-extra", "request-extra", "source-extra"])
 def test_validation_rejects_broken_review_audit(make_package, monkeypatch, mutation):
     _, data = document(make_package, monkeypatch)
     audit = data["runs"][0]["properties"]["llmReview"]
@@ -282,6 +283,10 @@ def test_validation_rejects_broken_review_audit(make_package, monkeypatch, mutat
         audit["mode"] = "shadow"
     elif mutation == "hidden-dispute":
         decision["disposition"] = "reported"
+    elif mutation == "audit-extra":
+        audit["request"] = {"source": "Whole input must not be exported"}
+    elif mutation.endswith("-extra"):
+        decision[mutation.removesuffix("-extra")] = {"source": "Whole input must not be exported"}
     else:
         decision["status"] = "approved"
     with pytest.raises(ValueError, match="SARIF validation failed"):

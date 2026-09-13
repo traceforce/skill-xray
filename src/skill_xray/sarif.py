@@ -25,6 +25,9 @@ __all__ = ["build_sarif", "encode_sarif", "validate_sarif", "write_sarif"]
 _SCHEMA = Path(__file__).with_name("schemas") / "sarif-schema-2.1.0.json"
 _LEVEL = {"critical": "error", "high": "error", "medium": "warning", "low": "note"}
 _MAX_REPORT_BYTES = 64 * 1024 * 1024
+_REVIEW_FIELDS = ("candidate_id", "disposition", "status", "reason", "policy_version", "provenance",
+                  "proposal", "tags", "reviewer", "request_sha256", "response_sha256",
+                  "reviewed_candidate_id", "failure_reason")
 
 
 @lru_cache(maxsize=1)
@@ -89,10 +92,7 @@ def _review_audit(report, identities):
     records = []
     for decision in decisions:
         # Requests contain whole source files; export only the compact review and audit hashes.
-        record = {key: deepcopy(decision[key]) for key in (
-            "candidate_id", "disposition", "status", "reason", "policy_version", "provenance",
-            "proposal", "tags", "reviewer", "request_sha256", "response_sha256",
-            "reviewed_candidate_id", "failure_reason") if key in decision}
+        record = {key: deepcopy(decision[key]) for key in _REVIEW_FIELDS if key in decision}
         for key in ("candidate_id", "reviewed_candidate_id"):
             if key in record:
                 if record[key] not in identities:
@@ -108,16 +108,17 @@ def _review_audit(report, identities):
 
 
 def _validate_review(audit, raw):
-    if audit["mode"] not in {"annotated", "shadow"} or audit["authoritative"] is not False:
+    if (set(audit) != {"mode", "authoritative", "decisions"}
+            or audit["mode"] not in {"annotated", "shadow"} or audit["authoritative"] is not False):
         raise ValueError("Invalid LLM review mode")
     candidates = {c["candidate_id"]: c for c in raw if c["provenance"] != "advisory-output"}
     records = {d["candidate_id"]: d for d in audit["decisions"]}
     if len(records) != len(audit["decisions"]) or set(records) != set(candidates):
         raise ValueError("Invalid LLM review identities")
     for cid, decision in records.items():
-        if (decision["status"] not in {"ineligible", "proposed", "duplicate-review", "budget",
-                                      "unavailable", "incomplete-context", "invalid-response",
-                                      "error"}
+        if (not set(decision).issubset(_REVIEW_FIELDS)
+                or decision["status"] not in {"ineligible", "proposed", "duplicate-review",
+                    "budget", "unavailable", "incomplete-context", "invalid-response", "error"}
                 or decision["disposition"] not in {"reported", "llm-disputed"}
                 or any(not isinstance(decision[key], str) or not decision[key].strip()
                        or len(decision[key]) > 200
