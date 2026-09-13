@@ -35,10 +35,10 @@ def _policy_entries(policy):
                 or any(not re.fullmatch(r"[0-9a-f]{64}", entry[key])
                        for key in ("fingerprint", "context_digest"))
                 or PurePosixPath(entry["path"]).is_absolute()
-                or ".." in entry["path"].split("/") or ":" in entry["path"]
-                or "\\" in entry["path"]
+                or ".." in entry["path"].split("/")
                 or entry.get("effective_severity", "low") not in SEVERITY_RANK):
             raise ValueError("Invalid operator policy decision")
+        # Paths are exact IR identities, never filesystem paths to open or normalize.
         key = tuple(entry[field] for field in _SCOPE)
         if key in entries:
             raise ValueError("Duplicate operator policy scope")

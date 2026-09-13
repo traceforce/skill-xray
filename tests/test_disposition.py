@@ -74,7 +74,7 @@ def test_scope_mismatch_never_generalizes(make_package, field):
 @pytest.mark.parametrize("mutation", [
     {"action": "approve"}, {"reason": " "}, {"reason": 9},
     {"fingerprint": "*"}, {"context_digest": ""}, {"vector": "SXV-008"},
-    {"path": "../run.py"}, {"path": "/run.py"}, {"path": "C:\\run.py"},
+    {"path": "../run.py"}, {"path": "/run.py"}, {"path": "/C:/run.py"},
     {"effective_severity": "critical"},
 ])
 def test_invalid_policy_is_rejected_not_partially_applied(make_package, mutation):
@@ -90,6 +90,46 @@ def test_conflicting_duplicate_decisions_are_invalid(make_package):
     policy["decisions"] *= 2
     with pytest.raises(ValueError, match="policy"):
         apply_dispositions(parsed, correlated, triads, policy=policy)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Literal punctuation filenames are POSIX-only")
+@pytest.mark.parametrize("path", ["helper:one.py", r"helper\one.py", r"C:\run.py"])
+def test_exact_policy_preserves_posix_filename_identity(make_package, path):
+    parsed = parse.parse_package(ingest.build_package(make_package({
+        "SKILL.md": "---\nname: test\n---\n", path: SOURCE})))
+    assert path in parsed.by_rel
+    correlated = correlate(parsed, [candidate(path=path)])
+    target, = correlated["results"]
+    final = apply_dispositions(parsed, correlated, build_triads(parsed), policy=policy_for(target))
+    assert final["results"][0]["disposition"] == "suppressed"
+    assert final["raw_candidates"] == correlated["raw_candidates"]
+    changed = policy_for(target, path=path.replace(":", "/").replace("\\", "/"))
+    assert apply_dispositions(parsed, correlated, build_triads(parsed),
+                              policy=changed)["results"][0]["disposition"] == "reported"
+
+
+@pytest.mark.parametrize("failed", [False, True])
+@pytest.mark.parametrize("action,expected", [("suppress", "suppressed"), ("demote", "corrected")])
+def test_successful_advisory_cannot_veto_unrelated_operator_scope(
+        make_package, monkeypatch, failed, action, expected):
+    parsed = package(make_package)
+    finding = Finding("SXV-008", "command-injection", "high", "run.py", "test", line=2)
+    advisory = Finding(
+        "" if failed else "SXV-038", "llm-error" if failed else "semantic-prompt-injection",
+        "low" if failed else "medium", "SKILL.md", "advisory", line=1)
+    monkeypatch.setattr(scanmod, "run_checks", lambda *_a, **_kw: [finding])
+    monkeypatch.setattr(scanmod, "_advisory", lambda *_a: [advisory])
+    original = scanmod.scan_report(parsed, client=object())
+    target = next(r for r in original.correlation["results"] if r["finding"]["vector"] == "SXV-008")
+    policy = policy_for(target, action)
+    other = next(r for r in original.correlation["results"] if r is not target)
+    policy["decisions"] += policy_for(other)["decisions"]
+    report = scanmod.scan_report(parsed, client=object(), disposition_policy=policy)
+    assert report.findings == original.findings and report.raw_candidates == original.raw_candidates
+    results = {r["id"]: r for r in report.correlation["results"]}
+    assert results[target["id"]]["disposition"] == ("reported" if failed else expected)
+    assert results[other["id"]]["disposition"] == "reported"
+    assert results[other["id"]]["original_severity"] == results[other["id"]]["effective_severity"]
 
 
 @pytest.mark.parametrize("severity", ["high", "medium", "low"])

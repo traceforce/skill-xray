@@ -132,7 +132,8 @@ def scan_report(parsed, *, client=None, llm_shadow=False, opengrep_executable=No
         usage.update(advisory_enabled=llm_advisory, judge_enabled=review_enabled)
     report_candidates = candidates + [
         {"candidate_id": "advisory-%06d" % i, "finding": deepcopy(f.to_dict()),
-         "analyzer": "llm", "provenance": "advisory-output", "coverage": "unknown"}
+         "analyzer": "llm", "provenance": "advisory-output",
+         "coverage": "no-reported-gap" if f.vector else "incomplete"}
         for i, f in enumerate(supplemental)]
     correlation = {"raw_candidates": deepcopy(report_candidates), "results": [], "links": []}
     try:
