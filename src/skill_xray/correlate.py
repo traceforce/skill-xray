@@ -175,6 +175,10 @@ def correlate(parsed, candidates):
         comparable = {key: value for key, value in evidence.items()
                       if key not in {"engine", "engine_rule"}}
         finding["evidence"] = comparable
+        # Wording is not identity when matching security evidence has a known source.
+        if finding["vector"] and comparable and _anchor(
+                finding, parsed.by_rel.get(finding["path"])) is not None:
+            finding.pop("message", None)
         groups[canonical(finding)].append(candidate)
     results, links = [], []
     occurrences = defaultdict(int)

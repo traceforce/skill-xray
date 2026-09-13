@@ -118,6 +118,34 @@ def test_engine_fingerprints_are_not_finding_identity(make_package):
     assert first["raw_candidates"] != second["raw_candidates"]
 
 
+def test_equivalent_analyzer_wording_merges_without_losing_messages(make_package):
+    parsed = package(make_package)
+    raw = [candidate("a"), candidate("b", analyzer="other-engine",
+                                    message="An untrusted argument reaches command execution")]
+    report = correlate(parsed, raw)
+    result, = report["results"]
+    assert result["candidate_ids"] == ["a", "b"]
+    assert report["raw_candidates"] == raw
+    assert len({item["finding"]["message"] for item in report["raw_candidates"]}) == 2
+    assert {item["analyzer"] for item in result["provenance"]} == {"opengrep", "other-engine"}
+    assert result["fingerprint"] == correlate(parsed, raw[:1])["results"][0]["fingerprint"]
+    reversed_report = correlate(parsed, list(reversed(raw)))
+    assert report["results"] == reversed_report["results"]
+    assert report["links"] == reversed_report["links"]
+
+
+@pytest.mark.parametrize("changes", [
+    {"vector": "", "rule": "check-error"}, {"evidence": {}},
+    {"path": "absent.py"}, {"line": None},
+])
+def test_uncertain_or_diagnostic_messages_remain_separate(make_package, changes):
+    raw = [candidate("a", message="First distinct detail", **changes),
+           candidate("b", message="Second distinct detail", **changes)]
+    report = correlate(package(make_package), raw)
+    assert len(report["results"]) == 2
+    assert report["raw_candidates"] == raw
+
+
 def test_real_trace_is_preserved_without_stitching_findings(make_package):
     source = "source = input()\nos.system(source)\n"
     trace = {"taint_source": loc(1, "source = input()"),
