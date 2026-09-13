@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 from . import __version__
 from .findings import findings_to_dicts
@@ -23,6 +24,7 @@ from .opengrep_runtime import VERSION as OPENGREP_VERSION
 from .opengrep_runtime import OpenGrepRuntimeError, install_opengrep
 from .parse import parse_package
 from .resolve import IngestLimitExceededError, UnsafeInputError, resolved_input
+from .sarif import build_sarif, write_sarif
 from .scan import scan, scan_report
 
 
@@ -131,6 +133,9 @@ def main(argv=None) -> int:
     ap.add_argument("--install-opengrep", action="store_true",
                     help="download and verify the pinned OpenGrep runtime, then exit")
     ap.add_argument("--json", action="store_true", help="emit the inventory as JSON")
+    ap.add_argument("--sarif", metavar="PATH",
+                    help="write validated SARIF outside the scanned package")
+    ap.add_argument("--policy", metavar="PATH", help="explicit scoped operator policy for --sarif")
     ap.add_argument("--version", action="version", version="skill-xray %s" % __version__)
     args = ap.parse_args(argv)
     reviewing = args.llm_shadow or args.llm_review
@@ -138,7 +143,7 @@ def main(argv=None) -> int:
     if args.install_opengrep:
         if (args.package or args.scan_known_skills or args.analyze
                 or args.json or args.opengrep_bin or args.llm or args.enrich or args.llm_shadow
-                or args.llm_additive or args.llm_review):
+                or args.llm_additive or args.llm_review or args.sarif or args.policy):
             ap.error("--install-opengrep is a standalone action")
         try:
             installed = install_opengrep()
@@ -153,7 +158,7 @@ def main(argv=None) -> int:
         if args.package:
             ap.error("--scan-known-skills takes no package argument")
         if (args.analyze or args.opengrep_bin or args.llm or args.enrich or args.llm_shadow
-                or args.llm_additive or args.llm_review):
+                or args.llm_additive or args.llm_review or args.sarif or args.policy):
             ap.error("--scan-known-skills does not accept analysis options")
         return _scan_known(args.json)
 
@@ -162,6 +167,10 @@ def main(argv=None) -> int:
 
     if args.opengrep_bin and not args.analyze:
         ap.error("--opengrep-bin requires --analyze")
+    if args.sarif and not args.analyze:
+        ap.error("--sarif requires --analyze")
+    if args.policy and not args.sarif:
+        ap.error("--policy requires --sarif")
     if (args.enrich or reviewing) and not (args.analyze and args.json):
         ap.error("--enrich and LLM review require --analyze --json")
     if reviewing and not args.llm:
@@ -186,22 +195,54 @@ def main(argv=None) -> int:
 
     try:
         with resolved_input(args.package) as r:
+            policy = None
+            if args.sarif:
+                try:
+                    if Path(args.sarif).resolve() == Path(args.package).resolve():
+                        raise ValueError("Report cannot overwrite its source")
+                    if args.policy:
+                        policy_path = Path(args.policy).resolve()
+                        if policy_path == Path(args.sarif).resolve():
+                            raise ValueError("Report cannot overwrite its operator policy")
+                        if policy_path.is_relative_to(Path(r.root).resolve()):
+                            raise ValueError("Operator policy must be outside the scanned package")
+                        if not policy_path.is_file():
+                            raise ValueError("Operator policy must be a regular file")
+                        with policy_path.open("rb") as stream:
+                            contents = stream.read(512 * 1024 + 1)
+                        if len(contents) > 512 * 1024:
+                            raise ValueError("Operator policy exceeds 512 KiB")
+                        policy = json.loads(contents)
+                        if not isinstance(policy, dict):
+                            raise ValueError("Operator policy must be an object")
+                except (OSError, ValueError, RecursionError) as exc:
+                    sys.stderr.write("cannot prepare SARIF: %s\n" % _display(str(exc)))
+                    return 2
             pkg = build_package(r.root)
             pkg.name = r.name          # friendly name; the root may be a temp dir
             ledger = build_ledger(pkg)
             if args.analyze:
                 parsed = parse_package(pkg)
-                result = (scan_report if args.enrich or reviewing else scan)(
+                enriched = args.enrich or reviewing or bool(args.sarif)
+                result = (scan_report if enriched else scan)(
                     parsed,
                     client=client,
                     opengrep_executable=args.opengrep_bin,
                     **({"llm_shadow": args.llm_shadow,
                         "llm_review": args.llm_review,
-                        "llm_advisory": args.llm_additive or not reviewing}
-                       if args.enrich or reviewing else {}),
+                        "llm_advisory": args.llm_additive or not reviewing,
+                        "disposition_policy": policy}
+                       if enriched else {}),
                 )
-                report = result if args.enrich or reviewing else None
+                report = result if enriched else None
                 findings = report.findings if report else result
+                report_failed = False
+                if args.sarif:
+                    try:
+                        write_sarif(build_sarif(parsed, report), args.sarif, source_root=r.root)
+                    except (OSError, ValueError) as exc:
+                        sys.stderr.write("cannot write SARIF: %s\n" % _display(str(exc)))
+                        report_failed = True
                 if args.json:
                     enrichment = report.to_dict() if report else {}
                     analysis = {"opengrepVersion": OPENGREP_VERSION}
@@ -228,7 +269,7 @@ def main(argv=None) -> int:
                             "%d skipped, %d errored, %d flagged\n" % (
                                 cov["eligible"], cov["checked"], cov["truncated"],
                                 cov["skipped"], cov["errored"], cov["flagged"]))
-                if (report and report.context_errors) or any(
+                if report_failed or (report and report.context_errors) or any(
                     not finding.vector and finding.severity in {"critical", "high"}
                     for finding in findings
                 ):

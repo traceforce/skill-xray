@@ -14,7 +14,9 @@ It is the counterpart of `mcp-xray`, which does the same for MCP servers.
 Ingest builds an inventory and coverage ledger. Parsing produces the shared IR;
 `--analyze` runs deterministic checks, including the pinned OpenGrep code lane.
 Analysis gaps remain visible in the findings. The scanner does not execute the
-package. SARIF output is not implemented.
+package. `--analyze --sarif <path>` writes a validated SARIF report outside the scanned
+package, including evidence, source locations and audited dispositions. See
+[reporting](docs/reporting.md) for policy and failure semantics.
 
 The walker reads a package it does not trust, so:
 
