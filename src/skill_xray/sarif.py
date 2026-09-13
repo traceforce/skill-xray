@@ -141,13 +141,17 @@ def _validate_review(audit, raw):
                     or decision["disposition"] != records[original]["disposition"]):
                 raise ValueError("Invalid duplicate review reference")
             proposal = records[original]["proposal"]
+            expected = "duplicate-review" if proposal is not None else records[original]["status"]
+            if decision["status"] != expected:
+                raise ValueError("Duplicate review changed the original outcome")
         elif decision["status"] == "duplicate-review":
             raise ValueError("Missing duplicate review reference")
-        if decision["disposition"] == "llm-disputed" and (
-                audit["mode"] != "annotated" or proposal is None
-                or proposal["verdict"] != "propose_false_positive"
-                or proposal["confidence"] != "high" or proposal["mechanism"] != "not_supported"
-                or proposal["intent"] != "legitimate"):
+        disputed = (audit["mode"] == "annotated" and proposal is not None
+                    and proposal["verdict"] == "propose_false_positive"
+                    and proposal["confidence"] == "high"
+                    and proposal["mechanism"] == "not_supported"
+                    and proposal["intent"] == "legitimate")
+        if (decision["disposition"] == "llm-disputed") != disputed:
             raise ValueError("Invalid non-authoritative dispute")
 
 

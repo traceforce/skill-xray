@@ -265,10 +265,10 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
             request["manifest"]["source"] = manifest_source
         user = json.dumps(request, sort_keys=True, ensure_ascii=True)
         decision.update(request=request, request_sha256=hashlib.sha256(user.encode()).hexdigest())
-        if apply_review:
-            decision["reviewer"] = reviewer
+        decision["reviewer"] = reviewer
         try:
             reply = session.complete(_SYSTEM, user, response_schema=RESPONSE_SCHEMA)
+            decision["response_sha256"] = hashlib.sha256(reply.encode()).hexdigest()
             proposal = _proposal(reply, candidate["candidate_id"], snippet)
         except LLMBudgetError:
             decision.update(status="budget", reason="Shared LLM budget exhausted; retained")
@@ -294,7 +294,6 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
                     disposition="llm-disputed" if disputed else "reported",
                     tags=["llm-disputed"] if disputed else [],
                     reason=proposal["reason"] if disputed else "Finding retained without dispute",
-                    provenance="llm-review-policy",
-                    response_sha256=hashlib.sha256(reply.encode()).hexdigest())
+                    provenance="llm-review-policy")
         reviewed[identity] = decision
     return decisions

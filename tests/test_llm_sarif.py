@@ -1,5 +1,6 @@
 """LLM audit export must not change deterministic reporting decisions."""
 
+import hashlib
 import json
 import sys
 from copy import deepcopy
@@ -211,9 +212,46 @@ def test_duplicate_review_cannot_reference_unrelated_evidence(make_package, monk
         validate_sarif(data)
 
 
+@pytest.mark.parametrize("prior_failed,status", [(True, "duplicate-review"), (False, "budget"),
+                                               (True, "error")])
+def test_reused_review_preserves_original_outcome(make_package, monkeypatch, prior_failed, status):
+    client = Reviewer(error=LLMError() if prior_failed else None)
+    _, data = document(make_package, monkeypatch, raw=[finding(), finding()], client=client)
+    validate_sarif(data)
+    decisions = data["runs"][0]["properties"]["llmReview"]["decisions"]
+    duplicate = next(d for d in decisions if "reviewed_candidate_id" in d)
+    duplicate["status"] = status
+    with pytest.raises(ValueError, match="SARIF validation failed"):
+        validate_sarif(data)
+
+
+@pytest.mark.parametrize("mode", ["annotated", "shadow"])
+@pytest.mark.parametrize("malformed", [False, True])
+def test_returned_response_provenance_survives_even_invalid_json(
+        make_package, monkeypatch, mode, malformed):
+    monkeypatch.setattr(scanmod, "run_checks", lambda *_a, **_kw: [finding()])
+    client, replies = Reviewer(), []
+    complete = client.complete
+    def record(*args):
+        reply = "{" if malformed else complete(*args)
+        replies.append(reply)
+        return reply
+    monkeypatch.setattr(client, "complete", record)
+    parsed = fixture(make_package)
+    report = scanmod.scan_report(parsed, client=client,
+                                **{"llm_review" if mode == "annotated" else "llm_shadow": True})
+    data = build_sarif(parsed, report)
+    decision, = data["runs"][0]["properties"]["llmReview"]["decisions"]
+    assert decision["reviewer"]["model"] == "fixture-1"
+    assert decision["response_sha256"] == hashlib.sha256(replies[0].encode()).hexdigest()
+    assert decision["status"] == ("invalid-response" if malformed else "proposed")
+    assert "response" not in decision
+    validate_sarif(data)
+
+
 @pytest.mark.parametrize("mutation", ["identity", "missing", "duplicate", "proposal-id",
     "duplicate-link", "authority", "disposition", "verdict", "confidence", "status",
-    "missing-proposal", "disputed-unknown", "shadow-dispute"])
+    "missing-proposal", "disputed-unknown", "shadow-dispute", "hidden-dispute"])
 def test_validation_rejects_broken_review_audit(make_package, monkeypatch, mutation):
     _, data = document(make_package, monkeypatch)
     audit = data["runs"][0]["properties"]["llmReview"]
@@ -242,6 +280,8 @@ def test_validation_rejects_broken_review_audit(make_package, monkeypatch, mutat
         decision["proposal"]["intent"] = "unknown"
     elif mutation == "shadow-dispute":
         audit["mode"] = "shadow"
+    elif mutation == "hidden-dispute":
+        decision["disposition"] = "reported"
     else:
         decision["status"] = "approved"
     with pytest.raises(ValueError, match="SARIF validation failed"):
