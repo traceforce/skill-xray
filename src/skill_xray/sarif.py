@@ -9,7 +9,7 @@ import tempfile
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from urllib.parse import quote_from_bytes
+from urllib.parse import quote, quote_from_bytes
 
 from jsonschema import Draft4Validator
 
@@ -58,14 +58,10 @@ def _location(parsed, path, line_cache, start=None, end=None, offset=None, lengt
             positions = []
             for position in (start, end or start):
                 line, col = position.get("line"), position.get("col")
-                if type(line) is not int or not 1 <= line <= len(lines):
-                    raise ValueError("invalid text line")
-                if col is not None:
-                    if byte_columns:
-                        _, col, _ = source_region(artifact, position, position, lines=lines)
-                    elif type(col) is not int or not 1 <= col <= len(lines[line - 1]) + 1:
-                        raise ValueError("invalid text column")
-                positions.append((line, col))
+                point = {"line": line, "col": 1 if col is None else col}
+                _, character, _ = source_region(artifact, point, point,
+                                                byte_columns=byte_columns, lines=lines)
+                positions.append((line, None if col is None else character))
             (line, col), (last, last_col) = positions
             if (last, last_col or 1) < (line, col or 1):
                 raise ValueError("inverted text region")
@@ -202,8 +198,10 @@ def validate_sarif(document):
         by_candidate = {c["candidate_id"]: c for c in raw}
         by_result = {r["properties"]["id"]: r for r in results}
         linked = {rid: [] for rid in by_result}
+        primary = {rid: 0 for rid in by_result}
         for link in links:
             linked[link["result_id"]].append(link["candidate_id"])
+            primary[link["result_id"]] += link["disposition"] != "duplicate"
         if (len(by_candidate) != len(raw) or len(by_result) != len(results)
                 or len(links) != len(raw)
                 or {link["candidate_id"] for link in links} != set(by_candidate)
@@ -220,6 +218,7 @@ def validate_sarif(document):
                     or not props["reason"] or not props["policyVersion"]
                     or props["disposition"] not in {"reported", "suppressed", "corrected"}
                     or sorted(linked[props["id"]]) != sorted(props["candidateIds"])
+                    or primary[props["id"]] != 1
                     or SEVERITY_RANK[props["effectiveSeverity"]]
                     < SEVERITY_RANK[props["originalSeverity"]]
                     or result["level"] != _LEVEL[props["effectiveSeverity"]]):
@@ -245,7 +244,8 @@ def validate_sarif(document):
             for cid in props["candidateIds"]:
                 finding = by_candidate[cid]["finding"]
                 category = "security-finding" if finding["vector"] else "analysis-diagnostic"
-                if props["category"] != category or any(
+                rule = "skill-xray/" + quote(finding["rule"] or "unknown-rule", safe="-._")
+                if result["ruleId"] != rule or props["category"] != category or any(
                         (props.get(key) or None) != (finding.get(source) or None)
                         for key, source in (("sxv", "vector"), ("cwe", "cwe"), ("tier", "tier"))):
                     raise ValueError("Result classification contradicts raw finding")

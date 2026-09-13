@@ -81,15 +81,12 @@ def test_severity_mapping(make_package, severity, level):
 
 @pytest.mark.parametrize("path,uri", [("dir/run.py", "dir/run.py"),
     ("dir/a b#é.py", "dir/a%20b%23%C3%A9.py"), ("dir/a%20.py", "dir/a%2520.py"),
-    pytest.param(r"dir/a\b.py", "dir/a%5Cb.py",
-                 marks=pytest.mark.skipif(sys.platform == "win32", reason="POSIX filename")),
-    pytest.param(r"C:\run.py", "C%3A%5Crun.py",
-                 marks=pytest.mark.skipif(sys.platform == "win32", reason="POSIX filename")),
-    pytest.param("C:run.py", "C%3Arun.py",
-                 marks=pytest.mark.skipif(sys.platform == "win32", reason="POSIX filename")),
+    (r"dir/a\b.py", "dir/a%5Cb.py"), (r"C:\run.py", "C%3A%5Crun.py"), ("C:run.py", "C%3Arun.py"),
     pytest.param("raw-\udcff/SKILL.md", "raw-%FF/SKILL.md",
                  marks=pytest.mark.skipif(sys.platform != "linux", reason="Linux byte filename"))])
 def test_relative_paths_are_uri_encoded(make_package, path, uri):
+    if sys.platform == "win32" and ("\\" in path or ":" in path):
+        pytest.skip("POSIX filename")
     parsed = parse.parse_package(ingest.build_package(make_package({path: "pass\n"})))
     report = report_for(parsed, [candidate(path=path, line=1)])
     result, = build_sarif(parsed, report)["runs"][0]["results"]
@@ -164,10 +161,10 @@ def test_coverage_and_check_failure_are_not_clean_or_suppressible(make_package, 
 
 
 @pytest.mark.parametrize("mutation", ["schema", "rule", "candidate", "link", "severity",
-                                    "suppression", "empty-evidence", "forged-evidence"])
+    "suppression", "empty-evidence", "forged-evidence", "rule-binding", "duplicates", "primaries"])
 def test_schema_and_cross_reference_validation_fail_visibly(make_package, mutation):
     parsed = package(make_package)
-    output = build_sarif(parsed, report_for(parsed, [candidate()]))
+    output = build_sarif(parsed, report_for(parsed, [candidate(), candidate("duplicate")]))
     run = output["runs"][0]
     result = run["results"][0]
     if mutation == "schema":
@@ -182,6 +179,11 @@ def test_schema_and_cross_reference_validation_fail_visibly(make_package, mutati
         result["properties"]["originalSeverity"] = "low"
     elif mutation.endswith("evidence"):
         result["properties"]["evidence"] = [] if mutation == "empty-evidence" else [{"fake": True}]
+    elif mutation == "rule-binding":
+        run["tool"]["driver"]["rules"][0]["id"] = result["ruleId"] = "skill-xray/other"
+    elif mutation in {"duplicates", "primaries"}:
+        for link in run["properties"]["candidateLinks"]:
+            link["disposition"] = "duplicate" if mutation == "duplicates" else "reported"
     else:
         result["properties"]["disposition"] = "suppressed"
     with pytest.raises(ValueError):
