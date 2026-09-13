@@ -160,7 +160,7 @@ def test_url_trailer_does_not_evade_as_empty_archive(monkeypatch):
     # internal, so the tell is the surfaced artifact.)
     blob = b"---\nname: evil\n---\nbody\n" + b"PK\x05\x06" + b"\x00" * 18
     monkeypatch.setattr(resolve, "_check_url_host",
-                        lambda url: ("example.com", 443, "/skill.zip", "93.184.216.34"))
+                        lambda url, **_kw: ("example.com", 443, "/skill.zip", "93.184.216.34"))
 
     class _Resp:
         status = 200
@@ -309,7 +309,7 @@ def test_url_public_host_passes_the_check(monkeypatch):
 def test_url_download_pins_and_caps_size(monkeypatch):
     monkeypatch.setattr(resolve, "INGEST_MAX_BYTES", 1000)
     monkeypatch.setattr(resolve, "_check_url_host",
-                        lambda url: ("example.com", 443, "/x", "93.184.216.34"))
+                        lambda url, **_kw: ("example.com", 443, "/x", "93.184.216.34"))
 
     class _Resp:
         status = 200
@@ -496,7 +496,7 @@ def test_unknown_archive_extension_is_refused(tmp_path):
 
 def test_url_redirect_is_refused(monkeypatch):
     monkeypatch.setattr(resolve, "_check_url_host",
-                        lambda url: ("example.com", 443, "/x", "93.184.216.34"))
+                        lambda url, **_kw: ("example.com", 443, "/x", "93.184.216.34"))
 
     class _Resp:
         status = 302

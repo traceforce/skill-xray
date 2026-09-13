@@ -1,6 +1,7 @@
 """Real HTTP buffering over an instrumented TLS transport; no network or sleeps."""
 
 import io
+import json
 import ssl
 from collections import deque
 from types import SimpleNamespace
@@ -177,10 +178,76 @@ def test_idle_socket_timeout_is_not_mislabeled_as_whole_download_deadline(
 def test_deadline_failure_removes_url_temporary_directory(transfer, tmp_path, monkeypatch):
     transfer([(FIXED, 0), (b"abcdefgh", 0.02)])
     monkeypatch.setattr(resolve, "_check_url_host",
-                        lambda _: ("example.com", 443, "/skill", "93.184.216.34"))
+                        lambda _, **_kw: ("example.com", 443, "/skill", "93.184.216.34"))
     temporary = tmp_path / "download"
     temporary.mkdir()
     monkeypatch.setattr(resolve.tempfile, "mkdtemp", lambda **_: str(temporary))
     with pytest.raises(resolve.IngestLimitExceededError, match="deadline"):
         resolve._fetch_url("https://example.com/skill")
     assert not temporary.exists()
+
+
+def test_dns_and_transfer_share_one_deadline(transfer, monkeypatch):
+    state = transfer([(FIXED, 0), (b"abcdefgh", 0.02)])
+    def resolve_host(_url, *, deadline=None):
+        assert deadline == 0.05
+        state.now[0] += 0.04
+        return "example.com", 443, "/skill", "93.184.216.34"
+    monkeypatch.setattr(resolve, "_check_url_host", resolve_host)
+    with pytest.raises(resolve.IngestLimitExceededError, match="deadline"):
+        resolve._fetch_url("https://example.com/skill")
+    assert state.now[0] <= 0.05
+    assert all(sock.closed for sock in state.sockets)
+
+
+def test_stalled_dns_is_bounded_before_download(transfer, monkeypatch):
+    state = transfer([])
+    def stalled(argv, **kwargs):
+        assert argv[1:3] == ["-I", "-c"] and argv[-2:] == ["example.com", "443"]
+        assert kwargs["timeout"] == 0.05
+        state.now[0] += kwargs["timeout"]
+        raise resolve.subprocess.TimeoutExpired(argv, kwargs["timeout"])
+    monkeypatch.setattr(resolve.subprocess, "run", stalled)
+    monkeypatch.setattr(resolve.socket, "getaddrinfo",
+                        lambda *_a, **_kw: pytest.fail("DNS must not block the parent"))
+    with pytest.raises(resolve.IngestLimitExceededError, match="deadline"):
+        resolve._check_url_host("https://example.com/skill", deadline=0.05)
+    assert not state.sockets
+
+
+@pytest.mark.parametrize("addresses", [["93.184.216.34"], ["93.184.216.34", "127.0.0.1"],
+                                      ["::ffff:169.254.169.254"]])
+def test_bounded_dns_preserves_all_address_ssrf_checks(transfer, monkeypatch, addresses):
+    transfer([])
+    answers = [[2, 1, 6, "", [ip, 443]] for ip in addresses]
+    monkeypatch.setattr(resolve.subprocess, "run", lambda *_a, **_kw:
+                        SimpleNamespace(stdout=json.dumps(answers).encode()))
+    if addresses == ["93.184.216.34"]:
+        result = resolve._check_url_host("https://example.com/skill", deadline=0.05)
+        assert result[3] == addresses[0]
+    else:
+        with pytest.raises(resolve.UnsafeInputError, match="non-public"):
+            resolve._check_url_host("https://example.com/skill", deadline=0.05)
+
+
+def test_real_isolated_dns_worker_resolves_numeric_literal_without_network():
+    result = resolve._check_url_host("https://93.184.216.34/skill",
+                                     deadline=resolve.time.monotonic() + 5)
+    assert result == ("93.184.216.34", 443, "/skill", "93.184.216.34")
+
+
+@pytest.mark.parametrize("failure", ["process", "malformed", "late"])
+def test_dns_worker_failure_never_reaches_connect(transfer, monkeypatch, failure):
+    state = transfer([])
+    def reply(argv, **_kwargs):
+        if failure == "process":
+            raise resolve.subprocess.CalledProcessError(1, argv, stderr=b"private worker detail")
+        if failure == "late":
+            state.now[0] = 0.06
+        return SimpleNamespace(stdout=b"{")
+    monkeypatch.setattr(resolve.subprocess, "run", reply)
+    error = resolve.IngestLimitExceededError if failure == "late" else resolve.UnsafeInputError
+    with pytest.raises(error) as raised:
+        resolve._check_url_host("https://example.com/skill", deadline=0.05)
+    assert "private worker detail" not in str(raised.value)
+    assert not state.sockets
