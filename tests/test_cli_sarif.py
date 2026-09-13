@@ -111,6 +111,20 @@ def test_sarif_requires_analysis(make_package):
     assert exc.value.code == 2
 
 
+@pytest.mark.parametrize("options", [
+    ["--analyze", "--sarif", ""], ["--analyze", "--policy", ""],
+    ["--sarif", ""], ["--policy", ""],
+    ["--analyze", "--sarif", "report.sarif", "--policy", ""],
+])
+def test_empty_reporting_paths_fail_before_ingest(make_package, monkeypatch, options, capsys):
+    root = make_package({"SKILL.md": "# Documentation\n"})
+    monkeypatch.setattr(cli, "resolved_input", lambda *_a: pytest.fail("ingest must not start"))
+    with pytest.raises(SystemExit) as exc:
+        cli.main([str(root), *options])
+    assert exc.value.code == 2
+    assert "non-empty path" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("content", ["[" * 20000 + "]" * 20000, "null"], ids=["deep", "null"])
 def test_invalid_policy_never_starts_scan(make_package, tmp_path, monkeypatch, content):
     root, target = run_fixture(make_package, tmp_path, monkeypatch, [])

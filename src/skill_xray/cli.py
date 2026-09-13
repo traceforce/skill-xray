@@ -138,6 +138,8 @@ def main(argv=None) -> int:
     ap.add_argument("--policy", metavar="PATH", help="explicit scoped operator policy for --sarif")
     ap.add_argument("--version", action="version", version="skill-xray %s" % __version__)
     args = ap.parse_args(argv)
+    if args.sarif == "" or args.policy == "":
+        ap.error("--sarif and --policy require non-empty paths")
     reviewing = args.llm_shadow or args.llm_review
 
     if args.install_opengrep:
