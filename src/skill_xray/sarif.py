@@ -14,7 +14,7 @@ from urllib.parse import quote, quote_from_bytes
 from jsonschema import Draft4Validator
 
 from . import __version__
-from .correlate import canonical, source_region
+from .correlate import FINGERPRINT_VERSION, canonical, source_region
 from .disposition import POLICY_VERSION
 from .findings import SEVERITY_RANK
 from .opengrep_runtime import VERSION as OPENGREP_VERSION
@@ -35,11 +35,10 @@ def _validator():
 
 def _location(parsed, path, line_cache, start=None, end=None, offset=None, length=None,
               byte_columns=False):
+    artifact = parsed.by_rel.get(path) if isinstance(path, str) else None
     if (not isinstance(path, str) or not path or PurePosixPath(path).is_absolute()
-            or ".." in path.split("/")):
-        return None, True
-    artifact = parsed.by_rel.get(path)
-    if artifact is None and (PureWindowsPath(path).drive or "\\" in path):
+            or ".." in path.split("/")
+            or artifact is None and (PureWindowsPath(path).drive or "\\" in path)):
         return None, True
     physical = {"artifactLocation": {"uri": quote_from_bytes(os.fsencode(path), safe="/")}}
     try:
@@ -50,17 +49,16 @@ def _location(parsed, path, line_cache, start=None, end=None, offset=None, lengt
                 raise ValueError("invalid byte region")
             physical["region"] = {"byteOffset": offset, "byteLength": length}
         elif start and start.get("line") is not None:
-            if artifact is None or artifact.text is None:
-                raise ValueError("source unavailable")
+            if end is not None and end.get("col") is None:
+                raise ValueError("incomplete end boundary")
             if path not in line_cache:
                 line_cache[path] = artifact.text.split("\n")
-            lines = line_cache[path]
             positions = []
             for position in (start, end or start):
                 line, col = position.get("line"), position.get("col")
                 point = {"line": line, "col": 1 if col is None else col}
                 _, character, _ = source_region(artifact, point, point,
-                                                byte_columns=byte_columns, lines=lines)
+                                                byte_columns=byte_columns, lines=line_cache[path])
                 positions.append((line, None if col is None else character))
             (line, col), (last, last_col) = positions
             if (last, last_col or 1) < (line, col or 1):
@@ -69,9 +67,7 @@ def _location(parsed, path, line_cache, start=None, end=None, offset=None, lengt
             if col is not None:
                 region["startColumn"] = col
             if end is not None:
-                region["endLine"] = last
-                if last_col is not None:
-                    region["endColumn"] = last_col
+                region.update(endLine=last, endColumn=last_col)
             physical["region"] = region
         return {"physicalLocation": physical}, artifact is None
     except (ValueError, TypeError, AttributeError):
@@ -178,8 +174,7 @@ def build_sarif(parsed, report):
                           "contextErrors": sorted(report.context_errors),
                           "rawScope": "emitted-results-before-reporting-deduplication",
                           "rawCandidates": raw, "candidateLinks": links}}
-    return {"version": "2.1.0", "$schema": json.loads(_SCHEMA.read_text(encoding="utf-8"))["id"],
-            "runs": [run]}
+    return {"version": "2.1.0", "$schema": _validator().schema["id"], "runs": [run]}
 
 
 def validate_sarif(document):
@@ -198,13 +193,13 @@ def validate_sarif(document):
         by_candidate = {c["candidate_id"]: c for c in raw}
         by_result = {r["properties"]["id"]: r for r in results}
         linked = {rid: [] for rid in by_result}
-        primary = {rid: 0 for rid in by_result}
+        primary = [link["result_id"] for link in links if link["disposition"] != "duplicate"]
         for link in links:
             linked[link["result_id"]].append(link["candidate_id"])
-            primary[link["result_id"]] += link["disposition"] != "duplicate"
         if (len(by_candidate) != len(raw) or len(by_result) != len(results)
                 or len(links) != len(raw)
                 or {link["candidate_id"] for link in links} != set(by_candidate)
+                or sorted(primary) != sorted(by_result)
                 or len({r["id"] for r in rules}) != len(rules)):
             raise ValueError("Invalid candidate/result identities")
         for result in results:
@@ -218,7 +213,8 @@ def validate_sarif(document):
                     or not props["reason"] or not props["policyVersion"]
                     or props["disposition"] not in {"reported", "suppressed", "corrected"}
                     or sorted(linked[props["id"]]) != sorted(props["candidateIds"])
-                    or primary[props["id"]] != 1
+                    or props["id"] != "finding-" + result[
+                        "partialFingerprints"][FINGERPRINT_VERSION]
                     or SEVERITY_RANK[props["effectiveSeverity"]]
                     < SEVERITY_RANK[props["originalSeverity"]]
                     or result["level"] != _LEVEL[props["effectiveSeverity"]]):

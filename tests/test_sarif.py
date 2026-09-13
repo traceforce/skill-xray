@@ -107,11 +107,13 @@ def test_unsafe_paths_are_not_emitted_as_source_uris(make_package, path):
 def test_unicode_columns_crlf_and_byte_regions(make_package):
     parsed = package(make_package, "é = 1\r\nos.system('x')\r\n")
     raw = [candidate("text", line=1, column=4, evidence={"engine": "opengrep"}),
-           candidate("bytes", line=None, column=None, offset=2, length=3)]
+           candidate("bytes", line=None, column=None, offset=2, length=3),
+           candidate("incomplete", line=1, evidence={"end": {"line": 2}})]
     output = build_sarif(parsed, report_for(parsed, raw))
     assert output["runs"][0]["columnKind"] == "unicodeCodePoints"
-    regions = [r["locations"][0]["physicalLocation"]["region"]
+    regions = [r["locations"][0]["physicalLocation"].get("region")
                for r in output["runs"][0]["results"]]
+    assert None in regions
     assert {"startLine": 1, "startColumn": 3} in regions
     assert {"byteOffset": 2, "byteLength": 3} in regions
 
@@ -161,7 +163,8 @@ def test_coverage_and_check_failure_are_not_clean_or_suppressible(make_package, 
 
 
 @pytest.mark.parametrize("mutation", ["schema", "rule", "candidate", "link", "severity",
-    "suppression", "empty-evidence", "forged-evidence", "rule-binding", "duplicates", "primaries"])
+    "suppression", "empty-evidence", "forged-evidence", "rule-binding", "duplicates", "primaries",
+    "fingerprint"])
 def test_schema_and_cross_reference_validation_fail_visibly(make_package, mutation):
     parsed = package(make_package)
     output = build_sarif(parsed, report_for(parsed, [candidate(), candidate("duplicate")]))
@@ -181,6 +184,8 @@ def test_schema_and_cross_reference_validation_fail_visibly(make_package, mutati
         result["properties"]["evidence"] = [] if mutation == "empty-evidence" else [{"fake": True}]
     elif mutation == "rule-binding":
         run["tool"]["driver"]["rules"][0]["id"] = result["ruleId"] = "skill-xray/other"
+    elif mutation == "fingerprint":
+        result["partialFingerprints"] = dict.fromkeys(result["partialFingerprints"], "0" * 64)
     elif mutation in {"duplicates", "primaries"}:
         for link in run["properties"]["candidateLinks"]:
             link["disposition"] = "duplicate" if mutation == "duplicates" else "reported"
