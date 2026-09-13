@@ -9,7 +9,7 @@ from test_correlate import SOURCE, candidate, loc, package
 
 from skill_xray import ingest, parse
 from skill_xray.capability import build_triads
-from skill_xray.checks import preproc
+from skill_xray.checks import coverage, preproc
 from skill_xray.correlate import correlate
 from skill_xray.disposition import POLICY_VERSION, apply_dispositions
 from skill_xray.findings import Finding
@@ -172,6 +172,68 @@ def test_other_artifact_change_invalidates_scoped_decision(make_package):
     final = apply_dispositions(changed, correlate(changed, [candidate()]),
                                build_triads(changed), policy=policy)
     assert final["results"][0]["disposition"] == "reported"
+
+
+@pytest.mark.parametrize("extra,benign", [
+    ({"assets/logo.png": b"\x89PNG\r\n\x1a\n\x00\x00"}, True),
+    ({".git/config": "metadata"}, True),
+    ({"broken.py": b"print(1)\x00payload"}, False),
+    ({"payload.pyc": b"compiled"}, False),
+    ({"assets/large.png": b"x" * (ingest.MAX_FILE_BYTES + 1)}, False),
+])
+def test_ledger_policy_uses_material_coverage_not_every_inventory_note(
+        make_package, extra, benign):
+    pkg = ingest.build_package(make_package({
+        "SKILL.md": "---\nname: test\n---\n", "run.py": SOURCE, **extra}))
+    parsed = parse.parse_package(pkg)
+    notes = coverage.check(parsed)
+    raw = [candidate()] + [
+        {"candidate_id": "note-%d" % i, "finding": note.to_dict(),
+         "analyzer": "ir-check", "provenance": "deterministic-check-output",
+         "coverage": "incomplete"} for i, note in enumerate(notes)]
+    correlated = correlate(parsed, raw)
+    target = next(r for r in correlated["results"] if r["finding"]["vector"] == "SXV-008")
+    final = apply_dispositions(parsed, correlated, build_triads(parsed, coverage=notes),
+                               policy=policy_for(target))
+    result = next(r for r in final["results"] if r["finding"]["vector"] == "SXV-008")
+    assert result["disposition"] == ("suppressed" if benign else "reported")
+    expected_coverage = "no-reported-gap" if benign else "incomplete"
+    assert result["coverage"] == final["coverage"] == expected_coverage
+    assert final["raw_candidates"] == raw
+    assert all(r["disposition"] == "reported" for r in final["results"]
+               if not r["finding"]["vector"])
+    if benign:
+        assert ingest.build_ledger(pkg)["coveragePercent"] == 100.0
+
+
+def test_scan_report_excluded_inventory_keeps_notes_without_blocking_policy(make_package):
+    parsed = parse.parse_package(ingest.build_package(make_package({
+        "SKILL.md": "---\nname: test\n---\n!`echo safe`\n", ".git/config": "metadata"})))
+    original = scanmod.scan_report(parsed)
+    target = next(r for r in original.correlation["results"]
+                  if r["finding"]["vector"] == "SXV-001")
+    report = scanmod.scan_report(parsed, disposition_policy=policy_for(target))
+    assert report.findings == original.findings
+    assert report.raw_candidates == original.raw_candidates
+    assert report.triads["SKILL.md"].limitations == []
+    assert report.correlation["coverage"] == "no-reported-gap"
+    assert any(r["disposition"] == "suppressed" for r in report.correlation["results"])
+    notes = [r for r in report.correlation["results"] if not r["finding"]["vector"]]
+    assert notes and all(r["disposition"] == "reported" for r in notes)
+
+
+@pytest.mark.parametrize("entry", [
+    {"path": "unknown", "reasonCode": "new-unknown-failure"},
+    {"path": ".git", "reasonCode": "excluded_dir", "phase": "parse"},
+    {"path": "asset.png", "reasonCode": "binary_content"},
+])
+def test_unknown_or_parse_ledger_entries_still_block_policy(make_package, entry):
+    parsed, correlated, triads = setup(make_package)
+    parsed.ledger_exceptions.append(entry)
+    final = apply_dispositions(parsed, correlated, triads,
+                               policy=policy_for(correlated["results"][0]))
+    assert final["results"][0]["disposition"] == "reported"
+    assert final["coverage"] == "incomplete"
 
 
 @pytest.mark.parametrize("end", [None, {}, {"line": 2, "col": 999},

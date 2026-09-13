@@ -12,6 +12,13 @@ _LOW_PARSE = {
 _LOW_STATIC = {"excluded_dir"}
 
 
+def is_inventory_note(finding: dict) -> bool:
+    evidence = finding.get("evidence", {})
+    return (not finding["vector"] and finding["rule"] == "coverage-note"
+            and finding["severity"] == "low" and evidence.get("phase") == "static"
+            and evidence.get("reason") in _LOW_STATIC)
+
+
 def _static_severity(reason: str, kind: str | None) -> str | None:
     if reason in _LOW_STATIC:
         return "low"

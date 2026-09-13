@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 
 from .capability import build_triads
 from .checks import run_checks
+from .checks.coverage import is_inventory_note
 from .correlate import correlate
 from .disposition import apply_dispositions
 from .findings import Finding, dedupe_findings
@@ -89,7 +90,7 @@ def scan_report(parsed, *, client=None, llm_shadow=False, opengrep_executable=No
     session = LLMSession(client, max_calls=max_llm_calls) if client is not None else None
     observations = []
     raw = _collect(parsed, opengrep_executable, observations)
-    gaps = {f.path for f in raw if not f.vector}
+    gaps = {f.path for f in raw if not f.vector and not is_inventory_note(f.to_dict())}
     candidates = [
         {"candidate_id": "candidate-%06d" % i, "finding": deepcopy(f.to_dict()),
          "analyzer": f.evidence.get("engine", "ir-check"),

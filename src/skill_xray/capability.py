@@ -7,6 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 
 from .checks.code_lane import _governing_manifest, _manifest_index
+from .checks.coverage import is_inventory_note
 from .checks.grants import (
     _EXECUTION_TOOLS,
     _NETWORK_TOOLS,
@@ -184,7 +185,7 @@ def build_triads(parsed, observations=(), coverage=()) -> dict[str, CapabilityTr
         if manifest.text is None:
             triad.limitations.append("manifest-unread")
     for finding in coverage:
-        if finding.vector:
+        if finding.vector or is_inventory_note(finding.to_dict()):
             continue
         manifest = _governing_manifest(manifests, finding.path) if finding.path else None
         affected = [triads[manifest.rel]] if manifest else list(triads.values())

@@ -7,8 +7,10 @@ from copy import deepcopy
 from dataclasses import asdict
 from pathlib import PurePosixPath
 
+from .checks.coverage import _static_severity, is_inventory_note
 from .correlate import canonical, source_region
 from .findings import SEVERITY_RANK
+from .ingest import _BENIGN_LEDGER
 
 POLICY_VERSION = "skill-xray/scoped-policy/v1"
 _SCOPE = ("rule_id", "path", "fingerprint", "context_digest")
@@ -67,6 +69,15 @@ def _source_known(result, parsed):
     return True
 
 
+def _material_ledger_entry(entry, parsed):
+    if (entry.get("phase") or "static") != "static":
+        return True
+    reason = str(entry.get("reasonCode") or "unknown")
+    artifact = parsed.by_rel.get(str(entry.get("path") or ""))
+    return (reason not in _BENIGN_LEDGER
+            and _static_severity(reason, artifact.kind if artifact else None) is not None)
+
+
 def apply_dispositions(parsed, correlated, triads, *, policy=None, context_errors=()):
     """Retain by default. Only exact operator scope may suppress or lower severity.
 
@@ -82,15 +93,18 @@ def apply_dispositions(parsed, correlated, triads, *, policy=None, context_error
     final["capability_contexts"] = contexts
     context_limits = [{"manifest": key, "limitations": sorted(value.limitations)}
                       for key, value in sorted(triads.items()) if value.limitations]
-    package_gap = bool(context_errors or context_limits or parsed.ledger_exceptions or any(
-        not item["finding"]["vector"] or item.get("coverage") != "no-reported-gap" for item in raw))
+    package_gap = bool(context_errors or context_limits or any(
+        _material_ledger_entry(entry, parsed) for entry in parsed.ledger_exceptions) or any(
+        (not item["finding"]["vector"] or item.get("coverage") != "no-reported-gap")
+        and not is_inventory_note(item["finding"]) for item in raw))
     decisions = {}
     for result in final["results"]:
         finding = result["finding"]
         context = contexts.get(result["manifest"] or "")
-        incomplete = (package_gap or bool(result["limitations"]) or result["manifest"] is None
-                      or not _source_known(result, parsed)
-                      or context is None or bool(context["limitations"]))
+        incomplete = (package_gap or result["manifest"] is None
+                      or context is None or bool(context["limitations"])
+                      or (not is_inventory_note(finding)
+                          and (bool(result["limitations"]) or not _source_known(result, parsed))))
         protected = (not finding["vector"] or any(
             item["provenance"] != "deterministic-check-output" for item in result["provenance"]))
         disposition, reason, provenance = (
