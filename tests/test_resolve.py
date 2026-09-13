@@ -168,6 +168,9 @@ def test_url_trailer_does_not_evade_as_empty_archive(monkeypatch):
         def __init__(self):
             self._sent = False
 
+        def close(self):
+            pass
+
         def read(self, n):
             if self._sent:
                 return b""
@@ -310,6 +313,9 @@ def test_url_download_pins_and_caps_size(monkeypatch):
 
     class _Resp:
         status = 200
+
+        def close(self):
+            pass
 
         def __init__(self):
             self._sent = False
@@ -494,6 +500,9 @@ def test_url_redirect_is_refused(monkeypatch):
 
     class _Resp:
         status = 302
+
+        def close(self):
+            pass
 
         def read(self, n):
             return b""

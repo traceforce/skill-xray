@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import socket
+import ssl
 import stat
 import subprocess
 import tarfile
@@ -360,47 +361,81 @@ def _check_url_host(url):
     return host, port, target, ip
 
 
+def _download_timeout(deadline):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise IngestLimitExceededError(
+            "download exceeded the %ds deadline" % URL_DEADLINE_SECONDS)
+    return min(URL_TIMEOUT_SECONDS, remaining)
+
+
+class _DeadlineSSLSocket(ssl.SSLSocket):
+    # HTTP buffering can hide many reads inside one header or chunk-framing operation.
+    def recv_into(self, buffer, nbytes=None, flags=0):
+        self.settimeout(_download_timeout(self.download_deadline))
+        result = super().recv_into(buffer, nbytes, flags)
+        _download_timeout(self.download_deadline)
+        return result
+
+    def send(self, data, flags=0):
+        self.settimeout(_download_timeout(self.download_deadline))
+        result = super().send(data, flags)
+        _download_timeout(self.download_deadline)
+        return result
+
+
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
-    def __init__(self, host, ip, port):
+    def __init__(self, host, ip, port, deadline):
         super().__init__(host, port, timeout=URL_TIMEOUT_SECONDS)
         self._ip = ip
+        self._deadline = deadline
+        self._context.sslsocket_class = _DeadlineSSLSocket
 
     def connect(self):
-        self.sock = socket.create_connection((self._ip, self.port), self.timeout)
+        self.sock = socket.create_connection(
+            (self._ip, self.port), _download_timeout(self._deadline))
+        self.sock.settimeout(_download_timeout(self._deadline))
         self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
+        self.sock.download_deadline = self._deadline
+        _download_timeout(self._deadline)
 
 
 def _download_capped(host, port, target, ip, dest):
-    conn = _PinnedHTTPSConnection(host, ip, port)
+    deadline = time.monotonic() + URL_DEADLINE_SECONDS
+    conn = _PinnedHTTPSConnection(host, ip, port, deadline)
+    resp = None
     try:
         # No explicit Host header: http.client builds a correct one (with the port
         # and bracketed IPv6) from the hostname; the socket is still IP-pinned.
         conn.request("GET", target, headers={"User-Agent": "skill-xray"})
         resp = conn.getresponse()
+        _download_timeout(deadline)
         if resp.status in _REDIRECT_STATUSES:
             raise UnsafeInputError(
                 "URL redirected (HTTP %d); pass the final URL directly" % resp.status)
         if resp.status != 200:
             raise UnsafeInputError("URL returned HTTP %d" % resp.status)
         written = 0
-        # Wall-clock deadline across the whole read: the per-operation socket
-        # timeout never trips on a slowloris that trickles one byte before it, so
-        # only this bounds the total transfer time (below the 100 MiB size cap).
-        deadline = time.monotonic() + URL_DEADLINE_SECONDS
         with open(dest, "wb") as fh:
             while True:
-                if time.monotonic() > deadline:
-                    raise IngestLimitExceededError(
-                        "download exceeded the %ds deadline" % URL_DEADLINE_SECONDS)
+                _download_timeout(deadline)
                 chunk = resp.read(_CHUNK)
+                _download_timeout(deadline)
                 if not chunk:
                     break
                 written += len(chunk)
                 if written > INGEST_MAX_BYTES:
                     raise IngestLimitExceededError("download exceeds %d bytes" % INGEST_MAX_BYTES)
                 fh.write(chunk)
+    except TimeoutError:
+        _download_timeout(deadline)
+        raise
     finally:
-        conn.close()
+        try:
+            if resp is not None:
+                resp.close()
+        finally:
+            conn.close()
 
 
 def _fetch_url(url):
