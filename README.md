@@ -37,6 +37,7 @@ The walker reads a package it does not trust, so:
 ## Use
 
 ```bash
+python dev/prepare_sarif_schema.py   # source checkouts only; verified release asset
 pip install -e .
 skill-xray <package-dir>            # a directory
 skill-xray <path>/SKILL.md          # a single file
@@ -49,6 +50,11 @@ skill-xray <target> --json          # JSON output
 
 Directory, file and zip are fully offline. URL and git are the only inputs that
 use the network; each enforces size, count and SSRF limits and fails closed.
+
+Source checkouts need the pinned SARIF schema before installation or packaging. The
+preparation command downloads and verifies it, or accepts `--cache /path/to/schema.json`
+for offline preparation. Wheels and source distributions already include it. Builds
+refuse missing/tampered assets; neither installation from a release nor scanning fetches it.
 
 ### Capability context and LLM review
 

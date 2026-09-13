@@ -29,6 +29,9 @@ skill-xray = "skill_xray.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+skill_xray = ["rules/*.yml", "schemas/*.json", "schemas/*.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

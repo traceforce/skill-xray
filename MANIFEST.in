@@ -1,0 +1,1 @@
+include dev/prepare_sarif_schema.py
