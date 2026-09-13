@@ -206,7 +206,8 @@ def main(argv=None) -> int:
                         policy_path = Path(args.policy).resolve()
                         if policy_path == Path(args.sarif).resolve():
                             raise ValueError("Report cannot overwrite its operator policy")
-                        if policy_path.is_relative_to(Path(r.root).resolve()):
+                        if (policy_path == Path(args.package).resolve()
+                                or policy_path.is_relative_to(Path(r.root).resolve())):
                             raise ValueError("Operator policy must be outside the scanned package")
                         if not policy_path.is_file():
                             raise ValueError("Operator policy must be a regular file")
@@ -217,7 +218,7 @@ def main(argv=None) -> int:
                         policy = json.loads(contents)
                         if not isinstance(policy, dict):
                             raise ValueError("Operator policy must be an object")
-                except (OSError, ValueError, RecursionError) as exc:
+                except (OSError, ValueError, RuntimeError) as exc:
                     sys.stderr.write("cannot prepare SARIF: %s\n" % _display(str(exc)))
                     return 2
             pkg = build_package(r.root)

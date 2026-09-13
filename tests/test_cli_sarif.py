@@ -133,3 +133,34 @@ def test_invalid_policy_never_starts_scan(make_package, tmp_path, monkeypatch, c
     monkeypatch.setattr(cli, "scan_report", lambda *_a, **_kw: pytest.fail("scan must not start"))
     assert cli.main([str(root), "--analyze", "--sarif", str(target), "--policy", str(policy)]) == 2
     assert not target.exists()
+
+
+def test_single_file_source_cannot_supply_its_own_policy(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "source.json"
+    original = '{"version":"skill-xray/scoped-policy/v1","decisions":[]}'
+    source.write_text(original)
+    target = tmp_path / "report.sarif"
+    monkeypatch.setattr(cli, "scan_report", lambda *_a, **_kw: pytest.fail("scan must not start"))
+    assert cli.main([str(source), "--analyze", "--sarif", str(target),
+                     "--policy", str(source)]) == 2
+    assert "outside the scanned package" in capsys.readouterr().err
+    assert source.read_text() == original and not target.exists()
+
+
+@pytest.mark.parametrize("option", ["--sarif", "--policy"])
+def test_path_resolution_runtime_error_is_reported(make_package, tmp_path, monkeypatch, option,
+                                                   capsys):
+    root = make_package({"SKILL.md": "# Documentation\n"})
+    target, bad = tmp_path / "result.sarif", tmp_path / "cycle"
+    resolve = Path.resolve
+    def fail_cycle(path, *args, **kwargs):
+        if path == bad:
+            raise RuntimeError("Symlink loop from cycle")
+        return resolve(path, *args, **kwargs)
+    monkeypatch.setattr(Path, "resolve", fail_cycle)
+    monkeypatch.setattr(cli, "scan_report", lambda *_a, **_kw: pytest.fail("scan must not start"))
+    options = ["--sarif", str(bad)] if option == "--sarif" else [
+        "--sarif", str(target), "--policy", str(bad)]
+    assert cli.main([str(root), "--analyze", *options]) == 2
+    assert "cannot prepare SARIF" in capsys.readouterr().err
+    assert not target.exists()
