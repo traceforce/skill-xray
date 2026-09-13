@@ -21,6 +21,7 @@ dependencies = [
     "packaging>=23",        # dependency specifier parsing
     "python-bidi>=0.6",     # UAX-9 bidi algorithm for Trojan-Source reordering (SXV-014)
     "confusable-homoglyphs>=3.3",  # UTS #39 confusables data for SXV-015 homoglyph folding
+    "jsonschema==4.26.0",  # offline validation against the official SARIF schema
 ]
 
 [project.scripts]

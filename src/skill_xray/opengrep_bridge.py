@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import tempfile
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -126,6 +127,92 @@ def _location(result: dict, target: SelectedCode) -> tuple[int, dict] | None:
         "end": {"line": _bounded(end.get("line"), 1), "col": _bounded(end.get("col"), 1),
                 "offset": _bounded(end.get("offset"), 0)},
     }
+
+
+def _fence_region(target, parsed, start, end, source_cache):
+    """Prove generated UTF-8 positions against the original, same-line Markdown.
+
+    Markdown already extracted the code; a suffix comparison recovers only the
+    removed container prefix. Tabs and transformed/ambiguous spans stay unlocated.
+    """
+    artifact = parsed.by_rel.get(target.rel) if parsed is not None else None
+    if artifact is None or artifact.text is None:
+        raise ValueError("fence source unavailable")
+    key = id(target)
+    if key not in source_cache:
+        source_cache[key] = target.text.split("\n"), artifact.text.split("\n")
+    generated, original = source_cache[key]
+    positions = []
+    for position in (start, end):
+        if not isinstance(position, dict):
+            raise ValueError("invalid fence position")
+        line, col = position.get("line"), position.get("col")
+        if (type(line) is not int or type(col) is not int
+                or not 1 <= line <= min(len(generated), len(original))):
+            raise ValueError("invalid fence position")
+        encoded = generated[line - 1].encode("utf-8")
+        if not 1 <= col <= len(encoded) + 1:
+            raise ValueError("invalid fence column")
+        positions.append((line, len(encoded[:col - 1].decode("utf-8"))))
+    (first, start_char), (last, end_char) = positions
+    if positions[1] < positions[0]:
+        raise ValueError("inverted fence region")
+    prefixes = []
+    for line in range(first - 1, last):
+        source, lifted = original[line], generated[line]
+        if not lifted or "\t" in source or "\t" in lifted or not source.endswith(lifted):
+            raise ValueError("unprovable fence prefix")
+        prefixes.append(len(source) - len(lifted))
+    generated_span = generated[first - 1:last]
+    generated_span[-1] = generated_span[-1][:end_char]
+    generated_span[0] = generated_span[0][start_char:]
+    original_span = original[first - 1:last]
+    original_span[-1] = original_span[-1][:prefixes[-1] + end_char]
+    original_span[0] = original_span[0][prefixes[0] + start_char:]
+    if original_span != generated_span:
+        raise ValueError("fence span crosses transformed source")
+    return {
+        "start": {"line": first, "col": start["col"]
+                  + len(original[first - 1][:prefixes[0]].encode("utf-8"))},
+        "end": {"line": last, "col": end["col"]
+                + len(original[last - 1][:prefixes[-1]].encode("utf-8"))},
+    }
+
+
+def _fence_trace(value, targets, parsed, source_cache):
+    """Map only locations belonging to known generated fence targets."""
+    if isinstance(value, list):
+        return [_fence_trace(item, targets, parsed, source_cache) for item in value]
+    if not isinstance(value, dict):
+        return value
+    mapped = {key: _fence_trace(item, targets, parsed, source_cache)
+              for key, item in value.items()}
+    if "path" in value and "start" in value and "end" in value:
+        target = targets.get(_target_name(value["path"]))
+        if target is None:
+            raise ValueError("unknown trace target")
+        if target.origin == "fence":
+            mapped.update(_fence_region(target, parsed, value["start"], value["end"], source_cache))
+    return mapped
+
+
+def _map_fence_evidence(evidence, target, targets, parsed, trace, source_cache):
+    """Reporting-only remapping, called after generated-code detection/postfilters."""
+    evidence["engine_location"] = deepcopy({key: evidence[key] for key in ("start", "end")})
+    try:
+        evidence.update(_fence_region(
+            target, parsed, evidence["start"], evidence["end"], source_cache))
+        evidence["location_mapping"] = "validated"
+    except (ValueError, TypeError, AttributeError):
+        evidence["location_mapping"] = "unvalidated"
+    if trace:
+        evidence["engine_dataflow_trace"] = deepcopy(evidence["dataflow_trace"])
+        try:
+            evidence["dataflow_trace"] = _remap_engine_paths(
+                _fence_trace(trace, targets, parsed, source_cache), targets)
+            evidence["trace_mapping"] = "validated"
+        except (ValueError, TypeError, AttributeError):
+            evidence["trace_mapping"] = "unvalidated"
 
 
 def _scope_chain(tree: ast.Module, line: int, col: int | None = None):
@@ -1425,6 +1512,7 @@ def findings_from_report(
     capability_postfilter_counts: dict[str, int] = {}
     observation_trees: dict[str, ast.Module | None] = {}
     observation_counts: dict[str, int] = {}
+    fence_sources = {}  # Split each captured source once across findings and trace steps.
     known_vectors = vector_registry()
     manifests = _manifest_index(parsed) if parsed is not None else {}
     results = report.get("results", [])
@@ -1688,13 +1776,17 @@ def findings_from_report(
         ):
             if source:
                 evidence[destination] = _remap_engine_paths(source, targets)
+        if target.origin == "fence":
+            _map_fence_evidence(evidence, target, targets, parsed,
+                                extra.get("dataflow_trace"), fence_sources)
         findings.append(Finding(
             vector=vector,
             rule=rule,
             severity=severity,
             path=target.rel,
             line=line,
-            column=location["start"].get("col"),
+            column=(None if evidence.get("location_mapping") == "unvalidated"
+                    else evidence["start"].get("col")),
             message=(
                 "governing manifest %s does not declare observed %s capability"
                 % (manifest.rel, capability)

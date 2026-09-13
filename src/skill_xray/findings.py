@@ -163,11 +163,28 @@ class Finding:
         return d
 
 
+def _engine_occurrence(f: Finding):
+    if (not isinstance(f.evidence, dict) or f.evidence.get("engine") != "opengrep"
+            or f.evidence.get("location_mapping") != "unvalidated"):
+        return ()
+    location = f.evidence.get("engine_location")
+    if not isinstance(location, dict):
+        return ()
+    positions = []
+    for boundary in ("start", "end"):
+        point = location.get(boundary)
+        if not isinstance(point, dict):
+            return ()
+        positions.extend(point.get(key) if type(point.get(key)) is int else -1
+                         for key in ("line", "col", "offset"))
+    return tuple(positions)
+
+
 def _sort_key(f: Finding):
     return (SEVERITY_RANK.get(f.severity, 9), f.path, f.vector,
             f.line if f.line is not None else -1,
             f.column if f.column is not None else -1,
-            f.offset if f.offset is not None else -1, f.rule, f.message)
+            f.offset if f.offset is not None else -1, f.rule, f.message, _engine_occurrence(f))
 
 
 def sort_findings(findings) -> list:
@@ -181,7 +198,9 @@ def dedupe_findings(findings) -> list:
     seen = set()
     out = []
     for f in sort_findings(findings):
-        key = (f.vector, f.path, f.line, f.column, f.offset, f.rule, f.message)
+        # Unverified source positions do not erase distinct generated-code occurrences.
+        key = (f.vector, f.path, f.line, f.column, f.offset, f.rule, f.message,
+               _engine_occurrence(f))
         if key not in seen:
             seen.add(key)
             out.append(f)
