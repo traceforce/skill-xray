@@ -87,6 +87,21 @@ def test_failed_download_leaves_no_asset(schema, tmp_path, monkeypatch, failure)
     assert not cache.exists() and not (tmp_path / "checkout" / ASSET).exists()
 
 
+def test_download_worker_failure_reason_reaches_stderr(schema, tmp_path, monkeypatch, capfd):
+    run = subprocess.run
+
+    def fail(_args, **kwargs):
+        return run([sys.executable, "-c",
+                    "import sys; sys.stderr.write('TLS verification failed\\n'); sys.exit(1)"],
+                   **kwargs)
+
+    monkeypatch.setattr(schema.subprocess, "run", fail)
+    with pytest.raises(subprocess.CalledProcessError):
+        schema.prepare(tmp_path / "checkout", tmp_path / "cache.json")
+    assert "TLS verification failed" in capfd.readouterr().err
+    assert not (tmp_path / "cache.json").exists() and not (tmp_path / "checkout" / ASSET).exists()
+
+
 def test_download_checks_url_size_and_digest(schema, official, monkeypatch):
     class Response(io.BytesIO):
         def read(self, size=-1):

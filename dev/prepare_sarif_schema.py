@@ -66,7 +66,7 @@ def prepare(root, cache):
     else:
         # A separate worker bounds total time, including a slowly trickling response.
         result = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--download"],
-                                capture_output=True, timeout=30, check=True)
+                                stdout=subprocess.PIPE, timeout=30, check=True)
         data = checked(result.stdout)
         atomic_write(cache, data)
     atomic_write(target, data)
