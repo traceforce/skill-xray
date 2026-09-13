@@ -72,11 +72,11 @@ def _anchor(finding, artifact):
     return None
 
 
-def source_region(artifact, start, end, *, byte_columns=True):
+def source_region(artifact, start, end, *, byte_columns=True, lines=None):
     """Validate native byte columns or IR character columns against captured source."""
     if artifact is None or artifact.text is None:
         raise ValueError("source unavailable")
-    lines = artifact.text.split("\n")
+    lines = artifact.text.split("\n") if lines is None else lines
     positions = []
     for position in (start, end):
         if not isinstance(position, dict):

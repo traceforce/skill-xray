@@ -9,7 +9,7 @@ import tempfile
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from urllib.parse import quote
+from urllib.parse import quote_from_bytes
 
 from jsonschema import Draft4Validator
 
@@ -33,12 +33,15 @@ def _validator():
     return Draft4Validator(schema)
 
 
-def _location(parsed, path, start=None, end=None, offset=None, length=None, byte_columns=False):
+def _location(parsed, path, line_cache, start=None, end=None, offset=None, length=None,
+              byte_columns=False):
     if (not isinstance(path, str) or not path or PurePosixPath(path).is_absolute()
-            or PureWindowsPath(path).drive or ".." in path.split("/") or "\\" in path):
+            or ".." in path.split("/")):
         return None, True
     artifact = parsed.by_rel.get(path)
-    physical = {"artifactLocation": {"uri": quote(path, safe="/", errors="surrogatepass")}}
+    if artifact is None and (PureWindowsPath(path).drive or "\\" in path):
+        return None, True
+    physical = {"artifactLocation": {"uri": quote_from_bytes(os.fsencode(path), safe="/")}}
     try:
         if offset is not None:
             if (artifact is None or artifact.raw is None or type(offset) is not int
@@ -49,7 +52,9 @@ def _location(parsed, path, start=None, end=None, offset=None, length=None, byte
         elif start and start.get("line") is not None:
             if artifact is None or artifact.text is None:
                 raise ValueError("source unavailable")
-            lines = artifact.text.split("\n")
+            if path not in line_cache:
+                line_cache[path] = artifact.text.split("\n")
+            lines = line_cache[path]
             positions = []
             for position in (start, end or start):
                 line, col = position.get("line"), position.get("col")
@@ -57,7 +62,7 @@ def _location(parsed, path, start=None, end=None, offset=None, length=None, byte
                     raise ValueError("invalid text line")
                 if col is not None:
                     if byte_columns:
-                        _, col, _ = source_region(artifact, position, position)
+                        _, col, _ = source_region(artifact, position, position, lines=lines)
                     elif type(col) is not int or not 1 <= col <= len(lines[line - 1]) + 1:
                         raise ValueError("invalid text column")
                 positions.append((line, col))
@@ -89,6 +94,7 @@ def _raw_view(candidate, stable_id):
 def build_sarif(parsed, report):
     """Map final decisions without applying policy, model opinions or detection logic."""
     correlation = report.correlation
+    line_cache = {}
     if correlation.get("errors"):
         raise ValueError("Cannot emit final SARIF after correlation failure; raw report retained")
     identities = {link["candidate_id"]: link.get("stable_candidate_id", link["candidate_id"])
@@ -134,7 +140,7 @@ def build_sarif(parsed, report):
                   "properties": properties}
         unmapped = evidence.get("location_mapping") == "unvalidated"
         location, invalid = _location(
-            parsed, finding["path"], {"line": finding.get("line"),
+            parsed, finding["path"], line_cache, {"line": finding.get("line"),
                                      "col": None if unmapped else finding.get("column")},
             None if unmapped else evidence.get("end"), finding.get("offset"), finding.get("length"),
             evidence.get("engine") == "opengrep")
@@ -148,7 +154,8 @@ def build_sarif(parsed, report):
         if entry["code_flow"]:
             steps = []
             for i, step in enumerate(entry["code_flow"]):
-                location, invalid = _location(parsed, step["path"], step["start"], step["end"],
+                location, invalid = _location(parsed, step["path"], line_cache,
+                                               step["start"], step["end"],
                                                byte_columns=True)
                 if invalid:
                     raise ValueError("Validated code flow lost its source mapping")
@@ -231,6 +238,10 @@ def validate_sarif(document):
                     or props["coverage"] != "no-reported-gap"
                     or result["suppressions"][0]["justification"] != props["reason"]):
                 raise ValueError("Invalid suppression audit")
+            expected = sorted({canonical(by_candidate[cid]["finding"].get("evidence", {}))
+                               for cid in props["candidateIds"]})
+            if [canonical(evidence) for evidence in props["evidence"]] != expected:
+                raise ValueError("Result evidence contradicts raw findings")
             for cid in props["candidateIds"]:
                 finding = by_candidate[cid]["finding"]
                 category = "security-finding" if finding["vector"] else "analysis-diagnostic"

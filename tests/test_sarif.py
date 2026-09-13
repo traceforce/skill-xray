@@ -80,7 +80,15 @@ def test_severity_mapping(make_package, severity, level):
 
 
 @pytest.mark.parametrize("path,uri", [("dir/run.py", "dir/run.py"),
-    ("dir/a b#é.py", "dir/a%20b%23%C3%A9.py"), ("dir/a%20.py", "dir/a%2520.py")])
+    ("dir/a b#é.py", "dir/a%20b%23%C3%A9.py"), ("dir/a%20.py", "dir/a%2520.py"),
+    pytest.param(r"dir/a\b.py", "dir/a%5Cb.py",
+                 marks=pytest.mark.skipif(sys.platform == "win32", reason="POSIX filename")),
+    pytest.param(r"C:\run.py", "C%3A%5Crun.py",
+                 marks=pytest.mark.skipif(sys.platform == "win32", reason="POSIX filename")),
+    pytest.param("C:run.py", "C%3Arun.py",
+                 marks=pytest.mark.skipif(sys.platform == "win32", reason="POSIX filename")),
+    pytest.param("raw-\udcff/SKILL.md", "raw-%FF/SKILL.md",
+                 marks=pytest.mark.skipif(sys.platform != "linux", reason="Linux byte filename"))])
 def test_relative_paths_are_uri_encoded(make_package, path, uri):
     parsed = parse.parse_package(ingest.build_package(make_package({path: "pass\n"})))
     report = report_for(parsed, [candidate(path=path, line=1)])
@@ -112,10 +120,17 @@ def test_unicode_columns_crlf_and_byte_regions(make_package):
 
 
 def test_supported_code_flow_only_and_order_preserved(make_package):
+    class CountedText(str):
+        splits = 0
+        def split(self, *args, **kwargs):
+            self.splits += 1
+            return super().split(*args, **kwargs)
     parsed = package(make_package, "source = input()\nos.system(source)\n")
     trace = {"taint_source": loc(1, "source = input()"), "taint_sink": loc(2, "os.system(source)")}
     report = report_for(parsed, [candidate(evidence={"dataflow_trace": trace})])
+    parsed.by_rel["run.py"].text = text = CountedText(parsed.by_rel["run.py"].text)
     output = build_sarif(parsed, report)
+    assert text.splits == 1
     steps = output["runs"][0]["results"][0]["codeFlows"][0]["threadFlows"][0]["locations"]
     assert [step["kinds"] for step in steps] == [["source"], ["sink"]]
     assert [step["executionOrder"] for step in steps] == [0, 1]
@@ -149,7 +164,7 @@ def test_coverage_and_check_failure_are_not_clean_or_suppressible(make_package, 
 
 
 @pytest.mark.parametrize("mutation", ["schema", "rule", "candidate", "link", "severity",
-                                    "suppression"])
+                                    "suppression", "empty-evidence", "forged-evidence"])
 def test_schema_and_cross_reference_validation_fail_visibly(make_package, mutation):
     parsed = package(make_package)
     output = build_sarif(parsed, report_for(parsed, [candidate()]))
@@ -165,6 +180,8 @@ def test_schema_and_cross_reference_validation_fail_visibly(make_package, mutati
         run["properties"]["candidateLinks"][0]["result_id"] = "absent"
     elif mutation == "severity":
         result["properties"]["originalSeverity"] = "low"
+    elif mutation.endswith("evidence"):
+        result["properties"]["evidence"] = [] if mutation == "empty-evidence" else [{"fake": True}]
     else:
         result["properties"]["disposition"] = "suppressed"
     with pytest.raises(ValueError):
