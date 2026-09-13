@@ -131,6 +131,26 @@ configuration produce byte-identical SARIF; scan-local IDs, engine fingerprints,
 and absolute installation roots are not canonical report identities.
 When report writing fails, requested JSON/text findings are still emitted before exit 2.
 
+### Optional LLM audit
+
+With `--analyze --json --llm --llm-review --sarif <path>`, validated review annotations
+also appear in `runs[].properties.llmReview`. `authoritative` is always false. Each
+decision references the same stable `candidate_id` used by `rawCandidates`, result
+`candidateIds` and `candidateLinks`; a reused review references its original candidate.
+The existing shadow API exports the same audit with `mode: "shadow"`.
+
+Records preserve review status, reason, policy/provenance, validated proposal and, when
+available, reviewer identity and request/response hashes. Confidence belongs to the model's
+evidence assessment, not a calibrated maliciousness probability. Whole requests, manifests
+and source windows are not duplicated into SARIF. The enriched JSON retains the request
+audit; hashes identify original requests/responses, before candidate IDs are canonicalized.
+
+An `llm-disputed` annotation never changes result membership, severity or native
+`suppressions`. Failed, skipped, budget-limited and incomplete reviews remain explicit;
+they are not clean verdicts. Review records cover deterministic candidates, not the separate
+additive SXV-038 findings. No review field is added when review is disabled. Identical
+recorded responses yield identical output; fresh model calls may return different opinions.
+
 Fenced-code positions are mapped from generated code only when the original source span
 can be verified. Tabs or transformed multiline spans may retain only the known line and
 an explicit mapping limitation. Original generated positions/traces remain in evidence;

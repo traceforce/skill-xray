@@ -17,6 +17,7 @@ from . import __version__
 from .correlate import FINGERPRINT_VERSION, canonical, source_region
 from .disposition import POLICY_VERSION
 from .findings import SEVERITY_RANK
+from .llm.judge import RESPONSE_SCHEMA
 from .opengrep_runtime import VERSION as OPENGREP_VERSION
 
 __all__ = ["build_sarif", "encode_sarif", "validate_sarif", "write_sarif"]
@@ -81,6 +82,73 @@ def _raw_view(candidate, stable_id):
     if value.get("analyzer") == "opengrep" or evidence.get("engine") == "opengrep":
         evidence.pop("fingerprint", None)
     return value
+
+
+def _review_audit(report, identities):
+    decisions = report.dispositions if report.review_mode else report.shadow
+    records = []
+    for decision in decisions:
+        # Requests contain whole source files; export only the compact review and audit hashes.
+        record = {key: deepcopy(decision[key]) for key in (
+            "candidate_id", "disposition", "status", "reason", "policy_version", "provenance",
+            "proposal", "tags", "reviewer", "request_sha256", "response_sha256",
+            "reviewed_candidate_id", "failure_reason") if key in decision}
+        for key in ("candidate_id", "reviewed_candidate_id"):
+            if key in record:
+                if record[key] not in identities:
+                    raise ValueError("Unknown LLM review candidate")
+                record[key] = identities[record[key]]
+        if record.get("proposal") is not None:
+            if record["proposal"]["candidate_id"] != decision["candidate_id"]:
+                raise ValueError("LLM proposal candidate mismatch")
+            record["proposal"]["candidate_id"] = record["candidate_id"]
+        records.append(record)
+    return {"mode": "annotated" if report.review_mode else "shadow", "authoritative": False,
+            "decisions": sorted(records, key=lambda d: d["candidate_id"])}
+
+
+def _validate_review(audit, raw):
+    if audit["mode"] not in {"annotated", "shadow"} or audit["authoritative"] is not False:
+        raise ValueError("Invalid LLM review mode")
+    candidates = {c["candidate_id"]: c for c in raw if c["provenance"] != "advisory-output"}
+    records = {d["candidate_id"]: d for d in audit["decisions"]}
+    if len(records) != len(audit["decisions"]) or set(records) != set(candidates):
+        raise ValueError("Invalid LLM review identities")
+    for cid, decision in records.items():
+        if (decision["status"] not in {"ineligible", "proposed", "duplicate-review", "budget",
+                                      "unavailable", "incomplete-context", "invalid-response",
+                                      "error"}
+                or decision["disposition"] not in {"reported", "llm-disputed"}
+                or any(not isinstance(decision[key], str) or not decision[key].strip()
+                       or len(decision[key]) > 200
+                       for key in ("reason", "policy_version", "provenance"))):
+            raise ValueError("Invalid LLM review decision")
+        proposal = decision["proposal"]
+        if proposal is not None:
+            Draft4Validator(RESPONSE_SCHEMA).validate(proposal)
+            if (proposal["candidate_id"] != cid or decision["status"] != "proposed"
+                    or proposal["verdict"] == "propose_false_positive" and (
+                        proposal["mechanism"] != "not_supported"
+                        or proposal["intent"] == "malicious")):
+                raise ValueError("Invalid LLM proposal")
+        elif decision["status"] == "proposed":
+            raise ValueError("Missing LLM proposal")
+        original = decision.get("reviewed_candidate_id")
+        if original is not None:
+            if (original == cid or original not in records
+                    or "reviewed_candidate_id" in records[original] or proposal is not None
+                    or candidates[cid]["finding"] != candidates[original]["finding"]
+                    or decision["disposition"] != records[original]["disposition"]):
+                raise ValueError("Invalid duplicate review reference")
+            proposal = records[original]["proposal"]
+        elif decision["status"] == "duplicate-review":
+            raise ValueError("Missing duplicate review reference")
+        if decision["disposition"] == "llm-disputed" and (
+                audit["mode"] != "annotated" or proposal is None
+                or proposal["verdict"] != "propose_false_positive"
+                or proposal["confidence"] != "high" or proposal["mechanism"] != "not_supported"
+                or proposal["intent"] != "legitimate"):
+            raise ValueError("Invalid non-authoritative dispute")
 
 
 def build_sarif(parsed, report):
@@ -174,6 +242,10 @@ def build_sarif(parsed, report):
                           "contextErrors": sorted(report.context_errors),
                           "rawScope": "emitted-results-before-reporting-deduplication",
                           "rawCandidates": raw, "candidateLinks": links}}
+    if (getattr(report, "review_mode", False)
+            or getattr(report, "llm_usage", {}).get("judge_enabled")
+            or getattr(report, "shadow", [])):
+        run["properties"]["llmReview"] = _review_audit(report, identities)
     return {"version": "2.1.0", "$schema": _validator().schema["id"], "runs": [run]}
 
 
@@ -202,6 +274,8 @@ def validate_sarif(document):
                 or sorted(primary) != sorted(by_result)
                 or len({r["id"] for r in rules}) != len(rules)):
             raise ValueError("Invalid candidate/result identities")
+        if "llmReview" in run["properties"]:
+            _validate_review(run["properties"]["llmReview"], raw)
         for result in results:
             props = result["properties"]
             manifest = props["governingManifest"]

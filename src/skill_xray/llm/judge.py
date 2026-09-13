@@ -124,6 +124,8 @@ def _proposal(reply, candidate_id, snippet):
         raise _ProposalError("evidence-quote")
     for key in ("reason", "mechanism", "intent", "impact"):
         obj[key] = redact(obj[key])
+        if len(obj[key]) > 200:
+            raise _ProposalError("field-bounds")
     return obj
 
 
