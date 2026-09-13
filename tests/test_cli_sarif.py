@@ -164,3 +164,17 @@ def test_path_resolution_runtime_error_is_reported(make_package, tmp_path, monke
     assert cli.main([str(root), "--analyze", *options]) == 2
     assert "cannot prepare SARIF" in capsys.readouterr().err
     assert not target.exists()
+
+
+@pytest.mark.parametrize("enrich", [False, True])
+def test_sarif_preserves_explicit_json_enrichment_contract(
+        make_package, tmp_path, monkeypatch, capsys, enrich):
+    finding = Finding("SXV-028", "instruction-override", "high", "SKILL.md", "live", line=4)
+    root, target = run_fixture(make_package, tmp_path, monkeypatch, [finding])
+    args = [str(root), "--analyze", "--json"] + (["--enrich"] if enrich else [])
+    assert cli.main(args) == 0
+    baseline = json.loads(capsys.readouterr().out)
+    assert cli.main([*args, "--sarif", str(target)]) == 0
+    assert json.loads(capsys.readouterr().out) == baseline
+    assert ("enrichment" in baseline) is enrich
+    validate_sarif(json.loads(target.read_bytes()))

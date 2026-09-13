@@ -24,7 +24,7 @@ from .opengrep_runtime import VERSION as OPENGREP_VERSION
 from .opengrep_runtime import OpenGrepRuntimeError, install_opengrep
 from .parse import parse_package
 from .resolve import IngestLimitExceededError, UnsafeInputError, resolved_input
-from .sarif import build_sarif, write_sarif
+from .sarif import build_sarif, is_within_source, write_sarif
 from .scan import scan, scan_report
 
 
@@ -200,14 +200,19 @@ def main(argv=None) -> int:
             policy = None
             if args.sarif:
                 try:
-                    if Path(args.sarif).resolve() == Path(args.package).resolve():
+                    report_path = Path(args.sarif).resolve()
+                    source_path = Path(args.package).resolve()
+                    if (report_path == source_path or report_path.exists() and source_path.exists()
+                            and report_path.samefile(source_path)):
                         raise ValueError("Report cannot overwrite its source")
                     if args.policy:
                         policy_path = Path(args.policy).resolve()
-                        if policy_path == Path(args.sarif).resolve():
+                        if (policy_path == report_path or report_path.exists()
+                                and policy_path.samefile(report_path)):
                             raise ValueError("Report cannot overwrite its operator policy")
-                        if (policy_path == Path(args.package).resolve()
-                                or policy_path.is_relative_to(Path(r.root).resolve())):
+                        if (policy_path == source_path or source_path.exists()
+                                and policy_path.samefile(source_path)
+                                or is_within_source(policy_path, Path(r.root).resolve())):
                             raise ValueError("Operator policy must be outside the scanned package")
                         if not policy_path.is_file():
                             raise ValueError("Operator policy must be a regular file")
@@ -247,7 +252,7 @@ def main(argv=None) -> int:
                         sys.stderr.write("cannot write SARIF: %s\n" % _display(str(exc)))
                         report_failed = True
                 if args.json:
-                    enrichment = report.to_dict() if report else {}
+                    enrichment = report.to_dict() if args.enrich or reviewing else {}
                     analysis = {"opengrepVersion": OPENGREP_VERSION}
                     if client is not None:
                         analysis["llmCoverage"] = coverage_summary(parsed, findings)
@@ -259,9 +264,9 @@ def main(argv=None) -> int:
                         "package": pkg.name, "identity": pkg.identity,
                         "source": args.package, "kind": r.kind,
                         "analysis": analysis,
-                        "findings": (enrichment.pop("findings") if report
+                        "findings": (enrichment.pop("findings") if enrichment
                                      else findings_to_dicts(findings)), "ledger": ledger,
-                        **({"enrichment": enrichment} if report else {}),
+                        **({"enrichment": enrichment} if args.enrich or reviewing else {}),
                     }, indent=2) + "\n")
                 else:
                     _print_findings(pkg, findings)

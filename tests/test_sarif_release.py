@@ -338,3 +338,50 @@ def test_writer_checks_the_same_resolved_destination_it_uses(make_package, tmp_p
     write_sarif(document, target, source_root=parsed.identity)
     assert (directory / "result.sarif").is_file()
     assert not (tmp_path / "pkg" / "result.sarif").exists()
+
+
+@pytest.mark.parametrize("kind", ["writer-source", "single-source",
+                                 "policy-output", "policy-input"])
+def test_source_and_policy_protection_uses_filesystem_identity(
+        directive, make_package, tmp_path, monkeypatch, kind):
+    root, _, document = directive
+    alias = root.with_name(root.name.upper())
+    if not alias.exists():
+        try:
+            alias.symlink_to(root, target_is_directory=True)
+        except OSError:
+            pytest.skip("case-insensitive volume or symlinks required")
+        resolve = Path.resolve
+        # Emulate case-insensitive POSIX resolution, which can preserve the caller's spelling.
+        def keep_spelling(path, *args, **kwargs):
+            return path.absolute() if path.is_relative_to(alias) else resolve(path, *args, **kwargs)
+        monkeypatch.setattr(Path, "resolve", keep_spelling)
+    source, policy = root / "SKILL.md", root / "operator.json"
+    policy.write_text('{"version":"skill-xray/scoped-policy/v1","decisions":[]}')
+    original = source.read_bytes(), policy.read_bytes()
+    monkeypatch.setattr(cli, "scan_report", lambda *_a, **_kw: pytest.fail("scan must not start"))
+    if kind == "writer-source":
+        with pytest.raises(ValueError):
+            write_sarif(document, alias / source.name, source_root=root)
+    else:
+        target, input_path, options = tmp_path / "report.sarif", root, []
+        if kind == "single-source":
+            input_path, target = source, alias / source.name
+        elif kind == "policy-output":
+            input_path = make_package({"SKILL.md": "# Documentation\n"}, name="other")
+            target, options = alias / policy.name, ["--policy", str(policy)]
+        else:
+            options = ["--policy", str(alias / policy.name)]
+        assert cli.main([str(input_path), "--analyze", "--sarif", str(target), *options]) == 2
+    assert (source.read_bytes(), policy.read_bytes()) == original
+
+
+def test_distinct_case_sensitive_sibling_is_a_valid_destination(directive):
+    root, _, document = directive
+    sibling = root.with_name(root.name.upper())
+    if sibling.exists():
+        pytest.skip("requires a case-sensitive volume")
+    sibling.mkdir()
+    target = sibling / "report.sarif"
+    write_sarif(document, target, source_root=root)
+    validate_sarif(json.loads(target.read_bytes()))

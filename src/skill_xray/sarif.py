@@ -264,13 +264,19 @@ def encode_sarif(document):
     return data
 
 
+def is_within_source(path, root):
+    # Filesystem identity catches case/Unicode aliases that lexical paths miss.
+    return path.is_relative_to(root) or any(
+        ancestor.exists() and ancestor.samefile(root) for ancestor in (path, *path.parents))
+
+
 def write_sarif(document, target, *, source_root):
     """Validate first; never place a generated report among scanner input artifacts."""
     target, source_root = Path(target), Path(source_root).resolve()
     if target.is_symlink():
         raise ValueError("SARIF output must be outside the scanned package")
     target = target.resolve()
-    if target.is_relative_to(source_root):
+    if is_within_source(target, source_root):
         raise ValueError("SARIF output must be outside the scanned package")
     if target.exists() and not target.is_file():
         raise ValueError("SARIF output must be a regular file")
