@@ -252,7 +252,8 @@ def test_returned_response_provenance_survives_even_invalid_json(
 @pytest.mark.parametrize("mutation", ["identity", "missing", "duplicate", "proposal-id",
     "duplicate-link", "authority", "disposition", "verdict", "confidence", "status",
     "missing-proposal", "disputed-unknown", "shadow-dispute", "hidden-dispute",
-    "audit-extra", "request-extra", "source-extra"])
+    "audit-extra", "request-extra", "source-extra", "bad-hash", "reviewer-source",
+    "reviewer-shape", "reviewer-model", "reviewer-hash", "failure-reason", "wrong-tags"])
 def test_validation_rejects_broken_review_audit(make_package, monkeypatch, mutation):
     _, data = document(make_package, monkeypatch)
     audit = data["runs"][0]["properties"]["llmReview"]
@@ -285,10 +286,110 @@ def test_validation_rejects_broken_review_audit(make_package, monkeypatch, mutat
         decision["disposition"] = "reported"
     elif mutation == "audit-extra":
         audit["request"] = {"source": "Whole input must not be exported"}
+    elif mutation == "bad-hash":
+        decision["request_sha256"] = "not-a-hash"
+    elif mutation == "reviewer-source":
+        decision["reviewer"]["source"] = "Whole input must not be exported"
+    elif mutation == "reviewer-shape":
+        decision["reviewer"] = []
+    elif mutation == "reviewer-model":
+        decision["reviewer"]["model"] = {"source": "Whole input must not be exported"}
+    elif mutation == "reviewer-hash":
+        decision["reviewer"]["prompt_sha256"] = "not-a-hash"
+    elif mutation == "failure-reason":
+        decision["failure_reason"] = "x" * 201
+    elif mutation == "wrong-tags":
+        decision["proposal"].update(verdict="retain_finding", mechanism="supported")
+        decision["disposition"] = "reported"
     elif mutation.endswith("-extra"):
         decision[mutation.removesuffix("-extra")] = {"source": "Whole input must not be exported"}
     else:
         decision["status"] = "approved"
+    with pytest.raises(ValueError, match="SARIF validation failed"):
+        validate_sarif(data)
+
+
+@pytest.mark.parametrize("mode", ["annotated", "shadow"])
+@pytest.mark.parametrize("verdict", ["retain_finding", "insufficient_context"])
+@pytest.mark.parametrize("mutation", ["reviewer", "request_sha256", "response_sha256",
+                                     "mode", "provenance"])
+def test_successful_review_requires_consistent_provenance(
+        make_package, monkeypatch, mode, verdict, mutation):
+    monkeypatch.setattr(scanmod, "run_checks", lambda *_a, **_kw: [finding(), finding()])
+    parsed = fixture(make_package)
+    report = scanmod.scan_report(parsed, client=Reviewer({"verdict": verdict}),
+                                **{"llm_review" if mode == "annotated" else "llm_shadow": True})
+    data = build_sarif(parsed, report)
+    validate_sarif(data)
+    audit = data["runs"][0]["properties"]["llmReview"]
+    decision = next(d for d in audit["decisions"] if d["status"] == "proposed")
+    assert decision["disposition"] == "reported"
+    if mutation == "mode":
+        audit["mode"] = "shadow" if mode == "annotated" else "annotated"
+    elif mutation == "provenance":
+        decision["provenance"] = "llm-shadow" if mode == "annotated" else "llm-review-policy"
+    else:
+        del decision[mutation]
+    with pytest.raises(ValueError, match="SARIF validation failed"):
+        validate_sarif(data)
+
+
+@pytest.mark.parametrize("mode", ["annotated", "shadow"])
+@pytest.mark.parametrize("outcome", ["ineligible", "budget", "unavailable", "incomplete-context",
+                                     "invalid-response", "error", "proposed", "duplicate-review"])
+@pytest.mark.parametrize("mutation", ["mode", "policy_version", "provenance"])
+def test_every_review_outcome_has_consistent_mode_and_policy(
+        make_package, monkeypatch, mode, outcome, mutation):
+    raw = [finding(evidence={"engine": "opengrep"})] if outcome == "ineligible" else [
+        finding(), finding()]
+    monkeypatch.setattr(scanmod, "run_checks", lambda *_a, **_kw: raw)
+    client = Reviewer({"verdict": "retain_finding"})
+    if outcome == "unavailable":
+        client.error = LLMError()
+    elif outcome == "invalid-response":
+        client.change["candidate_id"] = "wrong"
+    elif outcome == "error":
+        def fail(*_args, **_kwargs):
+            raise ValueError("review unavailable")
+        monkeypatch.setattr(scanmod, "judge_candidates", fail)
+    parsed = fixture(make_package, BODY + "x" * 20001 if outcome == "incomplete-context" else BODY)
+    report = scanmod.scan_report(parsed, client=client,
+                                max_llm_calls=0 if outcome == "budget" else 25,
+                                **{"llm_review" if mode == "annotated" else "llm_shadow": True})
+    data = build_sarif(parsed, report)
+    validate_sarif(data)
+    audit = data["runs"][0]["properties"]["llmReview"]
+    decision = next(d for d in audit["decisions"] if d["status"] == outcome)
+    if mutation == "mode":
+        audit["mode"] = "shadow" if mode == "annotated" else "annotated"
+    else:
+        decision[mutation] = "unrelated-policy"
+    with pytest.raises(ValueError, match="SARIF validation failed"):
+        validate_sarif(data)
+
+
+@pytest.mark.parametrize("mode", ["annotated", "shadow"])
+@pytest.mark.parametrize("failure,missing", [
+    ("malformed", "request_sha256"), ("malformed", "reviewer"), ("malformed", "both"),
+    ("oversized", "request_sha256"), ("oversized", "reviewer"),
+    ("transport", "request_sha256"), ("transport", "reviewer"),
+])
+def test_failed_review_hashes_keep_request_and_reviewer_together(
+        make_package, monkeypatch, mode, failure, missing):
+    monkeypatch.setattr(scanmod, "run_checks", lambda *_a, **_kw: [finding()])
+    client = Reviewer(error=LLMError())
+    if failure != "transport":
+        monkeypatch.setattr(client, "complete", lambda *_: "{" if failure == "malformed"
+                            else "x" * 16385)
+    parsed = fixture(make_package)
+    report = scanmod.scan_report(parsed, client=client,
+                                **{"llm_review" if mode == "annotated" else "llm_shadow": True})
+    data = build_sarif(parsed, report)
+    validate_sarif(data)
+    decision, = data["runs"][0]["properties"]["llmReview"]["decisions"]
+    assert ("response_sha256" in decision) == (failure == "malformed")
+    for key in ("request_sha256", "reviewer") if missing == "both" else (missing,):
+        del decision[key]
     with pytest.raises(ValueError, match="SARIF validation failed"):
         validate_sarif(data)
 

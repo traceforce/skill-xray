@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 from copy import deepcopy
 from functools import lru_cache
@@ -17,7 +18,8 @@ from . import __version__
 from .correlate import FINGERPRINT_VERSION, canonical, source_region
 from .disposition import POLICY_VERSION
 from .findings import SEVERITY_RANK
-from .llm.judge import RESPONSE_SCHEMA
+from .llm.judge import POLICY_VERSION as SHADOW_POLICY_VERSION
+from .llm.judge import RESPONSE_SCHEMA, REVIEW_POLICY_VERSION
 from .opengrep_runtime import VERSION as OPENGREP_VERSION
 
 __all__ = ["build_sarif", "encode_sarif", "validate_sarif", "write_sarif"]
@@ -115,8 +117,11 @@ def _validate_review(audit, raw):
     records = {d["candidate_id"]: d for d in audit["decisions"]}
     if len(records) != len(audit["decisions"]) or set(records) != set(candidates):
         raise ValueError("Invalid LLM review identities")
+    annotated = audit["mode"] == "annotated"
+    policy = REVIEW_POLICY_VERSION if annotated else SHADOW_POLICY_VERSION
     for cid, decision in records.items():
         if (not set(decision).issubset(_REVIEW_FIELDS)
+                or decision["policy_version"] != policy
                 or decision["status"] not in {"ineligible", "proposed", "duplicate-review",
                     "budget", "unavailable", "incomplete-context", "invalid-response", "error"}
                 or decision["disposition"] not in {"reported", "llm-disputed"}
@@ -124,8 +129,33 @@ def _validate_review(audit, raw):
                        or len(decision[key]) > 200
                        for key in ("reason", "policy_version", "provenance"))):
             raise ValueError("Invalid LLM review decision")
+        if ({"request_sha256", "reviewer", "response_sha256"}.intersection(decision)
+                and not {"request_sha256", "reviewer"}.issubset(decision)):
+            raise ValueError("Incomplete LLM request provenance")
+        hashes = [decision[key] for key in ("request_sha256", "response_sha256") if key in decision]
+        if "reviewer" in decision:
+            reviewer = decision["reviewer"]
+            if (not isinstance(reviewer, dict)
+                    or set(reviewer) != {"provider", "model", "prompt_sha256", "schema_sha256"}
+                    or any(not isinstance(reviewer[key], str) or not reviewer[key]
+                           or len(reviewer[key]) > 200 or reviewer[key] != reviewer[key].strip()
+                           or not reviewer[key].isprintable() for key in ("provider", "model"))):
+                raise ValueError("Invalid LLM reviewer identity")
+            hashes.extend(reviewer[key] for key in ("prompt_sha256", "schema_sha256"))
+        if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+               for value in hashes):
+            raise ValueError("Invalid LLM audit hash")
+        if "failure_reason" in decision and (
+                not isinstance(decision["failure_reason"], str)
+                or not decision["failure_reason"].strip() or len(decision["failure_reason"]) > 200):
+            raise ValueError("Invalid LLM failure reason")
+        if "tags" in decision and decision["tags"] != (
+                ["llm-disputed"] if decision["disposition"] == "llm-disputed" else []):
+            raise ValueError("LLM tags contradict disposition")
         proposal = decision["proposal"]
         if proposal is not None:
+            if not {"reviewer", "request_sha256", "response_sha256"}.issubset(decision):
+                raise ValueError("Missing LLM proposal provenance")
             Draft4Validator(RESPONSE_SCHEMA).validate(proposal)
             if (proposal["candidate_id"] != cid or decision["status"] != "proposed"
                     or proposal["verdict"] == "propose_false_positive" and (
@@ -147,7 +177,15 @@ def _validate_review(audit, raw):
                 raise ValueError("Duplicate review changed the original outcome")
         elif decision["status"] == "duplicate-review":
             raise ValueError("Missing duplicate review reference")
-        disputed = (audit["mode"] == "annotated" and proposal is not None
+        provenance = "deterministic-policy"
+        if proposal is not None:
+            if annotated:
+                provenance = "llm-review-policy"
+            elif original is None:
+                provenance = "llm-shadow"
+        if decision["provenance"] != provenance:
+            raise ValueError("LLM provenance contradicts review outcome")
+        disputed = (annotated and proposal is not None
                     and proposal["verdict"] == "propose_false_positive"
                     and proposal["confidence"] == "high"
                     and proposal["mechanism"] == "not_supported"

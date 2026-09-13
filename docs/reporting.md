@@ -144,6 +144,8 @@ available, reviewer identity and request/response hashes. Confidence belongs to 
 evidence assessment, not a calibrated maliciousness probability. Whole requests, manifests
 and source windows are not duplicated into SARIF. The enriched JSON retains the request
 audit; hashes identify original requests/responses, before candidate IDs are canonicalized.
+Response hashes cover bounded text returned by the LLM session. A response rejected at
+the session's size/type boundary has an explicit failure status but no response hash.
 
 An `llm-disputed` annotation never changes result membership, severity or native
 `suppressions`. Failed, skipped, budget-limited and incomplete reviews remain explicit;
