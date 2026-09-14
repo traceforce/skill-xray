@@ -82,7 +82,8 @@ def apply_dispositions(parsed, correlated, triads, *, policy=None, context_error
     """Retain by default. Only exact operator scope may suppress or lower severity.
 
     All results remain in the audit list, including suppressed results. Unknown capability
-    axes are explanation, not permission; source, manifest or coverage gaps block policy.
+    axes are explanation, not permission. Material gaps block policy package-wide:
+    an unanalyzed artifact may change cross-file capability or flow context.
     """
     entries = _policy_entries(policy)
     final = deepcopy(correlated)
