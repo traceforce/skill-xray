@@ -51,6 +51,35 @@ def test_compact_audit_survives_written_sarif(make_package, monkeypatch, tmp_pat
     assert encode_sarif(build_sarif(fixture(make_package), report)) == target.read_bytes()
 
 
+@pytest.mark.parametrize("context", [{"confidence": "medium"}, {"intent": "unknown"}])
+def test_serializer_does_not_rederive_judge_dispute_threshold(make_package, monkeypatch, context):
+    _, data = document(make_package, monkeypatch)
+    decision = data["runs"][0]["properties"]["llmReview"]["decisions"][0]
+    decision["proposal"].update(context)
+    validate_sarif(data)
+    result = data["runs"][0]["results"][0]
+    assert result["properties"]["disposition"] == "reported"
+    assert result["properties"]["effectiveSeverity"] == result["properties"]["originalSeverity"]
+    assert "suppressions" not in result
+
+
+def test_invalid_annotated_response_uses_mode_neutral_reason(make_package, monkeypatch):
+    report = run(make_package, monkeypatch, client=Reviewer({"candidate_id": "wrong"}))
+    assert report.dispositions[0]["reason"] == "Unusable review response; retained"
+
+
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_dispute_requires_an_actual_review_proposal(make_package, monkeypatch, duplicate):
+    raw = [finding()] * (2 if duplicate else 1)
+    _, data = document(make_package, monkeypatch, raw=raw, max_llm_calls=0)
+    decisions = data["runs"][0]["properties"]["llmReview"]["decisions"]
+    for decision in decisions:
+        assert decision["proposal"] is None
+        decision.update(disposition="llm-disputed", tags=["llm-disputed"])
+    with pytest.raises(ValueError, match="SARIF validation failed"):
+        validate_sarif(data)
+
+
 def test_duplicate_reviews_use_stable_links(make_package, monkeypatch):
     client = Reviewer()
     _, data = document(make_package, monkeypatch, raw=[finding(), finding()], client=client)
@@ -251,7 +280,7 @@ def test_returned_response_provenance_survives_even_invalid_json(
 
 @pytest.mark.parametrize("mutation", ["identity", "missing", "duplicate", "proposal-id",
     "duplicate-link", "authority", "disposition", "verdict", "confidence", "status",
-    "missing-proposal", "disputed-unknown", "shadow-dispute", "hidden-dispute",
+    "missing-proposal", "shadow-dispute", "hidden-dispute",
     "audit-extra", "request-extra", "source-extra", "bad-hash", "reviewer-source",
     "reviewer-shape", "reviewer-model", "reviewer-hash", "failure-reason", "wrong-tags"])
 def test_validation_rejects_broken_review_audit(make_package, monkeypatch, mutation):
@@ -278,8 +307,6 @@ def test_validation_rejects_broken_review_audit(make_package, monkeypatch, mutat
         decision["proposal"]["confidence"] = 0.99
     elif mutation == "missing-proposal":
         decision["proposal"] = None
-    elif mutation == "disputed-unknown":
-        decision["proposal"]["intent"] = "unknown"
     elif mutation == "shadow-dispute":
         audit["mode"] = "shadow"
     elif mutation == "hidden-dispute":
@@ -327,7 +354,7 @@ def test_successful_review_requires_consistent_provenance(
     if mutation == "mode":
         audit["mode"] = "shadow" if mode == "annotated" else "annotated"
     elif mutation == "provenance":
-        decision["provenance"] = "llm-shadow" if mode == "annotated" else "llm-review-policy"
+        decision["provenance"] = "unknown-producer"
     else:
         del decision[mutation]
     with pytest.raises(ValueError, match="SARIF validation failed"):

@@ -3,7 +3,6 @@
 import sys
 from copy import deepcopy
 from dataclasses import replace
-from types import SimpleNamespace
 
 import pytest
 
@@ -14,6 +13,7 @@ from skill_xray.disposition import POLICY_VERSION, apply_dispositions
 from skill_xray.findings import FINDING_CAP, cap_findings, dedupe_findings
 from skill_xray.opengrep_bridge import findings_from_report, select_executable_code
 from skill_xray.sarif import build_sarif, encode_sarif, validate_sarif
+from skill_xray.scan import ScanReport
 
 
 def _fixture(make_package, prefix="   ", command='open("~/.ssh/id_rsa")'):
@@ -51,8 +51,10 @@ def _document(parsed, finding, *, suppress=False):
             **{key: result[key] for key in ("rule_id", "fingerprint", "context_digest")},
             "path": finding.path, "action": "suppress", "reason": "Reviewed fixture",
         }]}
-    correlation = apply_dispositions(parsed, correlation, build_triads(parsed), policy=policy)
-    document = build_sarif(parsed, SimpleNamespace(correlation=correlation, context_errors=[]))
+    triads = build_triads(parsed)
+    correlation = apply_dispositions(parsed, correlation, triads, policy=policy)
+    report = ScanReport([], raw, triads, [], {}, [], correlation=correlation)
+    document = build_sarif(parsed, report)
     validate_sarif(document)
     return document["runs"][0]["results"][0]
 

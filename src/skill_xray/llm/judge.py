@@ -273,15 +273,15 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
         except LLMBudgetError:
             decision.update(status="budget", reason="Shared LLM budget exhausted; retained")
         except _ProposalError as exc:
-            decision.update(status="invalid-response", reason="Unusable shadow response; retained",
+            decision.update(status="invalid-response", reason="Unusable review response; retained",
                             failure_reason=str(exc))
         except (LLMResponseError, ValueError, RecursionError, TypeError):
-            decision.update(status="invalid-response", reason="Unusable shadow response; retained",
+            decision.update(status="invalid-response", reason="Unusable review response; retained",
                             failure_reason="response-unusable")
         except LLMError:
             decision.update(status="unavailable", reason="LLM unavailable; retained")
         except Exception:
-            decision.update(status="error", reason="Shadow review failed; retained")
+            decision.update(status="error", reason="Review failed; retained")
         else:
             decision.update(status="proposed", reason="Shadow proposal only; finding retained",
                             provenance="llm-shadow", proposal=proposal)

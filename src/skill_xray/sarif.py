@@ -110,6 +110,7 @@ def _review_audit(report, identities):
 
 
 def _validate_review(audit, raw):
+    """Validate audit structure; judgment semantics belong to the trusted producer."""
     if (set(audit) != {"mode", "authoritative", "decisions"}
             or audit["mode"] not in {"annotated", "shadow"} or audit["authoritative"] is not False):
         raise ValueError("Invalid LLM review mode")
@@ -125,6 +126,9 @@ def _validate_review(audit, raw):
                 or decision["status"] not in {"ineligible", "proposed", "duplicate-review",
                     "budget", "unavailable", "incomplete-context", "invalid-response", "error"}
                 or decision["disposition"] not in {"reported", "llm-disputed"}
+                or decision["provenance"] not in {
+                    "deterministic-policy", "llm-review-policy", "llm-shadow"}
+                or not annotated and decision["disposition"] != "reported"
                 or any(not isinstance(decision[key], str) or not decision[key].strip()
                        or len(decision[key]) > 200
                        for key in ("reason", "policy_version", "provenance"))):
@@ -177,21 +181,8 @@ def _validate_review(audit, raw):
                 raise ValueError("Duplicate review changed the original outcome")
         elif decision["status"] == "duplicate-review":
             raise ValueError("Missing duplicate review reference")
-        provenance = "deterministic-policy"
-        if proposal is not None:
-            if annotated:
-                provenance = "llm-review-policy"
-            elif original is None:
-                provenance = "llm-shadow"
-        if decision["provenance"] != provenance:
-            raise ValueError("LLM provenance contradicts review outcome")
-        disputed = (annotated and proposal is not None
-                    and proposal["verdict"] == "propose_false_positive"
-                    and proposal["confidence"] == "high"
-                    and proposal["mechanism"] == "not_supported"
-                    and proposal["intent"] == "legitimate")
-        if (decision["disposition"] == "llm-disputed") != disputed:
-            raise ValueError("Invalid non-authoritative dispute")
+        if decision["disposition"] == "llm-disputed" and proposal is None:
+            raise ValueError("LLM dispute has no review proposal")
 
 
 def build_sarif(parsed, report):
@@ -285,9 +276,7 @@ def build_sarif(parsed, report):
                           "contextErrors": sorted(report.context_errors),
                           "rawScope": "emitted-results-before-reporting-deduplication",
                           "rawCandidates": raw, "candidateLinks": links}}
-    if (getattr(report, "review_mode", False)
-            or getattr(report, "llm_usage", {}).get("judge_enabled")
-            or getattr(report, "shadow", [])):
+    if report.llm_usage.get("judge_enabled"):
         run["properties"]["llmReview"] = _review_audit(report, identities)
     return {"version": "2.1.0", "$schema": _validator().schema["id"], "runs": [run]}
 
