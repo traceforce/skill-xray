@@ -1,8 +1,6 @@
-"""Prepared upstream data must not turn into an incomplete or online-only release."""
+"""Vendored upstream data must survive offline builds without a downloader."""
 
 import hashlib
-import importlib.util
-import io
 import os
 import shutil
 import subprocess
@@ -19,140 +17,33 @@ EXPECTED = "c3b4bb2d6093897483348925aaa73af03b3e3f4bd4ca38cef26dcb4212a2682e"
 
 
 @pytest.fixture
-def schema():
-    spec = importlib.util.spec_from_file_location(
-        "schema_preparation", ROOT / "dev/prepare_sarif_schema.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.fixture
 def official():
     data = (ROOT / ASSET).read_bytes()
     assert hashlib.sha256(data).hexdigest() == EXPECTED
     return data
 
 
-def test_verified_cache_prepares_exact_bytes_without_network(
-        schema, official, tmp_path, monkeypatch):
-    cache = tmp_path / "cache.json"
-    cache.write_bytes(official)
-    monkeypatch.setattr(schema.subprocess, "run", lambda *_a, **_k: pytest.fail("network"))
-    target = schema.prepare(tmp_path / "checkout", cache)
-    assert target == tmp_path / "checkout" / ASSET and target.read_bytes() == official
-    cache.unlink()
-    assert schema.prepare(tmp_path / "checkout", cache) == target
+def test_schema_needs_no_preparation_command(official):
+    assert official
+    assert not (ROOT / "dev/prepare_sarif_schema.py").exists()
+    for name in ("README.md", ".github/workflows/ci.yml"):
+        assert "prepare_sarif_schema.py" not in (ROOT / name).read_text(encoding="utf-8")
+    assert "/" + ASSET.as_posix() not in (ROOT / ".gitignore").read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("data", [b"{}", b"x" * (256 * 1024 + 1)], ids=["digest", "oversized"])
-def test_bad_cache_never_becomes_a_release_asset(schema, data, tmp_path, monkeypatch):
-    cache = tmp_path / "cache.json"
-    cache.write_bytes(data)
-    monkeypatch.setattr(schema.subprocess, "run", lambda *_a, **_k: pytest.fail("network"))
-    with pytest.raises(ValueError):
-        schema.prepare(tmp_path / "checkout", cache)
-    assert cache.read_bytes() == data and not (tmp_path / "checkout" / ASSET).exists()
-
-
-def test_missing_cache_uses_bounded_worker(schema, official, tmp_path, monkeypatch):
-    calls = []
-
-    def fetch(args, **kwargs):
-        calls.append((args, kwargs))
-        return subprocess.CompletedProcess(args, 0, stdout=official)
-
-    monkeypatch.setattr(schema.subprocess, "run", fetch)
-    cache = tmp_path / "cache.json"
-    assert schema.prepare(tmp_path / "checkout", cache).read_bytes() == official
-    assert cache.read_bytes() == official and len(calls) == 1
-    args, options = calls[0]
-    assert args[0] == sys.executable and args[-1] == "--download"
-    assert options["timeout"] == 30 and options["check"] is True
-
-
-@pytest.mark.parametrize("failure", ["timeout", "unavailable", "bad-response"])
-def test_failed_download_leaves_no_asset(schema, tmp_path, monkeypatch, failure):
-    def fetch(args, **_kwargs):
-        if failure == "timeout":
-            raise subprocess.TimeoutExpired(args, 30)
-        if failure == "unavailable":
-            raise subprocess.CalledProcessError(1, args)
-        return subprocess.CompletedProcess(args, 0, stdout=b"not the pinned schema")
-
-    monkeypatch.setattr(schema.subprocess, "run", fetch)
-    cache = tmp_path / "cache.json"
-    with pytest.raises((ValueError, subprocess.SubprocessError)):
-        schema.prepare(tmp_path / "checkout", cache)
-    assert not cache.exists() and not (tmp_path / "checkout" / ASSET).exists()
-
-
-def test_download_worker_failure_reason_reaches_stderr(schema, tmp_path, monkeypatch, capfd):
-    run = subprocess.run
-
-    def fail(_args, **kwargs):
-        return run([sys.executable, "-c",
-                    "import sys; sys.stderr.write('TLS verification failed\\n'); sys.exit(1)"],
-                   **kwargs)
-
-    monkeypatch.setattr(schema.subprocess, "run", fail)
-    with pytest.raises(subprocess.CalledProcessError):
-        schema.prepare(tmp_path / "checkout", tmp_path / "cache.json")
-    assert "TLS verification failed" in capfd.readouterr().err
-    assert not (tmp_path / "cache.json").exists() and not (tmp_path / "checkout" / ASSET).exists()
-
-
-def test_download_checks_url_size_and_digest(schema, official, monkeypatch):
-    class Response(io.BytesIO):
-        def read(self, size=-1):
-            assert size == 256 * 1024 + 1
-            return super().read(size)
-
-    class Opener:
-        def open(self, url, timeout):
-            assert url == schema.URL and url.startswith("https://docs.oasis-open.org/")
-            assert timeout == 10
-            return Response(official)
-
-    monkeypatch.setattr(schema, "build_opener", lambda *_: Opener())
-    assert schema.download() == official
-
-
-def test_redirects_are_not_followed(schema):
-    with pytest.raises(ValueError, match="redirect"):
-        schema.NoRedirect().redirect_request(None, None, 302, "Found", {}, "http://127.0.0.1")
-
-
-def test_symlink_cache_is_rejected(schema, official, tmp_path):
-    source, cache = tmp_path / "source.json", tmp_path / "cache.json"
-    source.write_bytes(official)
-    try:
-        cache.symlink_to(source)
-    except OSError:
-        pytest.skip("symlinks unavailable")
-    with pytest.raises(ValueError):
-        schema.prepare(tmp_path / "checkout", cache)
-    assert source.read_bytes() == official
-
-
-def test_failed_replacement_preserves_old_file(schema, official, tmp_path, monkeypatch):
-    target = tmp_path / "schema.json"
-    target.write_bytes(b"old file")
-
-    def fail(*_args):
-        raise OSError("disk unavailable")
-
-    monkeypatch.setattr(schema.os, "replace", fail)
-    with pytest.raises(OSError):
-        schema.atomic_write(target, official)
-    assert target.read_bytes() == b"old file" and list(tmp_path.iterdir()) == [target]
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX file permissions")
-def test_prepared_public_schema_is_readable_by_package_users(schema, official, tmp_path):
-    target = tmp_path / "schema.json"
-    schema.atomic_write(target, official)
-    assert target.stat().st_mode & 0o444 == 0o444
+def test_git_checkout_preserves_pinned_bytes_with_autocrlf(official, tmp_path):
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    attributes = ROOT / ".gitattributes"
+    if attributes.exists():
+        shutil.copy2(attributes, tmp_path / ".gitattributes")
+    target = tmp_path / ASSET
+    target.parent.mkdir(parents=True)
+    target.write_bytes(official)
+    command = ["git", "-C", str(tmp_path), "-c", "core.autocrlf=true"]
+    subprocess.run(command + ["add", "."], check=True, capture_output=True)
+    target.unlink()
+    subprocess.run(command + ["checkout-index", "--all", "--force"], check=True)
+    assert target.read_bytes() == official
 
 
 @pytest.fixture
@@ -164,10 +55,6 @@ def checkout(tmp_path):
             shutil.copy2(ROOT / name, root / name)
     shutil.copytree(ROOT / "src", root / "src", ignore=shutil.ignore_patterns(
         "*.egg-info", "__pycache__"))
-    (root / "dev").mkdir()
-    helper = ROOT / "dev/prepare_sarif_schema.py"
-    if helper.exists():
-        shutil.copy2(helper, root / "dev" / helper.name)
     return root
 
 
@@ -194,7 +81,7 @@ def test_build_rejects_missing_or_tampered_schema(checkout, kind, state):
         asset.write_bytes(b"{}")
     result = build(checkout, kind)
     assert result.returncode != 0, "Build accepted a missing or tampered schema"
-    assert "prepare_sarif_schema.py" in result.stderr
+    assert "Restore the vendored SARIF schema from a trusted checkout" in result.stderr
     assert not list((checkout / "dist").glob("*"))
 
 
@@ -206,13 +93,17 @@ def test_wheel_and_sdist_preserve_schema_and_rules_offline(checkout, official, t
     with zipfile.ZipFile(wheel) as archive:
         assert archive.read(str(ASSET.relative_to("src")).replace("\\", "/")) == official
         assert archive.read("skill_xray/rules/opengrep-phase1.yml")
+        assert archive.read("skill_xray/schemas/README.md") == (
+            ROOT / ASSET.parent / "README.md").read_bytes()
     sdist, = (checkout / "dist").glob("*.tar.gz")
     unpacked = tmp_path / "unpacked"
     with tarfile.open(sdist) as archive:
         archive.extractall(unpacked, filter="data")
     root, = unpacked.iterdir()
     assert (root / ASSET).read_bytes() == official
-    assert (root / "dev/prepare_sarif_schema.py").is_file()
+    assert not (root / "dev/prepare_sarif_schema.py").exists()
+    assert (root / ASSET.parent / "README.md").read_bytes() == (
+        ROOT / ASSET.parent / "README.md").read_bytes()
     result = build(root, "wheel")
     assert result.returncode == 0, result.stderr
     for artifact in (wheel, sdist):
@@ -223,6 +114,8 @@ def test_wheel_and_sdist_preserve_schema_and_rules_offline(checkout, official, t
         assert result.returncode == 0, result.stderr
         assert (installed / ASSET.relative_to("src")).read_bytes() == official
         assert (installed / "skill_xray/rules/opengrep-phase1.yml").is_file()
+        assert (installed / "skill_xray/schemas/README.md").read_bytes() == (
+            ROOT / ASSET.parent / "README.md").read_bytes()
         code = ("import sys\nfrom pathlib import Path\n"
                 "def deny(event, args):\n"
                 "    if event in ('socket.connect', 'socket.getaddrinfo'):\n"

@@ -18,6 +18,3 @@ venv/
 
 # Scanner output
 out/
-
-# Verified upstream release asset; prepare explicitly before a source build.
-/src/skill_xray/schemas/sarif-schema-2.1.0.json
