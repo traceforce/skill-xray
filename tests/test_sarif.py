@@ -18,6 +18,19 @@ from skill_xray.sarif import build_sarif, encode_sarif, validate_sarif, write_sa
 from skill_xray.scan import ScanReport
 
 
+def test_writer_rejects_filesystem_alias_before_encoding(tmp_path, monkeypatch):
+    root, alias = tmp_path / "Package", tmp_path / "package"
+    root.mkdir()
+    alias.mkdir(exist_ok=True)
+    samefile = Path.samefile
+    monkeypatch.setattr(Path, "samefile", lambda path, other:
+                        True if path == alias and other == root else samefile(path, other))
+    target = alias / "report.sarif"
+    with pytest.raises(ValueError, match="outside the scanned package"):
+        write_sarif({}, target, source_root=root)
+    assert not target.exists()
+
+
 def report_for(parsed, raw, policy=None, errors=()):
     triads = build_triads(parsed)
     correlation = apply_dispositions(parsed, correlate(parsed, raw), triads,

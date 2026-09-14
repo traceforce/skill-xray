@@ -138,14 +138,19 @@ def scan_report(parsed, *, client=None, llm_shadow=False, opengrep_executable=No
     correlation = {"raw_candidates": deepcopy(report_candidates), "results": [], "links": []}
     try:
         correlation = correlate(parsed, report_candidates)
-        try:
-            correlation = apply_dispositions(parsed, correlation, triads,
-                                             policy=disposition_policy, context_errors=errors)
-        except ValueError as exc:
-            errors.append("disposition-policy-error: %s" % type(exc).__name__)
-            correlation = apply_dispositions(parsed, correlation, triads, context_errors=errors)
     except Exception as exc:
         errors.append("correlation-error: %s" % type(exc).__name__)
         correlation["errors"] = [errors[-1]]
+    else:
+        try:
+            try:
+                correlation = apply_dispositions(parsed, correlation, triads,
+                                                 policy=disposition_policy, context_errors=errors)
+            except ValueError as exc:
+                errors.append("disposition-policy-error: %s" % type(exc).__name__)
+                correlation = apply_dispositions(parsed, correlation, triads, context_errors=errors)
+        except Exception as exc:
+            errors.append("disposition-error: %s" % type(exc).__name__)
+            correlation["errors"] = [errors[-1]]
     return ScanReport(dedupe_findings(findings), candidates, triads, shadow,
                       usage, errors, dispositions, llm_review, correlation)
