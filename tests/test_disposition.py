@@ -364,6 +364,27 @@ def test_correlation_failure_retains_candidates_and_is_visible(make_package, mon
     assert report.correlation["errors"]
 
 
+@pytest.mark.parametrize("invalid_policy", [False, True])
+def test_disposition_bug_is_not_mislabeled_as_correlation(make_package, monkeypatch,
+                                                         invalid_policy):
+    parsed = package(make_package)
+    finding = Finding("SXV-008", "command-injection", "high", "run.py", "test", line=2)
+    monkeypatch.setattr(scanmod, "run_checks", lambda *_a, **_kw: [finding])
+
+    def broken(*_args, **kwargs):
+        if kwargs.get("policy") is not None:
+            raise ValueError("invalid policy")
+        raise KeyError("disposition bug")
+
+    monkeypatch.setattr(scanmod, "apply_dispositions", broken)
+    report = scanmod.scan_report(parsed, disposition_policy={} if invalid_policy else None)
+    assert report.findings == [finding]
+    assert report.correlation["raw_candidates"] == report.raw_candidates
+    assert report.correlation["results"][0]["finding"] == finding.to_dict() | {"evidence": {}}
+    assert report.correlation["errors"] == ["disposition-error: KeyError"]
+    assert not any(error.startswith("correlation-error") for error in report.context_errors)
+
+
 def test_llm_opinion_remains_separate_and_cannot_suppress(make_package, monkeypatch):
     parsed = package(make_package)
     finding = Finding("SXV-028", "instruction-override", "high", "SKILL.md", "live", line=1)
