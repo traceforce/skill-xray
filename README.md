@@ -50,6 +50,10 @@ skill-xray <target> --json          # JSON output
 Directory, file and zip are fully offline. URL and git are the only inputs that
 use the network; each enforces size, count and SSRF limits and fails closed.
 
+The pinned SARIF schema is checked into the repository and included in wheels and
+source distributions. Builds reject missing or altered schema bytes. No schema
+download or preparation step is required for installation, packaging, or scanning.
+
 ### Capability context and LLM review
 
 `skill-xray <target> --analyze --json --enrich` adds manifest-scoped
