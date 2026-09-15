@@ -682,10 +682,39 @@ def test_openai_classic_model_pins_temperature_and_seed(monkeypatch):
 
 
 def test_openai_reasoning_model_omits_temperature_and_seed(monkeypatch):
-    # o-series / gpt-5 reject temperature and seed with a 400.
-    for model in ("o3", "gpt-5-mini", "gpt-5.1"):
+    # o-series / gpt-5 reject temperature and seed with a 400; hidden reasoning shares the output
+    # cap, so the cap is raised and effort kept low for a JSON-classifier call.
+    for model in ("o3", "gpt-5-mini", "gpt-5.1", "gpt-5.4-mini", "gpt-5.6-luna"):
         body = _openai_body(monkeypatch, model)
         assert "temperature" not in body and "seed" not in body
+        assert body["max_completion_tokens"] >= 4096 and body["reasoning_effort"] == "low"
+
+
+def _anthropic_body(monkeypatch, model):
+    captured = {}
+
+    def fake_open(req, timeout=None):
+        captured["body"] = json.loads(req.data.decode("utf-8"))
+        return _Resp(b'{"content":[{"type":"text","text":"ok"}]}')
+
+    c = HTTPLLMClient(LLMConfig("anthropic", model, "k", "https://api.anthropic.com"))
+    monkeypatch.setattr(c._opener, "open", fake_open)
+    c.complete("s", "u")
+    return captured["body"]
+
+
+def test_anthropic_thinking_family_omits_sampling_and_keeps_effort_low(monkeypatch):
+    # Opus 4.7+/5, Sonnet 5 and Fable reject temperature with a 400 and think by default.
+    for model in ("claude-opus-5", "claude-opus-4-8", "claude-sonnet-5", "claude-fable-5-1"):
+        body = _anthropic_body(monkeypatch, model)
+        assert "temperature" not in body, model
+        assert body["output_config"] == {"effort": "low"} and body["max_tokens"] >= 4096, model
+
+
+def test_anthropic_older_family_keeps_greedy_temperature(monkeypatch):
+    for model in ("claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-6"):
+        body = _anthropic_body(monkeypatch, model)
+        assert body["temperature"] == 0 and "output_config" not in body, model
 
 
 def test_compatible_endpoint_pins_temperature_and_seed(monkeypatch):
