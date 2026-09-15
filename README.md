@@ -76,14 +76,31 @@ A dispute requires high confidence, an unsupported mechanism, legitimate context
 a configured model and complete bounded source. Redacted, oversized or externally linked
 context blocks disputes, as do source/manifest/global failures and semantic limitations.
 Unrelated file failures remain visible but do not block intact candidates. Mechanical
-findings and coverage notes cannot be disputed. Neither mode removes or downgrades findings;
-attacker-controlled text can mislead the model. Do not suppress disputed findings in CI.
-Confidence is uncalibrated, real-model quality is unvalidated, and unchanged findings
+findings and coverage notes cannot be disputed. Neither mode removes or downgrades findings
+by default; attacker-controlled text can mislead the model. Do not suppress disputed findings
+in CI. Confidence is uncalibrated, real-model quality is unvalidated, and unchanged findings
 have unchanged precision. Shadow and annotated modes are mutually exclusive.
+
+`--llm --llm-review --llm-apply` is a further opt-in that lets a validated dispute demote the
+one SXV-028/029/030/031 result it covers to `low`, recorded as `corrected` with
+`llm-review-policy` provenance. It never suppresses, never raises and never touches a
+mechanically anchored or protected result; see `docs/reporting.md`.
+
+Four rules keep "risky" apart from "malicious" in the deterministic lanes:
+
+| vector | reports | severity |
+|---|---|---|
+| SXV-009 / SXV-041 | a first-party HTTPS installer (`curl -fsSL https://cli.vendor.com/install.sh \| sh`: one URL, a named installer path or bare vendor host, no `user@`, no TLS bypass, no IP, no paste/tunnel/shortener or placeholder host, no shell substitution in the fetch) as an unpinned remote install | medium |
+| SXV-033 | permission understatement, a T3 capability-consistency signal | medium |
+| SXV-042 | a prose directive to run a script shipped with the skill, framed as hidden from the user (`covert-bundled-script-run`) or as an unconditional precondition of every task (`coerced-bundled-preflight`) | high; medium with a single coercion cue |
+| SXV-043 | a prose directive to obtain the user's data and send it to an e-mail address or URL hard-coded in the skill text | high |
 
 `--llm` without either review flag keeps the existing additive SXV-038 behavior.
 Add `--llm-additive` to run it after candidate review. Both share 25 logical calls
 and 1 MiB of input per scan; HTTP retries are separately bounded. SXV-038 is not reviewed.
+The client pins `temperature: 0` (and OpenAI's best-effort `seed`) where the model accepts
+them. That removes one source of variance, not all of it, so the LLM verdict stays advisory
+and medium-capped; the deterministic verdict is byte-for-byte reproducible.
 
 JSON `enrichment` preserves emitted raw candidates, context, proposals, dispositions,
 tags/reasons/policy, provider/model, sanitized requests, prompt/schema/response hashes
