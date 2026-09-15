@@ -247,7 +247,9 @@ def test_native_network_observation_and_denial_only_regression(make_package):
     observations = []
     findings = check(parsed, observations=observations)
     mismatch = next(f for f in findings if f.vector == "SXV-033")
-    assert (mismatch.path, mismatch.line, mismatch.severity) == ("run.py", 2, "high")
+    # medium, T3: permission understatement is a capability-consistency signal, not a malicious
+    # verdict on its own.
+    assert (mismatch.path, mismatch.line, mismatch.severity) == ("run.py", 2, "medium")
     assert mismatch.evidence["understated_capability"] == "network"
     triad = _triads(parsed, observations)["SKILL.md"]
     assert triad.observed["network"] == "present" and triad.declared["network"] == "denied"

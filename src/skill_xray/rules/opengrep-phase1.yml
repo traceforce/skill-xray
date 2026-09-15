@@ -2042,7 +2042,7 @@ rules:
     metadata:
       skill_xray_vector: SXV-033
       skill_xray_rule: permission-understatement
-      skill_xray_severity: high
+      skill_xray_severity: medium
       skill_xray_capability: execution
     pattern-either:
       - patterns:
@@ -2067,7 +2067,7 @@ rules:
     metadata:
       skill_xray_vector: SXV-033
       skill_xray_rule: permission-understatement
-      skill_xray_severity: high
+      skill_xray_severity: medium
       skill_xray_capability: network
     pattern-either:
       - patterns:
@@ -2123,7 +2123,7 @@ rules:
     metadata:
       skill_xray_vector: SXV-033
       skill_xray_rule: permission-understatement
-      skill_xray_severity: high
+      skill_xray_severity: medium
       skill_xray_capability: network
     pattern-either:
       - patterns:
@@ -2147,7 +2147,7 @@ rules:
     metadata:
       skill_xray_vector: SXV-033
       skill_xray_rule: permission-understatement
-      skill_xray_severity: high
+      skill_xray_severity: medium
       skill_xray_capability: execution
     pattern-either:
       - patterns:

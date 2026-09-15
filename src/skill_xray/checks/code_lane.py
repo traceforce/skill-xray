@@ -190,3 +190,60 @@ def build_code_lane(parsed) -> tuple[list[CodeUnit], list[Finding]]:
                 dialect=dialect,
             ))
     return units, notes
+
+
+# --- first-party installer idiom ---------------------------------------------------------
+# `curl -fsSL https://cli.vendor.com/install.sh | sh` installs the tool a skill wraps: an unpinned
+# remote install worth reporting, not a dropper. Recognised narrowly -- HTTPS, a named host with
+# an installer-shaped path (or the bare vendor host), no TLS bypass, no paste/tunnel/shortener
+# host, no raw IP, no unresolved variable -- and anything outside that shape keeps dropper severity.
+_INSTALLER_URL_RE = re.compile(
+    r"https://(?P<host>[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)"
+    r"(?::\d+)?(?P<path>/[^\s'\"|;&`)<>]*)?", re.I)
+_INSTALLER_PATH_RE = re.compile(
+    r"(?:^|/)(?:install(?:er)?(?:\.(?:sh|bash|py))?|setup(?:\.sh)?|get(?:-[\w-]+)?(?:\.sh)?|"
+    r"bootstrap(?:\.sh)?|latest|download(?:/[\w.-]+)*|releases?(?:/[\w.-]+)*)$", re.I)
+_DROP_HOST_RE = re.compile(
+    r"(?:^|\.)(?:pastebin\.com|paste\.ee|hastebin\.com|ghostbin\.\w+|rentry\.co|transfer\.sh|"
+    r"0x0\.st|file\.io|anonfiles\.com|gofile\.io|mega\.nz|ngrok(?:-free)?\.(?:io|app|dev)|"
+    r"trycloudflare\.com|loca\.lt|serveo\.net|localhost\.run|discordapp\.(?:com|net)|"
+    r"ipfs\.io|dweb\.link|bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly|rb\.gy|"
+    r"gist\.githubusercontent\.com|gist\.github\.com|termbin\.com|dpaste\.\w+)$", re.I)
+# A TLS bypass in any spelling, including a clustered short flag (`-sk`, `-fsSLk`, `-K` config):
+# never part of a first-party installer.
+_INSECURE_FLAG_RE = re.compile(
+    r"(?<![\w-])(?:--insecure|--no-check-certificate|-[A-Za-z]*[kK][A-Za-z]*)(?![\w-])")
+# Any URL scheme, for counting. The idiom is exactly ONE URL, the fetch operand: a header value,
+# a docs link on the same line or a second command each add a URL and disqualify the shape.
+_ANY_URL_RE = re.compile(r"[a-z][a-z0-9+.-]*://[^\s'\"|;&`)<>]+", re.I)
+# Command substitution or a shell variable anywhere in the FETCH (before the pipe) means the bytes
+# run are not the URL as written. Text after the pipe (`| bash && export PATH=$HOME/...`) is fine.
+_SUBSTITUTION_RE = re.compile(r"[`$]")
+# RFC 2606/6761 reserved names and loopback: a placeholder host is nobody's vendor domain, so an
+# install piped from it is not a first-party installer.
+_PLACEHOLDER_HOST_RE = re.compile(
+    r"(?:^|\.)example\.(?:com|net|org)$|\.(?:example|test|invalid|localhost|local)$|^localhost$",
+    re.I)
+
+
+def installer_idiom(command_text) -> bool:
+    """True when a fetch-and-run command is a first-party HTTPS installer, see above."""
+    text = command_text or ""
+    if _INSECURE_FLAG_RE.search(text):
+        return False
+    if _SUBSTITUTION_RE.search(text.split("|", 1)[0]):
+        return False
+    urls = _ANY_URL_RE.findall(text)
+    if len(urls) != 1:                                 # header/docs URL or a second command
+        return False
+    match = _INSTALLER_URL_RE.fullmatch(urls[0])      # https only; the host class cannot span
+    if match is None:                                  # '@', so `vendor@evil.host` fails here
+        return False
+    host, path = match.group("host").lower(), (match.group("path") or "/")
+    if (re.fullmatch(r"[\d.]+", host) or _DROP_HOST_RE.search(host)
+            or _PLACEHOLDER_HOST_RE.search(host)):
+        return False
+    if "$" in path or "{" in path or "%" in path:
+        return False
+    stripped = path.rstrip("/")                        # bare vendor host serves the installer
+    return stripped == "" or bool(_INSTALLER_PATH_RE.search(stripped))
