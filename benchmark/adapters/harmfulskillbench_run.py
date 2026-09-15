@@ -1,0 +1,236 @@
+"""Run skill-xray over TrustAIRLab/HarmfulSkillBench and score severity-threshold coverage.
+
+HarmfulSkillBench (arXiv:2604.15415) is 200 harmful-content skills with no benign controls, so
+precision and FPR are not measurable; the unit is coverage at a severity threshold (MEDIUM+,
+HIGH+). The Hugging Face repo is gated: request access on the dataset page, export HF_TOKEN, then
+
+    python benchmark/adapters/harmfulskillbench_run.py --fetch --data hsb_raw \
+        --revision 0a30e25f20a391e1b6956c55d6806867944c2232
+    python benchmark/adapters/harmfulskillbench_run.py --data hsb_raw --out out/hsb.jsonl
+    python benchmark/adapters/harmfulskillbench_run.py --score out/hsb.jsonl [--summary s.json]
+
+Each skill directory is copied verbatim as its own package, scanned in-process (nothing is
+executed) and deleted. Only UTF-8 text files are materialized; anything else is counted in
+``skipped_binary``. Per-item exceptions are recorded in ``error``, never dropped.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import sys
+import tempfile
+import time
+import traceback
+from collections import Counter, defaultdict
+from multiprocessing import Pool
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))
+
+from skill_xray.ingest import MAX_FILE_BYTES, build_ledger, build_package  # noqa: E402
+from skill_xray.parse import parse_package  # noqa: E402
+from skill_xray.scan import scan  # noqa: E402
+
+REPO = "TrustAIRLab/HarmfulSkillBench"
+_HC = {"high", "critical"}
+_MP = {"medium", "high", "critical"}
+_ATTACK = {"T1", "T2"}
+_INJECTION = {"SXV-027", "SXV-028", "SXV-029", "SXV-030", "SXV-031", "SXV-041", "SXV-042",
+              "SXV-043"}
+_TEXT_EXT = {".md", ".txt", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".py", ".sh", ".bash",
+             ".js", ".ts", ".ps1", ".cfg", ".ini", ".csv", ".xml", ".html", ".env", ""}
+_WORK = None
+
+
+def _init(work):
+    global _WORK
+    _WORK = work
+
+
+def discover(data_dir):
+    """One record per directory under skills/ holding a SKILL.md; labels from _meta.json."""
+    root = os.path.join(data_dir, "skills")
+    recs = []
+    for dirpath, _dirs, files in os.walk(root):
+        if "SKILL.md" not in files:
+            continue
+        rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
+        meta = {}
+        if "_meta.json" in files:
+            with open(os.path.join(dirpath, "_meta.json"), encoding="utf-8") as fh:
+                meta = json.load(fh)
+        parts = rel.split("/")                   # original/{category}/{name} has no anon_id
+        recs.append({"id": meta.get("anon_id") or rel.replace("/", "__"), "dir": dirpath,
+                     "platform": meta.get("platform") or parts[0],
+                     "category": meta.get("category") or (parts[1] if len(parts) > 2 else None),
+                     "harm_tier": meta.get("tier")})
+    return sorted(recs, key=lambda r: r["id"])
+
+
+def _copy_text_files(src, dst):
+    """Copy UTF-8 text files at their relative paths; return (copied, skipped_binary, oversize)."""
+    copied = skipped = oversize = 0
+    for dirpath, _dirs, files in os.walk(src):
+        for name in files:
+            path = os.path.join(dirpath, name)
+            if os.path.splitext(name)[1].lower() not in _TEXT_EXT:
+                skipped += 1
+                continue
+            with open(path, "rb") as fh:
+                raw = fh.read()
+            try:
+                raw.decode("utf-8")
+            except UnicodeDecodeError:
+                skipped += 1
+                continue
+            oversize += len(raw) > MAX_FILE_BYTES
+            out = os.path.join(dst, os.path.relpath(path, src))
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            with open(out, "wb") as fh:
+                fh.write(raw)
+            copied += 1
+    return copied, skipped, oversize
+
+
+def _finding_row(f):
+    d = f.to_dict()
+    return {"vector": d.get("vector", ""), "rule": d.get("rule"), "severity": d.get("severity"),
+            "tier": d.get("tier"), "line": d.get("line")}
+
+
+def scan_one(rec):
+    """Materialize <work>/pkgs/<id>/ from the skill directory, scan it in-process, delete it."""
+    row = {"id": rec["id"], "label": 1, "category": rec["category"], "harm_tier": rec["harm_tier"],
+           "platform": rec["platform"], "files": 0, "skipped_binary": 0, "oversize": 0,
+           "ledger_skipped": 0, "analyzed": 0, "findings": [], "error": None, "elapsed_ms": 0}
+    pkg_dir = os.path.join(_WORK, "pkgs", rec["id"])
+    t0 = time.perf_counter()
+    try:
+        os.makedirs(pkg_dir, exist_ok=True)
+        row["files"], row["skipped_binary"], row["oversize"] = _copy_text_files(rec["dir"], pkg_dir)
+        if not os.path.isfile(os.path.join(pkg_dir, "SKILL.md")):
+            raise RuntimeError("SKILL.md could not be materialized or read back")
+        pkg = build_package(pkg_dir)
+        ledger = build_ledger(pkg)
+        row["ledger_skipped"] = ledger["artifactsSkipped"]
+        row["analyzed"] = ledger["artifactsAnalyzed"]
+        row["findings"] = [_finding_row(f) for f in scan(parse_package(pkg))]
+    except Exception as exc:  # a crashing item is a coverage gap: recorded, never dropped
+        row["error"] = "%s: %s" % (type(exc).__name__, str(exc)[:200])
+        row["trace"] = traceback.format_exc()[-600:]
+    finally:
+        row["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
+        shutil.rmtree(pkg_dir, ignore_errors=True)
+    return row
+
+
+def _real(fs):
+    return [f for f in fs if f.get("vector")]
+
+
+VERDICTS = {
+    "medium_plus": lambda fs: any(f["severity"] in _MP for f in _real(fs)),
+    "high_plus": lambda fs: any(f["severity"] in _HC for f in _real(fs)),
+    "critical": lambda fs: any(f["severity"] == "critical" for f in _real(fs)),
+    "blocking": lambda fs: any(f["tier"] in _ATTACK and f["severity"] in _HC for f in _real(fs)),
+    "any_vector": lambda fs: bool(_real(fs)),
+    "injection_any": lambda fs: any(f["vector"] in _INJECTION for f in _real(fs)),
+    "injection_medium_plus": lambda fs: any(
+        f["vector"] in _INJECTION and f["severity"] in _MP for f in _real(fs)),
+}
+
+
+def _wilson(k, n, z=1.96):
+    if not n:
+        return None
+    p, d = k / n, 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / d
+    return [round(100 * (c - h), 2), round(100 * (c + h), 2)]
+
+
+def score(rows):
+    """Coverage at each severity threshold plus per-vector and per-category package counts."""
+    n = len(rows)
+    out = {"evaluated": n, "errors": sum(r["error"] is not None for r in rows),
+           "skipped_binary_files": sum(r.get("skipped_binary", 0) for r in rows),
+           "oversize_files": sum(r.get("oversize", 0) for r in rows)}
+    for name, fn in VERDICTS.items():
+        hit = sum(fn(r["findings"]) for r in rows)
+        out[name] = {"count": hit, "pct": round(100.0 * hit / n, 2) if n else None,
+                     "ci95": _wilson(hit, n)}
+    out["result"] = "%d MEDIUM+ (%.2f%%); %d HIGH+ (%.2f%%)" % (
+        out["medium_plus"]["count"], out["medium_plus"]["pct"] or 0,
+        out["high_plus"]["count"], out["high_plus"]["pct"] or 0)
+    out["per_vector"] = dict(Counter(
+        v for r in rows for v in {f["vector"] for f in _real(r["findings"])}).most_common())
+    keys = ("any_vector", "medium_plus", "high_plus", "blocking")
+    by_cat = defaultdict(lambda: dict.fromkeys(("total",) + keys, 0))
+    for r in rows:
+        c = by_cat[r.get("category") or "(none)"]
+        c["total"] += 1
+        for k in keys:
+            c[k] += VERDICTS[k](r["findings"])
+    out["per_category"] = dict(sorted(by_cat.items()))
+    for k in ("any_vector", "medium_plus"):
+        out["categories_missed_entirely_" + k] = sorted(c for c, v in by_cat.items() if not v[k])
+    return out
+
+
+def fetch(data_dir, revision):
+    from huggingface_hub import snapshot_download
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+    if not token:
+        raise SystemExit("%s is gated: request access on the dataset page, set HF_TOKEN" % REPO)
+    return snapshot_download(REPO, repo_type="dataset", revision=revision, local_dir=data_dir,
+                             token=token, ignore_patterns=["*.png"])
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data", help="local snapshot root (contains skills/)")
+    ap.add_argument("--fetch", action="store_true", help="snapshot_download into --data first")
+    ap.add_argument("--revision", default=None, help="dataset commit to pin")
+    ap.add_argument("--out", help="JSONL to write (run mode)")
+    ap.add_argument("--score", metavar="JSONL", help="score an existing run instead of scanning")
+    ap.add_argument("--summary", help="also write the score dict as JSON to this path")
+    ap.add_argument("--work", default=None, help="scratch root for materialized packages")
+    ap.add_argument("--workers", type=int, default=4, help="max 4")
+    args = ap.parse_args(argv)
+    if args.score:
+        with open(args.score, encoding="utf-8") as fh:
+            rows = [json.loads(line) for line in fh if line.strip()]
+        s = score(rows)
+        if args.summary:
+            with open(args.summary, "w", encoding="utf-8") as fh:
+                json.dump(s, fh, indent=1)
+        print(json.dumps(s, indent=1))
+        return 0
+    if not args.data or not args.out:
+        ap.error("run mode needs --data and --out")
+    if args.fetch:
+        fetch(args.data, args.revision)
+    records = discover(args.data)
+    if not records:
+        raise SystemExit("no skills/**/SKILL.md under %s" % args.data)
+    work = args.work or tempfile.mkdtemp(prefix="hsb-work-")
+    os.makedirs(os.path.join(work, "pkgs"), exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
+    t0, n_err = time.perf_counter(), 0
+    with open(args.out, "w", encoding="utf-8") as out, \
+            Pool(min(args.workers, 4), initializer=_init, initargs=(work,)) as pool:
+        for i, row in enumerate(pool.imap_unordered(scan_one, records, chunksize=4), 1):
+            n_err += row["error"] is not None
+            out.write(json.dumps(row, ensure_ascii=True) + "\n")
+            if i % 50 == 0 or i == len(records):
+                sys.stderr.write("  %d/%d  errors=%d  %.0fs\n" % (
+                    i, len(records), n_err, time.perf_counter() - t0))
+    shutil.rmtree(work, ignore_errors=True)
+    sys.stderr.write("done: %d packages, %d errors -> %s\n" % (len(records), n_err, args.out))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
