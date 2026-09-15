@@ -124,6 +124,8 @@ def _proposal(reply, candidate_id, snippet):
         raise _ProposalError("evidence-quote")
     for key in ("reason", "mechanism", "intent", "impact"):
         obj[key] = redact(obj[key])
+        if len(obj[key]) > 200:
+            raise _ProposalError("field-bounds")
     return obj
 
 
@@ -263,23 +265,23 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
             request["manifest"]["source"] = manifest_source
         user = json.dumps(request, sort_keys=True, ensure_ascii=True)
         decision.update(request=request, request_sha256=hashlib.sha256(user.encode()).hexdigest())
-        if apply_review:
-            decision["reviewer"] = reviewer
+        decision["reviewer"] = reviewer
         try:
             reply = session.complete(_SYSTEM, user, response_schema=RESPONSE_SCHEMA)
+            decision["response_sha256"] = hashlib.sha256(reply.encode()).hexdigest()
             proposal = _proposal(reply, candidate["candidate_id"], snippet)
         except LLMBudgetError:
             decision.update(status="budget", reason="Shared LLM budget exhausted; retained")
         except _ProposalError as exc:
-            decision.update(status="invalid-response", reason="Unusable shadow response; retained",
+            decision.update(status="invalid-response", reason="Unusable review response; retained",
                             failure_reason=str(exc))
         except (LLMResponseError, ValueError, RecursionError, TypeError):
-            decision.update(status="invalid-response", reason="Unusable shadow response; retained",
+            decision.update(status="invalid-response", reason="Unusable review response; retained",
                             failure_reason="response-unusable")
         except LLMError:
             decision.update(status="unavailable", reason="LLM unavailable; retained")
         except Exception:
-            decision.update(status="error", reason="Shadow review failed; retained")
+            decision.update(status="error", reason="Review failed; retained")
         else:
             decision.update(status="proposed", reason="Shadow proposal only; finding retained",
                             provenance="llm-shadow", proposal=proposal)
@@ -292,7 +294,6 @@ def judge_candidates(parsed, candidates, triads, session, *, apply_review=False)
                     disposition="llm-disputed" if disputed else "reported",
                     tags=["llm-disputed"] if disputed else [],
                     reason=proposal["reason"] if disputed else "Finding retained without dispute",
-                    provenance="llm-review-policy",
-                    response_sha256=hashlib.sha256(reply.encode()).hexdigest())
+                    provenance="llm-review-policy")
         reviewed[identity] = decision
     return decisions
