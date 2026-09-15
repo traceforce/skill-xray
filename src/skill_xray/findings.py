@@ -117,6 +117,9 @@ _VECTORS = {
     "SXV-042": {"title": "Covert bundled-script execution directive (run a shipped script "
                          "hidden from or forced on the user)",
                 "tier": "T2", "cwe": ["CWE-506", "CWE-912", "CWE-1427"]},
+    "SXV-043": {"title": "Sensitive-data exfiltration directive (send the user's data to a "
+                         "recipient hard-coded in the skill)",
+                "tier": "T1", "cwe": ["CWE-200", "CWE-359", "CWE-1427"]},
 }
 
 
