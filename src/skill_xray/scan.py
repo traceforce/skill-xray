@@ -12,6 +12,9 @@ from dataclasses import asdict, dataclass, field
 
 from .capability import build_triads
 from .checks import run_checks
+from .checks.coverage import is_inventory_note
+from .correlate import correlate
+from .disposition import apply_dispositions
 from .findings import Finding, dedupe_findings
 from .llm import adjudicate
 from .llm.judge import POLICY_VERSION, REVIEW_POLICY_VERSION, judge_candidates
@@ -57,6 +60,7 @@ class ScanReport:
     context_errors: list
     dispositions: list = field(default_factory=list)
     review_mode: bool = False
+    correlation: dict = field(default_factory=dict)
 
     def to_dict(self):
         return deepcopy({"schema_version": "context-shadow-v1",
@@ -66,13 +70,15 @@ class ScanReport:
                          "triads": {key: asdict(value) for key, value in self.triads.items()},
                          "shadow": self.shadow, "llm_usage": self.llm_usage,
                          "context_errors": self.context_errors,
+                         "correlation": self.correlation,
                          **({"review_mode": "annotated", "dispositions": self.dispositions,
                              "final_findings": [f.to_dict() for f in self.findings]}
                             if self.review_mode else {})})
 
 
 def scan_report(parsed, *, client=None, llm_shadow=False, opengrep_executable=None,
-                max_llm_calls=25, llm_advisory=None, llm_review=False) -> ScanReport:
+                max_llm_calls=25, llm_advisory=None, llm_review=False,
+                disposition_policy=None) -> ScanReport:
     """Compatible opt-in context report. Candidate IDs are scan-local, not baseline identities."""
     if llm_shadow and llm_review:
         raise ValueError("Choose shadow or annotated LLM review, not both")
@@ -84,7 +90,7 @@ def scan_report(parsed, *, client=None, llm_shadow=False, opengrep_executable=No
     session = LLMSession(client, max_calls=max_llm_calls) if client is not None else None
     observations = []
     raw = _collect(parsed, opengrep_executable, observations)
-    gaps = {f.path for f in raw if not f.vector}
+    gaps = {f.path for f in raw if not f.vector and not is_inventory_note(f.to_dict())}
     candidates = [
         {"candidate_id": "candidate-%06d" % i, "finding": deepcopy(f.to_dict()),
          "analyzer": f.evidence.get("engine", "ir-check"),
@@ -119,10 +125,32 @@ def scan_report(parsed, *, client=None, llm_shadow=False, opengrep_executable=No
             # Model opinions must not change finding membership or severity.
         else:
             shadow = decisions
-    if session is not None and llm_advisory:
-        findings += _advisory(parsed, session)
+    supplemental = _advisory(parsed, session) if session is not None and llm_advisory else []
+    findings += supplemental
     usage = session.usage() if session else {}
     if session is not None:
         usage.update(advisory_enabled=llm_advisory, judge_enabled=review_enabled)
+    report_candidates = candidates + [
+        {"candidate_id": "advisory-%06d" % i, "finding": deepcopy(f.to_dict()),
+         "analyzer": "llm", "provenance": "advisory-output",
+         "coverage": "no-reported-gap" if f.vector else "incomplete"}
+        for i, f in enumerate(supplemental)]
+    correlation = {"raw_candidates": deepcopy(report_candidates), "results": [], "links": []}
+    try:
+        correlation = correlate(parsed, report_candidates)
+    except Exception as exc:
+        errors.append("correlation-error: %s" % type(exc).__name__)
+        correlation["errors"] = [errors[-1]]
+    else:
+        try:
+            try:
+                correlation = apply_dispositions(parsed, correlation, triads,
+                                                 policy=disposition_policy, context_errors=errors)
+            except ValueError as exc:
+                errors.append("disposition-policy-error: %s" % type(exc).__name__)
+                correlation = apply_dispositions(parsed, correlation, triads, context_errors=errors)
+        except Exception as exc:
+            errors.append("disposition-error: %s" % type(exc).__name__)
+            correlation["errors"] = [errors[-1]]
     return ScanReport(dedupe_findings(findings), candidates, triads, shadow,
-                      usage, errors, dispositions, llm_review)
+                      usage, errors, dispositions, llm_review, correlation)
