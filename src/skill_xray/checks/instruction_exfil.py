@@ -733,7 +733,7 @@ def _directive_findings(art):
                     continue
                 line, col = _source_position(prose, start_line, m.start())
                 out.append(Finding(
-                    vector=vid, rule=tag, severity=sev, path=art.rel, line=line,
+                    vector=vid, rule=tag, severity=sev, path=art.rel, line=line, column=col,
                     message=("instruction-file directive (%s): \"%s\". This addresses the "
                              "model's own behaviour rather than the task"
                              % (tag, matched[:100])),

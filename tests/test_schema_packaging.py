@@ -116,3 +116,15 @@ def test_wheel_and_sdist_preserve_schema_and_rules_offline(checkout, official, t
         assert (installed / "skill_xray/rules/opengrep-phase1.yml").is_file()
         assert (installed / "skill_xray/schemas/README.md").read_bytes() == (
             ROOT / ASSET.parent / "README.md").read_bytes()
+        code = ("import sys\nfrom pathlib import Path\n"
+                "def deny(event, args):\n"
+                "    if event in ('socket.connect', 'socket.getaddrinfo'):\n"
+                "        raise RuntimeError('network forbidden during validation')\n"
+                "sys.addaudithook(deny)\n"
+                "from skill_xray import sarif\n"
+                "assert Path(sarif.__file__).is_relative_to(Path(sys.argv[1]))\n"
+                "sarif._validator()\n")
+        result = subprocess.run([sys.executable, "-c", code, str(installed)], cwd=tmp_path,
+            capture_output=True, text=True, timeout=20,
+            env=dict(os.environ, PYTHONPATH=str(installed)))
+        assert result.returncode == 0, result.stderr
