@@ -95,15 +95,22 @@ class HTTPLLMClient(LLMClient):
             headers = {"x-api-key": self.cfg.api_key, "anthropic-version": "2023-06-01",
                        "content-type": "application/json"}
             body = {"model": self.cfg.model, "max_tokens": self.cfg.max_tokens,
+                    "temperature": 0,
                     "system": system, "messages": [{"role": "user", "content": user}]}
             return self._extract(self._post(url, headers, body), "anthropic")
         # openai and openai-compatible share the chat/completions shape
         url = self.cfg.base_url + "/chat/completions"
         headers = {"authorization": "Bearer %s" % self.cfg.api_key,
                    "content-type": "application/json"}
-        body = {"model": self.cfg.model, _openai_token_field(self.cfg): self.cfg.max_tokens,
+        token_field = _openai_token_field(self.cfg)
+        body = {"model": self.cfg.model, token_field: self.cfg.max_tokens,
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": user}]}
+        if token_field == "max_tokens":
+            # Greedy decoding plus OpenAI's best-effort `seed`: removes one source of run-to-run
+            # variance, guarantees nothing. Reasoning models reject both fields with a 400.
+            body["temperature"] = 0
+            body["seed"] = 0
         if schema is not None:
             body["response_format"] = {"type": "json_schema", "json_schema": {
                 "name": "finding_review", "strict": True, "schema": schema}}

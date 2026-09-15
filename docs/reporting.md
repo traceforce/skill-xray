@@ -147,8 +147,16 @@ audit; hashes identify original requests/responses, before candidate IDs are can
 Response hashes cover bounded text returned by the LLM session. A response rejected at
 the session's size/type boundary has an explicit failure status but no response hash.
 
-An `llm-disputed` annotation never changes result membership, severity or native
-`suppressions`. Failed, skipped, budget-limited and incomplete reviews remain explicit;
+An `llm-disputed` annotation never changes result membership or native `suppressions`. By
+default it does not change severity either. With the additional `--llm-apply` opt-in, a review
+that passed every validation gate (consistent verdict fields, a verbatim evidence quote, high
+confidence, full-file context) demotes the one text-pattern result it disputed (SXV-028/029/030/031
+only) to `low` in the correlated results, recorded as `corrected` with `llm-review-policy`
+provenance and `policy_version: skill-xray/llm-apply/v1` -- the same audited shape as an
+operator demote. It never suppresses, never touches a mechanically anchored vector, a protected
+or incomplete result, and never raises severity; `findings`, `final_findings` and raw candidates
+keep the original evidence. `correlation.llm_applied` counts the demotions.
+Failed, skipped, budget-limited and incomplete reviews remain explicit;
 they are not clean verdicts. Review records cover deterministic candidates, not the separate
 additive SXV-038 findings. No review field is added when review is disabled. Identical
 recorded responses yield identical output; fresh model calls may return different opinions.

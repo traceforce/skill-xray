@@ -330,8 +330,11 @@ def validate_sarif(document):
             suppressed = props["disposition"] == "suppressed"
             corrected = props["disposition"] == "corrected"
             changed = props["effectiveSeverity"] != props["originalSeverity"]
+            # A correction comes from an exact operator decision or, with --llm-apply, from a
+            # validated LLM dispute; a suppression is operator-only (a model never removes).
             if corrected != changed or corrected and (
-                    not props.get("sxv") or props["decisionProvenance"] != "operator-policy"
+                    not props.get("sxv")
+                    or props["decisionProvenance"] not in {"operator-policy", "llm-review-policy"}
                     or props["coverage"] != "no-reported-gap"):
                 raise ValueError("Invalid severity correction audit")
             if suppressed != bool(result.get("suppressions")) or suppressed and (

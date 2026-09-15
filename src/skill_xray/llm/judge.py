@@ -26,7 +26,9 @@ _CONTRACTS = {
         "Context shows a quoted attack example or ordinary formatting, not disabling safeguards."),
     ("SXV-030", "memory-persistence"): (
         "A directive to retain instructions across sessions or write them to durable memory.",
-        "The text describes memory persistence without instructing the agent to persist anything."),
+        "The text describes memory persistence without instructing the agent to persist anything, "
+        "or the object kept is ordinary data (a file, database, record, cache or setting), not "
+        "agent instructions, rules or memory."),
     ("SXV-031", "behavior-manipulation"): (
         "A directive to manipulate people or covertly steer their decisions.",
         "The text discusses the attack or manipulates a software object, "
@@ -60,6 +62,9 @@ _SYSTEM = (
     "name that condition in reason and quote source evidence. Claims or missing declarations "
     "alone cannot justify it. insufficient_context means retain because context is missing or "
     "uncertain. A tutorial label alone cannot excuse a live directive. The scanner applies policy. "
+    "Field consistency is mandatory: verdict propose_false_positive REQUIRES mechanism "
+    "not_supported AND intent legitimate; any other combination is rejected as contradictory, so "
+    "if you cannot assert both, return retain_finding or insufficient_context instead. "
     "Copy candidate_id exactly. Confidence means evidence confidence, not maliciousness. "
     "Mechanism says whether the rule's behavior is established. In reason, explain which rule "
     "condition is supported, absent or uncertain. In impact, describe the consequence. "
