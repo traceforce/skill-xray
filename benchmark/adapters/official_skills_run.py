@@ -155,13 +155,14 @@ def score(rows):
     """Package-level flag rates from the JSONL; every real finding is a compatibility flag. A
     package whose scan failed is reported under errors and leaves every rate. A package that
     ended in a high-severity diagnostic without a vector (OpenGrep unavailable, analysis cut
-    short), lost a file at materialization, or had an artifact skipped by the ledger was not fully
-    analyzed: an unflagged outcome on it is unknown rather than clean, so at each threshold it
-    counts only where it is flagged, and the eligible count is reported."""
+    short), lost a file at materialization or to a skipped symlink, or had an artifact skipped by
+    the ledger was not fully analyzed: an unflagged outcome on it is unknown rather than clean, so
+    at each threshold it counts only where it is flagged, and the eligible count is reported."""
     errored = [r["id"] for r in rows if r.get("error")]
     rows = [r for r in rows if not r.get("error")]
     incomplete = [r["id"] for r in rows
                   if r.get("materialize_errors") or r.get("ledger_skipped")
+                  or r.get("files_symlinks_skipped")
                   or any(f.get("severity") in _HC and not f.get("vector") for f in r["findings"])]
     unknown = set(incomplete)
     n = len(rows)
@@ -236,6 +237,9 @@ def main(argv=None):
     try:
         commit = subprocess.run(["git", "-C", args.repo, "rev-parse", "HEAD"], check=True,
                                 capture_output=True, text=True).stdout.strip()
+        if subprocess.run(["git", "-C", args.repo, "status", "--porcelain"], check=True,
+                          capture_output=True, text=True).stdout.strip():
+            commit += "-dirty"                # the working tree, not the commit, was scanned
     except (OSError, subprocess.CalledProcessError):
         commit = None
     if args.work:

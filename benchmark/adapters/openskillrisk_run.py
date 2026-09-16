@@ -150,7 +150,8 @@ def wilson(k, n, z=1.96):
 def _incomplete(r):
     """A crashed scan, a file lost at materialization, a ledger skip, or a high-severity
     diagnostic without a vector (OpenGrep unavailable, analysis cut short): the package was not
-    fully analyzed, so a miss on it says nothing."""
+    fully analyzed. On this all-malicious set it still counts as a miss in every rate (the
+    scanner did not catch it); the count is reported so those misses can be told apart."""
     return bool(r["error"] is not None or r.get("mat_errors") or r.get("files_oversize")
                 or r.get("ledger_skipped") or any(
                     f.get("severity") in _HC and not f.get("vector") for f in r["findings"]))

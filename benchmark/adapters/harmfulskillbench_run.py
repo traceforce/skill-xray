@@ -142,10 +142,11 @@ def _real(fs):
 
 
 def _incomplete(r):
-    """A crashed scan, an oversize file left out, or a high-severity diagnostic without a vector
-    (OpenGrep unavailable, analysis cut short): the package was not fully analyzed, so a miss on
-    it says nothing."""
-    return bool(r["error"] is not None or r.get("oversize") or any(
+    """A crashed scan, an oversize file left out, a ledger skip, or a high-severity diagnostic
+    without a vector (OpenGrep unavailable, analysis cut short): the package was not fully
+    analyzed. On this all-malicious set it still counts as a miss in every rate (the scanner did
+    not catch it); the count is reported so those misses can be told apart from real ones."""
+    return bool(r["error"] is not None or r.get("oversize") or r.get("ledger_skipped") or any(
         f.get("severity") in _HC and not f.get("vector") for f in r["findings"]))
 
 
