@@ -45,6 +45,15 @@ VERDICTS = {
 }
 
 
+def incomplete(r):
+    """The scan of this record did not complete: an exception, an oversize or skipped file, or a
+    high-severity diagnostic without a vector (a check error, an OpenGrep failure, an incomplete
+    analysis). Derived from the row so runs written before this field existed score the same."""
+    return bool(r.get("error") or r.get("oversize") or r.get("ledger_skipped")
+                or any(not f.get("vector") and f.get("severity") == "high"
+                       for f in r["findings"]))
+
+
 def metrics(rows, verdict):
     tp = fp = tn = fn = unanalyzed = 0
     for r in rows:
@@ -52,11 +61,12 @@ def metrics(rows, verdict):
         if r["label"] == 1:
             tp += flagged
             fn += not flagged                   # an unscanned attack is a miss, not a pass
-        elif r.get("error") or r.get("oversize") or r.get("ledger_skipped"):
+        elif flagged:
+            fp += 1                             # a positive prediction counts, complete or not
+        elif incomplete(r):
             unanalyzed += 1                     # an unscanned benign record is not a verified TN
         else:
-            fp += flagged
-            tn += not flagged
+            tn += 1
     p = tp / (tp + fp) if tp + fp else 0.0
     rc = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * p * rc / (p + rc) if p + rc else 0.0
@@ -115,8 +125,8 @@ def report(rows, title):
             100 * m["f1"], 100 * m["fpr"]))
     unanalyzed = metrics(rows, VERDICTS["any finding"])["unanalyzed_benign"]
     if unanalyzed:
-        lines += ["", "benign records that failed to scan, excluded from TN and FPR: %d"
-                  % unanalyzed]
+        lines += ["", "benign records whose scan did not complete and that carry no finding, "
+                  "excluded from TN and FPR: %d" % unanalyzed]
     a = analyze(rows, VERDICTS["blocking (T1/T2 and high/critical)"])
     lines += ["", "## Where the blocking false positives come from",
               "benign packages with ONLY T3 capability findings (correctly not counted): %d" %
@@ -155,7 +165,11 @@ def compare(rows, base_rows):
     describe the whole split rather than the subset."""
     base = {r["benchmark_id"]: r for r in base_rows}
     after_by = {r["benchmark_id"]: r for r in rows if r["benchmark_id"] in base}
-    if not after_by:
+    unknown = sorted(r["benchmark_id"] for r in rows if r["benchmark_id"] not in base)
+    if unknown:
+        raise SystemExit("--compare: %d after-run identities are not in the base run, e.g. %s"
+                         % (len(unknown), ", ".join(unknown[:3])))
+    if rows and not after_by:
         raise SystemExit("--compare: the after-run shares no identity with the base run")
     carried = len(base) - len(after_by)
     paired = [(after_by.get(bid, b), b) for bid, b in base.items()]
