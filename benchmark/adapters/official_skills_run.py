@@ -116,7 +116,8 @@ def scan_one(item):
     try:
         os.makedirs(root, exist_ok=True)
         n_text, n_bin, n_link, errs = materialize(item["src"], root)
-        row.update(files_text=n_text, files_binary_skipped=n_bin, materialize_errors=errs)
+        row.update(files_text=n_text, files_binary_skipped=n_bin, files_symlinks_skipped=n_link,
+                   materialize_errors=errs)
         pkg = build_package(root)
         ledger = build_ledger(pkg)
         row.update(analyzed=ledger["artifactsAnalyzed"], ledger_skipped=ledger["artifactsSkipped"])
@@ -141,9 +142,14 @@ def _wilson(k, n, z=1.96):
 
 def score(rows):
     """Package-level flag rates from the JSONL; every real finding is a compatibility flag. A
-    package whose scan failed is reported under errors and leaves the rate."""
+    package whose scan failed, or ended in a high-severity diagnostic without a vector (OpenGrep
+    unavailable, analysis cut short) and no finding, was not fully analyzed: it is reported and
+    leaves the rate rather than counting as a clean package."""
     errored = [r["id"] for r in rows if r.get("error")]
-    rows = [r for r in rows if not r.get("error")]
+    incomplete = [r["id"] for r in rows if not r.get("error")
+                  and not any(f.get("vector") for f in r["findings"])
+                  and any(f.get("severity") in _HC and not f.get("vector") for f in r["findings"])]
+    rows = [r for r in rows if not r.get("error") and r["id"] not in set(incomplete)]
     n = len(rows)
     real = {r["id"]: [f for f in r["findings"] if f.get("vector")] for r in rows}
 
@@ -161,9 +167,11 @@ def score(rows):
     summary = {
         "dataset": "anthropics/skills", "commit": rows[0].get("commit") if rows else None,
         "packages": n, "errors": len(errored), "error_ids": errored,
+        "incomplete": len(incomplete), "incomplete_ids": incomplete,
         "materialize_errors": sum(len(r["materialize_errors"]) for r in rows),
         "files_text": sum(r["files_text"] for r in rows),
         "files_binary_skipped": sum(r["files_binary_skipped"] for r in rows),
+        "files_symlinks_skipped": sum(r.get("files_symlinks_skipped", 0) for r in rows),
         "medium_plus": med, "medium_plus_pct": pct(med), "high_plus": high,
         "high_plus_pct": pct(high), "critical": count(lambda f: f["severity"] == "critical"),
         "blocking": block, "blocking_pct": pct(block), "any_vector": count(lambda f: True),

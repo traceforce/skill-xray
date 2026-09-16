@@ -141,6 +141,13 @@ def _real(fs):
     return [f for f in fs if f.get("vector")]
 
 
+def _incomplete(r):
+    """A crashed scan or a high-severity diagnostic without a vector (OpenGrep unavailable,
+    analysis cut short): the package was not fully analyzed, so a miss on it says nothing."""
+    return r["error"] is not None or any(
+        f.get("severity") in _HC and not f.get("vector") for f in r["findings"])
+
+
 VERDICTS = {
     "medium_plus": lambda fs: any(f["severity"] in _MP for f in _real(fs)),
     "high_plus": lambda fs: any(f["severity"] in _HC for f in _real(fs)),
@@ -166,6 +173,7 @@ def score(rows):
     """Coverage at each severity threshold plus per-vector and per-category package counts."""
     n = len(rows)
     out = {"evaluated": n, "errors": sum(r["error"] is not None for r in rows),
+           "incomplete": sum(_incomplete(r) for r in rows),
            "skipped_binary_files": sum(r.get("skipped_binary", 0) for r in rows),
            "oversize_files": sum(r.get("oversize", 0) for r in rows)}
     for name, fn in VERDICTS.items():

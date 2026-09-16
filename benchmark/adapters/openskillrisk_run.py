@@ -137,6 +137,13 @@ def wilson(k, n, z=1.96):
     return (round(100 * (c - h), 2), round(100 * (c + h), 2))
 
 
+def _incomplete(r):
+    """A crashed scan or a high-severity diagnostic without a vector (OpenGrep unavailable,
+    analysis cut short): the package was not fully analyzed, so a miss on it says nothing."""
+    return r["error"] is not None or any(
+        f.get("severity") in _HC and not f.get("vector") for f in r["findings"])
+
+
 def score(rows):
     n = len(rows)
     tests = {"medium_plus": lambda fs: any(f["severity"] in _MP for f in fs),
@@ -161,7 +168,9 @@ def score(rows):
             per_vector[v] += 1
     pct = {k: round(100 * counts[k] / n, 2) if n else 0.0 for k in tests}
     return {"total": n, "errors": sum(r["error"] is not None for r in rows),
+            "incomplete": sum(_incomplete(r) for r in rows),
             "files_skipped_binary": sum(r["files_skipped_binary"] for r in rows),
+            "files_oversize": sum(r.get("files_oversize", 0) for r in rows),
             "materialization_errors": sum(len(r["mat_errors"]) for r in rows),
             **{k: counts[k] for k in tests}, "pct": pct,
             "ci95_medium_plus": wilson(counts["medium_plus"], n),
@@ -198,7 +207,6 @@ def main(argv=None):
     if not args.out or not (args.source_dir or args.download):
         ap.error("--out plus --source-dir or --download is required (or --score)")
     os.makedirs(args.work, exist_ok=True)
-    scratch = tempfile.mkdtemp(prefix="osr-pkgs-", dir=args.work)   # only this run's dir is removed
     root, sha = (download(args.work, args.revision) if args.download
                  else (args.source_dir, args.revision))
     only = None
@@ -213,6 +221,7 @@ def main(argv=None):
         if missing:
             sys.exit("%d requested ids are not in the snapshot, e.g. %s"
                      % (len(missing), ", ".join(missing[:3])))
+    scratch = tempfile.mkdtemp(prefix="osr-pkgs-", dir=args.work)   # only this run's dir is removed
     sys.stderr.write("revision=%s packages=%d workers=%d\n" % (sha, len(pkgs), args.workers))
     t0, n_err = time.perf_counter(), 0
     with open(args.out, "w", encoding="utf-8") as out, Pool(max(1, min(4, args.workers))) as pool:
@@ -222,7 +231,7 @@ def main(argv=None):
             if i % 50 == 0 or i == len(pkgs):
                 sys.stderr.write("  %d/%d errors=%d %.0fs\n" % (
                     i, len(pkgs), n_err, time.perf_counter() - t0))
-    shutil.rmtree(os.path.join(args.work, "pkgs"), ignore_errors=True)
+    shutil.rmtree(scratch, ignore_errors=True)
     return 0
 
 
