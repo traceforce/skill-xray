@@ -213,8 +213,12 @@ _DROP_HOST_RE = re.compile(
 # A TLS bypass in any spelling, including a clustered short flag (`-sk`, `-fsSLk`) or a config
 # file (`-K`, `--config`) that can carry `insecure`: never part of a first-party installer.
 _INSECURE_FLAG_RE = re.compile(
-    r"(?<![\w-])(?:--insecure|--no-check-certificate|--check-certificate=(?:false|no|0)|"
-    r"--verify[= ](?:no|false|0)|--config(?:=\S+)?|-[A-Za-z]*[kK][A-Za-z]*)(?![\w-])")
+    r"(?<![\w-])(?:--(?:proxy-|doh-)?insecure|--no-check-certificate|"
+    r"--check-certificate[= ](?:false|no|off|0)|--verify[= ](?:no|false|0)|--config(?:=\S+)?|"
+    r"-[A-Za-z]*[kK][A-Za-z]*)(?![\w-])")
+# A second fetch later on the same line (`... | sh; curl -k $URL | sh`) is not part of the
+# installer and may carry its own bypass or an unresolved URL; the line keeps dropper severity.
+_LATER_FETCH_RE = re.compile(r"[;&|]\s*(?:sudo\s+(?:-\S+\s+)*)?(?:curl|wget|aria2c|http|fetch)\b")
 # An interpreter running inline code as the consumer (`| python -c 'exec(open(0).read())'`) is a
 # dropper shape; vendor installers pipe into a shell or into `python3 -`.
 _INLINE_CODE_CONSUMER_RE = re.compile(
@@ -270,7 +274,8 @@ def installer_idiom(command_text) -> bool:
     fetch = _fetch_text(text)
     if fetch is None or _INSECURE_FLAG_RE.search(fetch) or _SUBSTITUTION_RE.search(fetch):
         return False
-    if _INLINE_CODE_CONSUMER_RE.search(text[len(fetch):]):
+    tail = text[len(fetch):]
+    if _INLINE_CODE_CONSUMER_RE.search(tail) or _LATER_FETCH_RE.search(tail):
         return False
     urls = _ANY_URL_RE.findall(text)
     if len(urls) != 1:                                 # header/docs URL or a second command
@@ -293,6 +298,6 @@ def installer_idiom(command_text) -> bool:
         return False
     if "$" in path or "{" in path or "%" in path:
         return False
+    bare = path.rstrip("/") == ""                      # bare vendor host serves the installer
     path = path.split("?", 1)[0].split("#", 1)[0]     # the query is not the fetched path
-    stripped = path.rstrip("/")                        # bare vendor host serves the installer
-    return stripped == "" or bool(_INSTALLER_PATH_RE.search(stripped))
+    return bare or bool(_INSTALLER_PATH_RE.search(path.rstrip("/")))
