@@ -1142,7 +1142,7 @@ _EXFIL_EXAMPLE_TAIL_RE = re.compile(
     r"\b(?:for example|for instance|e\.?g\.?|such as|like this|examples?|sample|payload|"
     r"looks? like|might (?:say|write|include|contain|read)|would (?:say|write|read))"
     r"\s*:?\s*[\"'`]?\s*$", re.I)
-_EXFIL_EXAMPLE_HEADING_RE = re.compile(r"\b(?:examples?|samples?|usage|prompts?|demo)\b", re.I)
+_EXFIL_EXAMPLE_HEADING_RE = re.compile(r"\b(?:examples?|samples?|prompts?|demo)\b", re.I)
 _EXFIL_PLACEHOLDER_HOST_RE = re.compile(
     r"(?:^|\.)example\.[a-z]{2,}$|\.(?:test|invalid|local|localhost)$|^localhost$|^your[-_.]|"
     r"^(?:my|our|the)[-_.]?(?:server|host|domain|company|site)\b", re.I)
@@ -1159,8 +1159,10 @@ _EXFIL_ROLE_HOST_RE = re.compile(
     r"webhooks?)\.", re.I)
 # The user's own account at a known SaaS API is the endpoint the skill exists to call, not a
 # third-party recipient.
+# An api-looking host that is not a known service is a soft cue: the user's own endpoint for
+# business data, but no excuse for credentials or private history.
+_EXFIL_API_PREFIX_RE = re.compile(r"^(?:api|apis|graph|rest|gateway)\d*\.|\.(?:api|apis)\.", re.I)
 _EXFIL_SERVICE_HOST_RE = re.compile(
-    r"^(?:api|apis|graph|rest|gateway)\d*\.|\.(?:api|apis)\.|"
     r"(?:^|\.)(?:(?:www|gmail|people|drive|sheets|calendar|oauth2|docs|admin)\.googleapis\.com|"
     r"graph\.microsoft\.com|api\.hubspot\.com|salesforce\.com|force\.com|dropboxapi\.com|"
     r"api\.dropbox\.com|api\.notion\.com|api\.sendgrid\.com|api\.mailchimp\.com|api\.twilio\.com|"
@@ -1177,6 +1179,13 @@ _EXFIL_DEV_HOST_RE = re.compile(
     r"atlassian\.net|readthedocs\.io|huggingface\.co|hf\.co|s3(?:[.-][\w-]+)*\.amazonaws\.com|"
     r"storage\.googleapis\.com|blob\.core\.windows\.net|r2\.cloudflarestorage\.com|circleci\.com|"
     r"buildkite\.com|travis-ci\.com|jenkins\.io|semaphoreci\.com|dev\.azure\.com)$", re.I)
+# Credential-class data: the soft cues (api-looking host, placeholder-looking mailbox, example
+# heading) excuse business data going to a plausible destination, never this.
+_EXFIL_CREDENTIAL_RE = re.compile(
+    r"\b(?:passwords?|passphrases?|credentials?|secrets?|tokens?|api keys?|private keys?|"
+    r"ssh keys?|recovery codes?|2fa|otp|payment methods?|credit cards?|bank|ssn|social security|"
+    r"health|medical|patient|private|confidential|(?:chat|browsing|search) history|"
+    r"(?:my|the user'?s|their|your)\s+(?:e-?mails?|messages?|chats?|inbox|history))\b", re.I)
 _EXFIL_SENSITIVE_RE = re.compile(
     r"\b(?:passwords?|passphrases?|credentials?|secrets?|tokens?|api keys?|private keys?|"
     r"ssh keys?|payment|credit cards?|cards?|bank|(?:bank|saving|linked|brokerage|crypto\w*) "
@@ -1199,12 +1208,13 @@ def _sentences(raw):
 
 
 def _exfil_recipient(addr):
-    """(clean address, host, local part) or None for a placeholder / template recipient."""
+    """(clean address, host, local part, placeholder-looking local part) or None for a
+    placeholder / template host."""
     addr = addr.rstrip(".,;:'\"")
+    placeholder_local = False
     if "@" in addr and "://" not in addr:
         local, host = addr.rsplit("@", 1)
-        if _EXFIL_PLACEHOLDER_LOCAL_RE.match(local):
-            return None
+        placeholder_local = bool(_EXFIL_PLACEHOLDER_LOCAL_RE.match(local))
     else:
         try:
             host, local = urlsplit(addr).hostname or "", ""
@@ -1214,7 +1224,7 @@ def _exfil_recipient(addr):
     if not host or "." not in host or re.search(r"[<>{}$\[\]]", host) \
             or _EXFIL_PLACEHOLDER_HOST_RE.search(host):
         return None
-    return addr, host, local.lower()
+    return addr, host, local.lower(), placeholder_local
 
 
 def _exfil_addresses(sentence, pos):
@@ -1254,8 +1264,8 @@ def _data_exfil_findings(art):
             continue
         if raw.lstrip().startswith("#"):                       # a heading opens a section
             example_section = bool(_EXFIL_EXAMPLE_HEADING_RE.search(raw))
-        intro_prev = example_section or bool(_EXFIL_EXAMPLE_TAIL_RE.search(previous))
-        previous = raw
+        intro_prev = bool(_EXFIL_EXAMPLE_TAIL_RE.search(previous))
+        previous = "" if raw.lstrip().startswith("#") else raw     # a heading introduces nothing
         sentences = _sentences(raw)
         for s_start, sentence in sentences:
             sentence = _EXFIL_CODE_SPAN_RE.sub(lambda c: " " * len(c.group(0)), sentence)
@@ -1264,7 +1274,7 @@ def _data_exfil_findings(art):
                                              else addr_m.group(0))
                 if recipient is None:
                     continue
-                addr, host, local = recipient
+                addr, host, local, placeholder_local = recipient
                 verb = m.group("verb") if "verb" in m.groupdict() else ""
                 pre = sentence[max(0, m.start() - 80):m.start()]
                 tail = sentence[addr_m.end():addr_m.end() + 80]
@@ -1303,9 +1313,13 @@ def _data_exfil_findings(art):
                     continue
                 if _EXFIL_SERVICE_HOST_RE.search(host):
                     continue
+                data = window + " " + (gap or "")
                 shared = (_EXFIL_ROLE_LOCAL_RE.match(local) or _EXFIL_ROLE_HOST_RE.match(host)
                           or _EXFIL_DEV_HOST_RE.search(host))
-                if shared and not _EXFIL_SENSITIVE_RE.search(window + " " + (gap or "")):
+                if shared and not _EXFIL_SENSITIVE_RE.search(data):
+                    continue
+                soft = placeholder_local or example_section or _EXFIL_API_PREFIX_RE.search(host)
+                if soft and not _EXFIL_CREDENTIAL_RE.search(data):
                     continue
                 before = raw[:s_start + m.start()]
                 if (_SXV042_EXAMPLE_INTRO_RE.search(sentence[:m.start()]) or intro_prev
