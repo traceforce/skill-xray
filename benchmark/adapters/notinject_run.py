@@ -73,7 +73,7 @@ def load_records(data_dir, work):
     if not os.path.isdir(os.path.join(data_dir, "data")):
         from huggingface_hub import snapshot_download
         snapshot_download(DATASET, repo_type="dataset", revision=REVISION, local_dir=data_dir)
-    import pandas as pd                  # run mode only; --score works without pandas
+    import pandas as pd  # run mode only; --score works without pandas
     records = []
     for level in LEVELS:
         path = os.path.join(data_dir, "data", "NotInject_%s-00000-of-00001.parquet" % level)
