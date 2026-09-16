@@ -177,7 +177,7 @@ def apply_llm_review(final, decisions, *, effective_severity="low"):
         if (result["disposition"] != "reported" or result["coverage"] != "no-reported-gap"
                 or finding["vector"] not in LLM_APPLY_VECTORS
                 or any(p["provenance"] != "deterministic-check-output"
-                       for p in result["provenance"])
+                       or p.get("analyzer") == "opengrep" for p in result["provenance"])
                 or SEVERITY_RANK[effective_severity] <= SEVERITY_RANK.get(finding["severity"], 99)):
             continue
         result.update(disposition="corrected", effective_severity=effective_severity,

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from skill_xray import cli, ingest, parse
+from skill_xray.disposition import apply_llm_review
 from skill_xray.findings import Finding
 from skill_xray.sarif import build_sarif, validate_sarif, write_sarif
 
@@ -143,6 +144,17 @@ def test_apply_never_raises_severity(make_package, monkeypatch):
     report = run(make_package, monkeypatch, raw, llm_apply=True)
     result = result_for(report)
     assert result["disposition"] == "reported" and result["effective_severity"] == "low"
+
+
+def test_apply_never_touches_an_opengrep_backed_result():
+    final = {"results": [{"id": "r1", "finding": {"vector": "SXV-028", "severity": "high"},
+                          "disposition": "reported", "coverage": "no-reported-gap",
+                          "provenance": [{"analyzer": "opengrep",
+                                          "provenance": "deterministic-check-output"}]}],
+             "links": [{"candidate_id": "c1", "result_id": "r1", "disposition": "reported"}]}
+    out = apply_llm_review(final, [{"candidate_id": "c1", "disposition": "llm-disputed",
+                                    "status": "proposed", "reason": "r"}])
+    assert out["llm_applied"] == 0 and out["results"][0]["disposition"] == "reported"
 
 
 def test_applied_correction_passes_sarif_validation(make_package, monkeypatch, tmp_path):

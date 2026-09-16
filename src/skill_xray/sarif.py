@@ -348,7 +348,11 @@ def validate_sarif(document):
                     and d["proposal"]["confidence"] == "high"
                     and d["proposal"]["mechanism"] == "not_supported"
                     and d["proposal"]["intent"] == "legitimate"]
-                if (review is None or review["mode"] != "annotated" or not support
+                mechanical = any(
+                    by_candidate[cid].get("analyzer") == "opengrep"
+                    or by_candidate[cid]["finding"].get("evidence", {}).get("engine") == "opengrep"
+                    for cid in props["candidateIds"])
+                if (review is None or review["mode"] != "annotated" or not support or mechanical
                         or props["sxv"] not in LLM_APPLY_VECTORS
                         or props["effectiveSeverity"] != "low"):
                     raise ValueError("LLM correction without a supporting dispute")
