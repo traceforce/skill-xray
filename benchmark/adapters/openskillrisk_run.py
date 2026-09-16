@@ -201,9 +201,11 @@ def main(argv=None):
         with open(args.ids, encoding="utf-8") as fh:
             only = {line.strip() for line in fh if line.strip()}
     pkgs = enumerate_packages(root, only)
+    if not pkgs:
+        sys.exit("no packages selected: check --source-dir / --download and --ids")
     sys.stderr.write("revision=%s packages=%d workers=%d\n" % (sha, len(pkgs), args.workers))
     t0, n_err = time.perf_counter(), 0
-    with open(args.out, "w", encoding="utf-8") as out, Pool(min(args.workers, 4)) as pool:
+    with open(args.out, "w", encoding="utf-8") as out, Pool(max(1, min(4, args.workers))) as pool:
         for i, row in enumerate(pool.imap_unordered(partial(scan_one, args.work), pkgs, 4), 1):
             n_err += row["error"] is not None
             out.write(json.dumps(row, ensure_ascii=True) + "\n")

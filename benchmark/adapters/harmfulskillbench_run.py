@@ -17,8 +17,10 @@ executed) and deleted. Only UTF-8 text files are materialized; anything else is 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -39,8 +41,6 @@ _MP = {"medium", "high", "critical"}
 _ATTACK = {"T1", "T2"}
 _INJECTION = {"SXV-027", "SXV-028", "SXV-029", "SXV-030", "SXV-031", "SXV-041", "SXV-042",
               "SXV-043"}
-_TEXT_EXT = {".md", ".txt", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".py", ".sh", ".bash",
-             ".js", ".ts", ".ps1", ".cfg", ".ini", ".csv", ".xml", ".html", ".env", ""}
 _WORK = None
 
 
@@ -70,19 +70,22 @@ def discover(data_dir):
 
 
 def _copy_text_files(src, dst):
-    """Copy UTF-8 text files at their relative paths; symlinks and binaries are counted as
-    skipped, never followed. Returns (copied, skipped, oversize)."""
+    """Copy UTF-8 text files at their relative paths, judged by content rather than extension;
+    symlinks and binaries are counted as skipped, never followed. Returns (copied, skipped,
+    oversize)."""
     copied = skipped = oversize = 0
     for dirpath, dirs, files in os.walk(src):
         dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(dirpath, d))]
         for name in files:
             path = os.path.join(dirpath, name)
-            if os.path.islink(path) or os.path.splitext(name)[1].lower() not in _TEXT_EXT:
+            if os.path.islink(path):
                 skipped += 1
                 continue
             with open(path, "rb") as fh:
                 raw = fh.read()
             try:
+                if b"\x00" in raw[:8192]:
+                    raise UnicodeDecodeError("utf-8", b"", 0, 1, "binary")
                 raw.decode("utf-8")
             except UnicodeDecodeError:
                 skipped += 1
@@ -107,7 +110,11 @@ def scan_one(rec):
     row = {"id": rec["id"], "label": 1, "category": rec["category"], "harm_tier": rec["harm_tier"],
            "platform": rec["platform"], "files": 0, "skipped_binary": 0, "oversize": 0,
            "ledger_skipped": 0, "analyzed": 0, "findings": [], "error": None, "elapsed_ms": 0}
-    pkg_dir = os.path.join(_WORK, "pkgs", rec["id"])
+    # the dataset id is data, not a path: a sanitized stem plus a hash keeps every package in
+    # its own child of the scratch root, whatever the id contains
+    pkg_dir = os.path.join(_WORK, "pkgs", "%s-%s" % (
+        re.sub(r"[^A-Za-z0-9_-]", "_", rec["id"])[:40],
+        hashlib.sha1(rec["id"].encode("utf-8")).hexdigest()[:10]))
     t0 = time.perf_counter()
     try:
         os.makedirs(pkg_dir, exist_ok=True)
@@ -198,7 +205,9 @@ def main(argv=None):
     ap.add_argument("--out", help="JSONL to write (run mode)")
     ap.add_argument("--score", metavar="JSONL", help="score an existing run instead of scanning")
     ap.add_argument("--summary", help="also write the score dict as JSON to this path")
-    ap.add_argument("--work", default=None, help="scratch root for materialized packages")
+    ap.add_argument("--work", default=None,
+                    help="parent for the scratch packages; a fresh subdirectory is created and "
+                         "removed (default: the system temp dir)")
     ap.add_argument("--workers", type=int, default=4, help="max 4")
     args = ap.parse_args(argv)
     if args.score:
@@ -217,7 +226,9 @@ def main(argv=None):
     records = discover(args.data)
     if not records:
         raise SystemExit("no skills/**/SKILL.md under %s" % args.data)
-    work = args.work or tempfile.mkdtemp(prefix="hsb-work-")
+    if args.work:
+        os.makedirs(args.work, exist_ok=True)
+    work = tempfile.mkdtemp(prefix="hsb-work-", dir=args.work)
     os.makedirs(os.path.join(work, "pkgs"), exist_ok=True)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     t0, n_err = time.perf_counter(), 0

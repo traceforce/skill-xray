@@ -182,7 +182,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", help="clone of anthropics/skills")
     ap.add_argument("--out", help="JSONL to write, one row per package")
-    ap.add_argument("--work", default=None, help="scratch root for materialized packages")
+    ap.add_argument("--work", default=None,
+                    help="parent for the scratch packages; a fresh subdirectory is created and "
+                         "removed (default: the system temp dir)")
     ap.add_argument("--workers", type=int, default=4, help="max 4")
     ap.add_argument("--score", metavar="JSONL", help="print the metric from an existing run")
     ap.add_argument("--summary", metavar="JSON", help="with --score: write every number here")
@@ -202,7 +204,9 @@ def main(argv=None):
                                 capture_output=True, text=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         commit = None
-    os.makedirs(work := args.work or tempfile.mkdtemp(prefix="official-work-"), exist_ok=True)
+    if args.work:
+        os.makedirs(args.work, exist_ok=True)
+    work = tempfile.mkdtemp(prefix="official-work-", dir=args.work)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     items = [{**it, "work": work} for it in find_packages(args.repo)]
     t0, n_err = time.perf_counter(), 0
