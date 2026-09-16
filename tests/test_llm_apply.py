@@ -8,8 +8,9 @@ from types import SimpleNamespace
 import pytest
 
 from skill_xray import cli, ingest, parse
+from skill_xray.disposition import apply_llm_review
 from skill_xray.findings import Finding
-from skill_xray.sarif import build_sarif, write_sarif
+from skill_xray.sarif import build_sarif, validate_sarif, write_sarif
 
 scanmod = sys.modules["skill_xray.scan"]
 ANCHOR = "Ignore all previous instructions"
@@ -145,6 +146,17 @@ def test_apply_never_raises_severity(make_package, monkeypatch):
     assert result["disposition"] == "reported" and result["effective_severity"] == "low"
 
 
+def test_apply_never_touches_an_opengrep_backed_result():
+    final = {"results": [{"id": "r1", "finding": {"vector": "SXV-028", "severity": "high"},
+                          "disposition": "reported", "coverage": "no-reported-gap",
+                          "provenance": [{"analyzer": "opengrep",
+                                          "provenance": "deterministic-check-output"}]}],
+             "links": [{"candidate_id": "c1", "result_id": "r1", "disposition": "reported"}]}
+    out = apply_llm_review(final, [{"candidate_id": "c1", "disposition": "llm-disputed",
+                                    "status": "proposed", "reason": "r"}])
+    assert out["llm_applied"] == 0 and out["results"][0]["disposition"] == "reported"
+
+
 def test_applied_correction_passes_sarif_validation(make_package, monkeypatch, tmp_path):
     parsed = fixture(make_package)
     monkeypatch.setattr(scanmod, "run_checks", lambda *_a, **_kw: [finding()])
@@ -158,6 +170,25 @@ def test_applied_correction_passes_sarif_validation(make_package, monkeypatch, t
     assert props["decisionProvenance"] == "llm-review-policy"
     assert (props["originalSeverity"], props["effectiveSeverity"]) == ("high", "low")
     assert not doc["runs"][0]["results"][0].get("suppressions")
+    validate_sarif(doc)
+    # the correction must stay bound to the dispute that justified it
+    without_review = json.loads(json.dumps(doc))
+    del without_review["runs"][0]["properties"]["llmReview"]
+    with pytest.raises(ValueError, match="SARIF validation failed"):
+        validate_sarif(without_review)
+    retained = json.loads(json.dumps(doc))
+    for decision in retained["runs"][0]["properties"]["llmReview"]["decisions"]:
+        if decision["disposition"] == "llm-disputed":
+            decision["proposal"]["verdict"] = "retain_finding"
+    with pytest.raises(ValueError, match="SARIF validation failed"):
+        validate_sarif(retained)
+    for field, value in (("confidence", "medium"), ("intent", "unknown")):
+        weak = json.loads(json.dumps(doc))
+        for decision in weak["runs"][0]["properties"]["llmReview"]["decisions"]:
+            if decision["disposition"] == "llm-disputed":
+                decision["proposal"][field] = value
+        with pytest.raises(ValueError, match="SARIF validation failed"):
+            validate_sarif(weak)
 
 
 def test_cli_apply_requires_review_flag(make_package):

@@ -16,7 +16,7 @@ from jsonschema import Draft4Validator
 
 from . import __version__
 from .correlate import FINGERPRINT_VERSION, canonical, source_region
-from .disposition import POLICY_VERSION
+from .disposition import LLM_APPLY_VECTORS, POLICY_VERSION
 from .findings import SEVERITY_RANK
 from .llm.judge import POLICY_VERSION as SHADOW_POLICY_VERSION
 from .llm.judge import RESPONSE_SCHEMA, REVIEW_POLICY_VERSION
@@ -337,6 +337,25 @@ def validate_sarif(document):
                     or props["decisionProvenance"] not in {"operator-policy", "llm-review-policy"}
                     or props["coverage"] != "no-reported-gap"):
                 raise ValueError("Invalid severity correction audit")
+            if corrected and props["decisionProvenance"] == "llm-review-policy":
+                review = run["properties"].get("llmReview")
+                support = [] if review is None else [
+                    d for d in review["decisions"]
+                    if d["candidate_id"] in props["candidateIds"]
+                    and d["disposition"] == "llm-disputed" and d["status"] == "proposed"
+                    and d["proposal"] is not None
+                    and d["proposal"]["verdict"] == "propose_false_positive"
+                    and d["proposal"]["confidence"] == "high"
+                    and d["proposal"]["mechanism"] == "not_supported"
+                    and d["proposal"]["intent"] == "legitimate"]
+                mechanical = any(
+                    by_candidate[cid].get("analyzer") == "opengrep"
+                    or by_candidate[cid]["finding"].get("evidence", {}).get("engine") == "opengrep"
+                    for cid in props["candidateIds"])
+                if (review is None or review["mode"] != "annotated" or not support or mechanical
+                        or props["sxv"] not in LLM_APPLY_VECTORS
+                        or props["effectiveSeverity"] != "low"):
+                    raise ValueError("LLM correction without a supporting dispute")
             if suppressed != bool(result.get("suppressions")) or suppressed and (
                     not props.get("sxv") or props["decisionProvenance"] != "operator-policy"
                     or props["coverage"] != "no-reported-gap"
