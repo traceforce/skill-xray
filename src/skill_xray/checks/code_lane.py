@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 from dataclasses import dataclass
 
 from ..findings import Finding
@@ -216,8 +217,9 @@ _INSECURE_FLAG_RE = re.compile(
 # Any URL scheme, for counting. The idiom is exactly ONE URL, the fetch operand: a header value,
 # a docs link on the same line or a second command each add a URL and disqualify the shape.
 _ANY_URL_RE = re.compile(r"[a-z][a-z0-9+.-]*://[^\s'\"|;&`)<>]+", re.I)
-# Command substitution or a shell variable anywhere in the FETCH (before the pipe) means the bytes
-# run are not the URL as written. Text after the pipe (`| bash && export PATH=$HOME/...`) is fine.
+# Command substitution or a shell variable anywhere in the FETCH (before the first unquoted pipe)
+# means the bytes run are not the URL as written. Text after the pipe (`| bash && export
+# PATH=$HOME/...`) is fine.
 _SUBSTITUTION_RE = re.compile(r"[`$]")
 # RFC 2606/6761 reserved names and loopback: a placeholder host is nobody's vendor domain, so an
 # install piped from it is not a first-party installer.
@@ -226,12 +228,30 @@ _PLACEHOLDER_HOST_RE = re.compile(
     re.I)
 
 
+def _fetch_text(text):
+    """The fetch command up to the first unquoted pipe, quotes removed; None if it will not
+    tokenize (an unbalanced quote), which the caller treats as not a first-party installer."""
+    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return None
+    fetch = []
+    for token in tokens:
+        if token.startswith("|"):
+            break
+        fetch.append(token)
+    return " ".join(fetch)
+
+
 def installer_idiom(command_text) -> bool:
     """True when a fetch-and-run command is a first-party HTTPS installer, see above."""
     text = command_text or ""
     if _INSECURE_FLAG_RE.search(text):
         return False
-    if _SUBSTITUTION_RE.search(text.split("|", 1)[0]):
+    fetch = _fetch_text(text)
+    if fetch is None or _SUBSTITUTION_RE.search(fetch):
         return False
     urls = _ANY_URL_RE.findall(text)
     if len(urls) != 1:                                 # header/docs URL or a second command
