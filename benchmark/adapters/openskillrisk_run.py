@@ -21,6 +21,7 @@ import math
 import os
 import shutil
 import sys
+import tempfile
 import time
 from collections import Counter
 from functools import partial
@@ -71,7 +72,10 @@ def materialize(src, dst, row):
                 continue
             try:
                 with open(path, "rb") as fh:
-                    raw = fh.read()
+                    raw = fh.read(ingest.MAX_FILE_BYTES + 1)     # bounded: the scanner skips it too
+                if len(raw) > ingest.MAX_FILE_BYTES:
+                    row["files_oversize"] = row.get("files_oversize", 0) + 1
+                    continue
                 if b"\x00" in raw[:8192]:
                     row["files_skipped_binary"] += 1
                     continue
@@ -193,7 +197,8 @@ def main(argv=None):
         return 0
     if not args.out or not (args.source_dir or args.download):
         ap.error("--out plus --source-dir or --download is required (or --score)")
-    os.makedirs(os.path.join(args.work, "pkgs"), exist_ok=True)
+    os.makedirs(args.work, exist_ok=True)
+    scratch = tempfile.mkdtemp(prefix="osr-pkgs-", dir=args.work)   # only this run's dir is removed
     root, sha = (download(args.work, args.revision) if args.download
                  else (args.source_dir, args.revision))
     only = None
@@ -203,10 +208,15 @@ def main(argv=None):
     pkgs = enumerate_packages(root, only)
     if not pkgs:
         sys.exit("no packages selected: check --source-dir / --download and --ids")
+    if only is not None:
+        missing = sorted(only - {p["id"] for p in pkgs})
+        if missing:
+            sys.exit("%d requested ids are not in the snapshot, e.g. %s"
+                     % (len(missing), ", ".join(missing[:3])))
     sys.stderr.write("revision=%s packages=%d workers=%d\n" % (sha, len(pkgs), args.workers))
     t0, n_err = time.perf_counter(), 0
     with open(args.out, "w", encoding="utf-8") as out, Pool(max(1, min(4, args.workers))) as pool:
-        for i, row in enumerate(pool.imap_unordered(partial(scan_one, args.work), pkgs, 4), 1):
+        for i, row in enumerate(pool.imap_unordered(partial(scan_one, scratch), pkgs, 4), 1):
             n_err += row["error"] is not None
             out.write(json.dumps(row, ensure_ascii=True) + "\n")
             if i % 50 == 0 or i == len(pkgs):

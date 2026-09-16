@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 from skill_xray.ingest import (  # noqa: E402
     ASSET_EXT,
+    MAX_FILE_BYTES,
     NESTED_ARCHIVE_EXT,
     build_ledger,
     build_package,
@@ -80,7 +81,10 @@ def materialize(src, dst):
                 continue
             try:
                 with open(path, "rb") as fh:
-                    data = fh.read()
+                    data = fh.read(MAX_FILE_BYTES + 1)    # bounded: the scanner skips it too
+                if len(data) > MAX_FILE_BYTES:
+                    errors.append("%s: over %d bytes, skipped" % (rel, MAX_FILE_BYTES))
+                    continue
                 if not _is_text(data):
                     n_bin += 1
                     continue
@@ -136,7 +140,10 @@ def _wilson(k, n, z=1.96):
 
 
 def score(rows):
-    """Package-level flag rates from the JSONL; every real finding is a compatibility flag."""
+    """Package-level flag rates from the JSONL; every real finding is a compatibility flag. A
+    package whose scan failed is reported under errors and leaves the rate."""
+    errored = [r["id"] for r in rows if r.get("error")]
+    rows = [r for r in rows if not r.get("error")]
     n = len(rows)
     real = {r["id"]: [f for f in r["findings"] if f.get("vector")] for r in rows}
 
@@ -153,7 +160,7 @@ def score(rows):
              for r in rows for f in real[r["id"]] if f["severity"] in _MP]
     summary = {
         "dataset": "anthropics/skills", "commit": rows[0].get("commit") if rows else None,
-        "packages": n, "errors": sum(r["error"] is not None for r in rows),
+        "packages": n, "errors": len(errored), "error_ids": errored,
         "materialize_errors": sum(len(r["materialize_errors"]) for r in rows),
         "files_text": sum(r["files_text"] for r in rows),
         "files_binary_skipped": sum(r["files_binary_skipped"] for r in rows),
@@ -209,6 +216,8 @@ def main(argv=None):
     work = tempfile.mkdtemp(prefix="official-work-", dir=args.work)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     items = [{**it, "work": work} for it in find_packages(args.repo)]
+    if not items:
+        sys.exit("no SKILL.md packages found under %s" % args.repo)
     t0, n_err = time.perf_counter(), 0
     with open(args.out, "w", encoding="utf-8") as out, Pool(min(4, max(1, args.workers))) as pool:
         for i, row in enumerate(pool.imap_unordered(scan_one, items, chunksize=4), 1):

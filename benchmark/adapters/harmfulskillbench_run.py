@@ -82,7 +82,10 @@ def _copy_text_files(src, dst):
                 skipped += 1
                 continue
             with open(path, "rb") as fh:
-                raw = fh.read()
+                raw = fh.read(MAX_FILE_BYTES + 1)         # bounded: the scanner skips it too
+            if len(raw) > MAX_FILE_BYTES:
+                oversize += 1
+                continue
             try:
                 if b"\x00" in raw[:8192]:
                     raise UnicodeDecodeError("utf-8", b"", 0, 1, "binary")
@@ -90,7 +93,6 @@ def _copy_text_files(src, dst):
             except UnicodeDecodeError:
                 skipped += 1
                 continue
-            oversize += len(raw) > MAX_FILE_BYTES
             out = os.path.join(dst, os.path.relpath(path, src))
             os.makedirs(os.path.dirname(out), exist_ok=True)
             with open(out, "wb") as fh:
@@ -233,7 +235,7 @@ def main(argv=None):
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     t0, n_err = time.perf_counter(), 0
     with open(args.out, "w", encoding="utf-8") as out, \
-            Pool(min(args.workers, 4), initializer=_init, initargs=(work,)) as pool:
+            Pool(max(1, min(4, args.workers)), initializer=_init, initargs=(work,)) as pool:
         for i, row in enumerate(pool.imap_unordered(scan_one, records, chunksize=4), 1):
             n_err += row["error"] is not None
             out.write(json.dumps(row, ensure_ascii=True) + "\n")
