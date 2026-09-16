@@ -1014,8 +1014,10 @@ def _covert_script_findings(art):
                          or list(_BUNDLED_PROSE_RE.finditer(raw)))
             for m in artifacts:
                 script = m.group(0).strip()
-                akey = script.lower()
-                if akey in seen:
+                akey = (script.lower(), strong)
+                # one finding per script and grade: an earlier lone-cue mention must not hide a
+                # later covert or two-cue run of the same script
+                if akey in seen or (not strong and (akey[0], True) in seen):
                     continue
                 first = min(offset + m.start(), cue.start())
                 # Reuse the directive lane's example/defensive guards on THIS block up to the
