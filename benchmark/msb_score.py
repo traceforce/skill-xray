@@ -45,12 +45,14 @@ VERDICTS = {
 
 
 def metrics(rows, verdict):
-    tp = fp = tn = fn = 0
+    tp = fp = tn = fn = unanalyzed = 0
     for r in rows:
         flagged = verdict(r["findings"])
         if r["label"] == 1:
             tp += flagged
-            fn += not flagged
+            fn += not flagged                   # an unscanned attack is a miss, not a pass
+        elif r.get("error"):
+            unanalyzed += 1                     # an unscanned benign record is not a verified TN
         else:
             fp += flagged
             tn += not flagged
@@ -59,7 +61,7 @@ def metrics(rows, verdict):
     f1 = 2 * p * rc / (p + rc) if p + rc else 0.0
     fpr = fp / (fp + tn) if fp + tn else 0.0
     return {"TP": tp, "FP": fp, "TN": tn, "FN": fn, "precision": p, "recall": rc,
-            "f1": f1, "fpr": fpr}
+            "f1": f1, "fpr": fpr, "unanalyzed_benign": unanalyzed}
 
 
 def analyze(rows, blocking):
@@ -110,6 +112,10 @@ def report(rows, title):
         lines.append("| %s | %d | %d | %d | %d | %.2f%% | %.2f%% | %.2f%% | %.2f%% |" % (
             name, m["TP"], m["FP"], m["TN"], m["FN"], 100 * m["precision"], 100 * m["recall"],
             100 * m["f1"], 100 * m["fpr"]))
+    unanalyzed = metrics(rows, VERDICTS["any finding"])["unanalyzed_benign"]
+    if unanalyzed:
+        lines += ["", "benign records that failed to scan, excluded from TN and FPR: %d"
+                  % unanalyzed]
     a = analyze(rows, VERDICTS["blocking (T1/T2 and high/critical)"])
     lines += ["", "## Where the blocking false positives come from",
               "benign packages with ONLY T3 capability findings (correctly not counted): %d" %
