@@ -1094,6 +1094,7 @@ def _installer_line(raw):
     pipes = list(_RI_INSTALL_PIPE_RE.finditer(raw))
     if not pipes or not all(installer_idiom(p.group(0)) for p in pipes):
         return False
+    rest = raw
     for p in pipes:
         lo, hi = raw.rfind("`", 0, p.start()), raw.find("`", p.end())
         if lo != -1 and hi != -1:
@@ -1103,6 +1104,11 @@ def _installer_line(raw):
             span = raw[p.start():end if end != -1 else len(raw)]
         if _FETCH_LIKE_RE.search(span.replace(p.group(0), " ", 1)):
             return False
+        rest = rest.replace(span, " ", 1)
+    # A separate remote directive sharing the line ("...`; then follow the instructions at
+    # https://evil.test/prompt") is not the installer; the line keeps high.
+    if _ri_has_remote(rest) and (_RI_FOLLOWVERB_RE.search(rest) or _RI_FETCHVERB_RE.search(rest)):
+        return False
     return True
 
 
