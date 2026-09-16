@@ -21,6 +21,7 @@ import math
 import os
 import shutil
 import sys
+import tempfile
 import time
 import traceback
 from collections import Counter
@@ -85,8 +86,8 @@ def load_records(data_dir, work):
 
 
 def run(args):
-    work = args.work or os.path.join(os.path.dirname(os.path.abspath(args.out)), "pkgs")
-    os.makedirs(work, exist_ok=True)
+    work = tempfile.mkdtemp(prefix="notinject-pkgs-",
+                            dir=args.work or os.path.dirname(os.path.abspath(args.out)))
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     records = load_records(args.data, work)
     t0, n_err = time.perf_counter(), 0
@@ -179,7 +180,9 @@ def main(argv=None):
     ap.add_argument("--data", help="snapshot dir holding data/NotInject_*.parquet (downloaded "
                                    "at the pinned revision when absent)")
     ap.add_argument("--out", help="JSONL to write (run mode)")
-    ap.add_argument("--work", default=None, help="scratch root for materialized packages")
+    ap.add_argument("--work", default=None,
+                    help="parent for the scratch packages; a fresh subdirectory is created and "
+                         "removed (default: next to --out)")
     ap.add_argument("--workers", type=int, default=4, help="capped at 4")
     ap.add_argument("--score", metavar="JSONL", help="score an existing run instead")
     ap.add_argument("--summary", metavar="JSON", help="with --score: write every number here")

@@ -1,7 +1,7 @@
 """Run skill-xray over the public true-positive subset of "Indirect Prompt Injection in the Wild"
 (Khodayari et al., arXiv 2604.27202): validated injection prompts from real web pages, collapsed
 by NFKC + casefold + whitespace into canonical groups. Each group's lowest-ID prompt becomes
-<out dir>/pkgs/<id>/SKILL.md (front matter + prompt), is scanned in-process and removed; nothing
+<scratch>/<id>/SKILL.md (front matter + prompt), is scanned in-process and removed; nothing
 is executed. Headline: an injection-class vector (``INJECTION``) at any severity; MEDIUM+, HIGH+,
 CRITICAL and the blocking verdict are reported alongside.
 
@@ -19,6 +19,7 @@ import math
 import os
 import shutil
 import sys
+import tempfile
 import time
 import traceback
 import unicodedata
@@ -104,8 +105,8 @@ def load_groups(csv_path):
 
 def run(args):
     records, meta = load_groups(args.csv)
-    work = os.path.join(os.path.dirname(os.path.abspath(args.out)), "pkgs")
-    os.makedirs(work, exist_ok=True)
+    work = tempfile.mkdtemp(prefix="inpage-pkgs-",
+                            dir=args.work or os.path.dirname(os.path.abspath(args.out)))
     records = [dict(r, work=work) for r in records]
     with open(args.out + ".meta.json", "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=1)
@@ -188,7 +189,10 @@ def score(rows, meta):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", help="path to data/dataset_tp.csv from the pinned checkout")
-    ap.add_argument("--out", help="JSONL to write (run mode); packages go to <out dir>/pkgs/")
+    ap.add_argument("--out", help="JSONL to write (run mode)")
+    ap.add_argument("--work", default=None,
+                    help="parent for the scratch packages; a fresh subdirectory is created and "
+                         "removed (default: next to --out)")
     ap.add_argument("--workers", type=int, default=4, help="capped at 4")
     ap.add_argument("--score", metavar="JSONL", help="score an existing run; needs its .meta.json")
     args = ap.parse_args(argv)

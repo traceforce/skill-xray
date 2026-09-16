@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from multiprocessing import Pool
 
@@ -198,7 +199,9 @@ def main(argv=None):
     ap.add_argument("--variant", choices=("base", "enhanced", "both"), default="both")
     ap.add_argument("--unit", choices=("canonical", "response", "both"), default="canonical")
     ap.add_argument("--workers", type=int, default=4, help="max 4")
-    ap.add_argument("--work", default=None, help="scratch root for materialized packages")
+    ap.add_argument("--work", default=None,
+                    help="parent for the scratch packages; a fresh subdirectory is created and "
+                         "removed (default: next to --out)")
     ap.add_argument("--score", metavar="JSONL", help="score an existing run instead of scanning")
     ap.add_argument("--summary", metavar="JSON", help="with --score: write every number here")
     ap.add_argument("--llm", action="store_true",
@@ -212,7 +215,8 @@ def main(argv=None):
         _init(True)                      # fail on a missing key in the parent, before any worker
     variants = ("base", "enhanced") if args.variant == "both" else (args.variant,)
     prefix, canonical, items = enhanced_prefix(args.repo), load_canonical(args.repo), []
-    work = args.work or args.out + ".work"
+    work = tempfile.mkdtemp(prefix="injecagent-pkgs-",
+                            dir=args.work or os.path.dirname(os.path.abspath(args.out)))
     for v in variants:
         if args.unit != "response":
             items += [{**c, "id": "%s-%s" % (c["id"], v), "variant": v, "work": work,
