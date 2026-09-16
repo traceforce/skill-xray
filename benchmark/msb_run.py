@@ -17,8 +17,10 @@ check with a canned client. Rows from LLM modes carry ``effective_severity`` and
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -111,7 +113,10 @@ def scan_one(rec):
            "tlen": len(text),
            "oversize": len(text.encode("utf-8", "surrogatepass")) > MAX_FILE_BYTES,
            "findings": [], "error": None, "ledger_skipped": 0, "analyzed": 0, "elapsed_ms": 0}
-    root = os.path.join(_WORK, bid)
+    # the dataset id is data, not a path: a sanitized stem plus a hash keeps every record in
+    # its own child of the scratch root, whatever the id contains
+    root = os.path.join(_WORK, "%s-%s" % (re.sub(r"[^A-Za-z0-9_-]", "_", bid)[:40],
+                                          hashlib.sha1(bid.encode("utf-8")).hexdigest()[:10]))
     t0 = time.perf_counter()
     try:
         os.makedirs(root, exist_ok=True)
@@ -183,11 +188,13 @@ def _flagged_ids(path):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
-    ap.add_argument("--split", default="test", help="test | dev | train | validation")
+    ap.add_argument("--split", default="test", choices=("test", "dev", "train", "validation"))
     ap.add_argument("--out", required=True)
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--sample-per-label", type=int, default=None)
-    ap.add_argument("--work", default=None, help="scratch root for materialized packages")
+    ap.add_argument("--work", default=None,
+                    help="parent for the scratch packages; a fresh subdirectory is created and "
+                         "removed (default: the system temp dir)")
     ap.add_argument("--llm-mode", choices=("none", "review", "additive", "both"), default="none")
     ap.add_argument("--fake-llm", action="store_true", help="plumbing check only, no network")
     ap.add_argument("--only-flagged", metavar="DET_JSONL",
@@ -201,8 +208,7 @@ def main(argv=None):
     only = _flagged_ids(args.only_flagged) if args.only_flagged else None
     records = load_records(args.data, args.split, args.sample_per_label, only_ids=only)
     workers = args.workers or (4 if args.llm_mode != "none" else max(4, (os.cpu_count() or 8) - 1))
-    work = args.work or tempfile.mkdtemp(prefix="msb-work-")
-    os.makedirs(work, exist_ok=True)
+    work = tempfile.mkdtemp(prefix="msb-work-", dir=args.work)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     t0 = time.perf_counter()
     n_err = 0
