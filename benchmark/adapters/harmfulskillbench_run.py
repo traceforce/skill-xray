@@ -71,12 +71,15 @@ def discover(data_dir):
 
 def _copy_text_files(src, dst):
     """Copy UTF-8 text files at their relative paths, judged by content rather than extension;
-    symlinks and binaries are counted as skipped, never followed. Returns (copied, skipped,
-    oversize)."""
+    symlinks and binaries are counted as skipped, never followed. The dataset's own label file
+    (_meta.json at the package root) is not skill content and is left out. Returns (copied,
+    skipped, oversize)."""
     copied = skipped = oversize = 0
     for dirpath, dirs, files in os.walk(src):
         dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(dirpath, d))]
         for name in files:
+            if dirpath == src and name == "_meta.json":
+                continue
             path = os.path.join(dirpath, name)
             if os.path.islink(path):
                 skipped += 1
