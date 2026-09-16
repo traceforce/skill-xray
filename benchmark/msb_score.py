@@ -51,7 +51,7 @@ def metrics(rows, verdict):
         if r["label"] == 1:
             tp += flagged
             fn += not flagged                   # an unscanned attack is a miss, not a pass
-        elif r.get("error"):
+        elif r.get("error") or r.get("oversize"):
             unanalyzed += 1                     # an unscanned benign record is not a verified TN
         else:
             fp += flagged
