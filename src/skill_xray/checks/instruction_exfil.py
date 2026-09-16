@@ -1193,14 +1193,15 @@ _EXFIL_DEV_HOST_RE = re.compile(
 _EXFIL_CREDENTIAL_RE = re.compile(
     r"\b(?:passwords?|passphrases?|credentials?|secrets?|tokens?|api keys?|private keys?|"
     r"ssh keys?|recovery codes?|2fa|otp|payment methods?|credit cards?|bank|ssn|social security|"
-    r"health|medical|patient|private|confidential|(?:chat|browsing|search) history|"
+    r"health|medical|patient|private|confidential|(?:chat|browsing|browser|search) history|"
     r"(?:my|the user'?s|their|your)\s+(?:e-?mails?|messages?|chats?|inbox|history))\b", re.I)
 _EXFIL_SENSITIVE_RE = re.compile(
     r"\b(?:passwords?|passphrases?|credentials?|secrets?|tokens?|api keys?|private keys?|"
     r"ssh keys?|payment|credit cards?|cards?|bank|(?:bank|saving|linked|brokerage|crypto\w*) "
     r"accounts?|account (?:numbers?|passwords?|credentials?|tokens?|recovery)|payees?|holdings|"
     r"health|medical|genetic|patient|prescriptions?|personal|private|confidential|ssn|"
-    r"social security|contacts?|address book|(?:my|the user'?s|their|your)\s+(?:e-?mails?|"
+    r"social security|contacts?|address book|(?:chat|browsing|browser|search) history|"
+    r"(?:my|the user'?s|their|your)\s+(?:e-?mails?|"
     r"messages?|chats?|inbox|history|photos?|documents?|files|location)|"
     r"(?:browsing|search|purchase|order|location|access) history|wallet|seed phrase|identity|"
     r"2fa|mfa|one-time codes?)\b", re.I)
@@ -1305,10 +1306,16 @@ def _data_exfil_findings(art):
                 # the block so far, plus the tail of the previous paragraph or list item
                 window = prev_tail + " " + raw[:s_start + m.start()]
                 acquired = _EXFIL_ACQUIRE_RE.search(window)
-                if acquired is None and not _EXFIL_POSSESSIVE_RE.search(obj):
+                owned = _EXFIL_POSSESSIVE_RE.search(obj) or (
+                    re.search(r"\byour\b", obj, re.I) and _EXFIL_SENSITIVE_RE.search(obj))
+                if acquired is None and not owned:            # "send your passwords to ..."
                     continue
-                neg_text = (window[max(0, acquired.start() - 60):] if acquired
-                            else sentence[:m.start()])
+                if acquired:                # negation counts inside the acquisition's own sentence
+                    pre = window[max(0, acquired.start() - 60):acquired.start()]
+                    cut = max(pre.rfind(". "), pre.rfind("! "), pre.rfind("? "))
+                    neg_text = (pre if cut == -1 else pre[cut + 2:]) + window[acquired.start():]
+                else:
+                    neg_text = sentence[:m.start()]
                 if (_EXFIL_NEG_PREFIX_RE.search(neg_text)
                         or _EXFIL_CONTRAST_RE.search(sentence[:m.start()])):
                     continue
