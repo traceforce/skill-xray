@@ -218,11 +218,13 @@ _INSECURE_FLAG_RE = re.compile(
     r"-[A-Za-z]*[kK][A-Za-z]*)(?![\w-])")
 # A second fetch later on the same line (`... | sh; curl -k $URL | sh`) is not part of the
 # installer and may carry its own bypass or an unresolved URL; the line keeps dropper severity.
-_LATER_FETCH_RE = re.compile(r"[;&|]\s*(?:sudo\s+(?:-\S+\s+)*)?(?:curl|wget|aria2c|http|fetch)\b")
-# An interpreter running inline code as the consumer (`| python -c 'exec(open(0).read())'`) is a
-# dropper shape; vendor installers pipe into a shell or into `python3 -`.
+_LATER_FETCH_RE = re.compile(
+    r"[;&|][^;&|\n]*?\b(?:curl|wget|aria2c|https?|httpie|fetch)\b")
+# An interpreter running inline code as the consumer (`| python -c 'exec(open(0).read())'`,
+# `| bash -c '...'`) is a dropper shape; vendor installers pipe into a shell or into `python3 -`.
 _INLINE_CODE_CONSUMER_RE = re.compile(
-    r"\b(?:python[0-9.]*|perl|ruby|node|php)\b[^|;&\n]{0,40}?\s-[A-Za-z]*[ce]\b")
+    r"\b(?:python[0-9.]*|perl|ruby|node|php)\b[^|;&\n]{0,40}?\s-[A-Za-z]*[ce]\b|"
+    r"\b(?:sh|bash|zsh|dash|ksh)\b[^|;&\n]{0,40}?\s-[A-Za-z]*c\b")
 # A schemeless host among the fetch operands (`curl -H 'X: https://vendor/install.sh'
 # evil.host/p`) means the counted URL is not what is fetched.
 _BARE_HOST_RE = re.compile(
