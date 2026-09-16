@@ -119,7 +119,8 @@ def scan_one(work, pkg):
 
 
 def download(work, revision):
-    """Text files only; binaries never leave the Hub. Needs HF_TOKEN with approved access."""
+    """Snapshot skills/**, leaving known binary extensions on the Hub; anything else is judged
+    by content in materialize(). Needs HF_TOKEN with approved access."""
     from huggingface_hub import HfApi, snapshot_download
     sha = HfApi().dataset_info(REPO, revision=revision).sha
     path = snapshot_download(REPO, repo_type="dataset", revision=sha, allow_patterns=["skills/**"],

@@ -118,6 +118,8 @@ def scan_one(item):
         n_text, n_bin, n_link, errs = materialize(item["src"], root)
         row.update(files_text=n_text, files_binary_skipped=n_bin, files_symlinks_skipped=n_link,
                    materialize_errors=errs)
+        if not os.path.isfile(os.path.join(root, "SKILL.md")):
+            raise RuntimeError("SKILL.md could not be materialized: " + "; ".join(errs)[:200])
         pkg = build_package(root)
         ledger = build_ledger(pkg)
         row.update(analyzed=ledger["artifactsAnalyzed"], ledger_skipped=ledger["artifactsSkipped"])
@@ -142,25 +144,27 @@ def _wilson(k, n, z=1.96):
 
 def score(rows):
     """Package-level flag rates from the JSONL; every real finding is a compatibility flag. A
-    package whose scan failed, or ended in a high-severity diagnostic without a vector (OpenGrep
-    unavailable, analysis cut short) and no finding, was not fully analyzed: it is reported and
-    leaves the rate rather than counting as a clean package."""
+    package whose scan failed is reported under errors and leaves every rate. A package that
+    ended in a high-severity diagnostic without a vector (OpenGrep unavailable, analysis cut
+    short) was not fully analyzed: an unflagged outcome on it is unknown rather than clean, so at
+    each threshold it counts only where it is flagged, and the eligible count is reported."""
     errored = [r["id"] for r in rows if r.get("error")]
-    incomplete = [r["id"] for r in rows if not r.get("error")
-                  and not any(f.get("vector") for f in r["findings"])
-                  and any(f.get("severity") in _HC and not f.get("vector") for f in r["findings"])]
-    rows = [r for r in rows if not r.get("error") and r["id"] not in set(incomplete)]
+    rows = [r for r in rows if not r.get("error")]
+    incomplete = [r["id"] for r in rows
+                  if any(f.get("severity") in _HC and not f.get("vector") for f in r["findings"])]
+    unknown = set(incomplete)
     n = len(rows)
     real = {r["id"]: [f for f in r["findings"] if f.get("vector")] for r in rows}
 
-    def count(pred):
-        return sum(any(pred(f) for f in fs) for fs in real.values())
+    def rate(pred):
+        """(flagged, eligible, pct) at one threshold; eligible = flagged or fully analyzed."""
+        hits = {rid for rid, fs in real.items() if any(pred(f) for f in fs)}
+        eligible = len(hits) + sum(1 for rid in real if rid not in hits and rid not in unknown)
+        return len(hits), eligible, (100.0 * len(hits) / eligible if eligible else 0.0)
 
-    def pct(k):
-        return 100.0 * k / n if n else 0.0
-
-    med, high = count(lambda f: f["severity"] in _MP), count(lambda f: f["severity"] in _HC)
-    block = count(lambda f: f["tier"] in _ATTACK and f["severity"] in _HC)
+    med = rate(lambda f: f["severity"] in _MP)
+    high = rate(lambda f: f["severity"] in _HC)
+    block = rate(lambda f: f["tier"] in _ATTACK and f["severity"] in _HC)
     keys = ("vector", "rule", "severity", "tier", "path", "line")
     flags = [{"id": r["id"], **{k: f[k] for k in keys}}
              for r in rows for f in real[r["id"]] if f["severity"] in _MP]
@@ -172,19 +176,23 @@ def score(rows):
         "files_text": sum(r["files_text"] for r in rows),
         "files_binary_skipped": sum(r["files_binary_skipped"] for r in rows),
         "files_symlinks_skipped": sum(r.get("files_symlinks_skipped", 0) for r in rows),
-        "medium_plus": med, "medium_plus_pct": pct(med), "high_plus": high,
-        "high_plus_pct": pct(high), "critical": count(lambda f: f["severity"] == "critical"),
-        "blocking": block, "blocking_pct": pct(block), "any_vector": count(lambda f: True),
-        "injection_any": count(lambda f: f["vector"] in _INJECTION),
-        "injection_medium_plus": count(
-            lambda f: f["vector"] in _INJECTION and f["severity"] in _MP),
-        "ci95_medium_plus_pct": _wilson(med, n), "ci95_high_plus_pct": _wilson(high, n),
+        "medium_plus": med[0], "medium_plus_eligible": med[1], "medium_plus_pct": med[2],
+        "high_plus": high[0], "high_plus_eligible": high[1], "high_plus_pct": high[2],
+        "critical": rate(lambda f: f["severity"] == "critical")[0],
+        "blocking": block[0], "blocking_eligible": block[1], "blocking_pct": block[2],
+        "any_vector": rate(lambda f: True)[0],
+        "injection_any": rate(lambda f: f["vector"] in _INJECTION)[0],
+        "injection_medium_plus": rate(
+            lambda f: f["vector"] in _INJECTION and f["severity"] in _MP)[0],
+        "ci95_medium_plus_pct": _wilson(med[0], med[1]),
+        "ci95_high_plus_pct": _wilson(high[0], high[1]),
         "per_vector_packages": dict(Counter(
             v for fs in real.values() for v in {f["vector"] for f in fs}).most_common()),
         "per_rule_medium_plus_flags": dict(Counter(
             "%s/%s" % (f["vector"], f["rule"]) for f in flags).most_common()),
         "medium_plus_flags": flags,
-        "result": "%d MEDIUM+ (%.2f%%); %d HIGH+ (%.2f%%)" % (med, pct(med), high, pct(high)),
+        "result": "%d MEDIUM+ (%.2f%% of %d); %d HIGH+ (%.2f%% of %d)" % (
+            med[0], med[2], med[1], high[0], high[2], high[1]),
     }
     print(json.dumps({k: v for k, v in summary.items() if k != "medium_plus_flags"}, indent=1))
     for f in flags:  # one line per MEDIUM+ flag: package, vector, rule, severity, tier, file:line
