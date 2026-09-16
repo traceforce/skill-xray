@@ -2,7 +2,8 @@
 
 "blocking" (the headline) mirrors Cisco skill-scanner's HIGH/CRITICAL threshold plus the attack
 tiers: a package is flagged only by a T1/T2 vector at high or critical severity. T3 findings are
-reported as a separate rate and never count as a malicious verdict.
+reported as a separate rate and never count in that headline; the HIGH+, MEDIUM+ and any-finding
+views include every tier.
 
     python benchmark/msb_score.py out/msb_test.jsonl [--md out/msb_test.md]
 """
@@ -154,9 +155,14 @@ def compare(rows, base_rows):
     describe the whole split rather than the subset."""
     base = {r["benchmark_id"]: r for r in base_rows}
     after_by = {r["benchmark_id"]: r for r in rows if r["benchmark_id"] in base}
+    if not after_by:
+        raise SystemExit("--compare: the after-run shares no identity with the base run")
+    carried = len(base) - len(after_by)
     paired = [(after_by.get(bid, b), b) for bid, b in base.items()]
     after, before = [a for a, _ in paired], [b for _, b in paired]
-    lines = ["", "## Before / after on %d paired identities" % len(paired), "",
+    lines = ["", "## Before / after on %d paired identities%s" % (
+        len(paired), " (%d carried over unchanged from the base run: the after-run is a subset)"
+        % carried if carried else ""), "",
              "| verdict | before P / R / F1 / FPR | after P / R / F1 / FPR "
              "| TP FP TN FN before -> after |",
              "|---|---|---|---|"]

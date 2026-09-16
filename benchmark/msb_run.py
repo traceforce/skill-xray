@@ -118,6 +118,9 @@ def scan_one(rec):
     root = os.path.join(_WORK, "%s-%s" % (re.sub(r"[^A-Za-z0-9_-]", "_", bid)[:40],
                                           hashlib.sha1(bid.encode("utf-8")).hexdigest()[:10]))
     t0 = time.perf_counter()
+    if not text:                                   # recorded as unanalyzed, never dropped
+        row["error"] = "record has no skill_text"
+        return row
     try:
         os.makedirs(root, exist_ok=True)
         with open(os.path.join(root, "SKILL.md"), "w", encoding="utf-8",
@@ -135,6 +138,9 @@ def scan_one(rec):
             report = scan_report(parsed, client=_CLIENT, llm_review=review, llm_apply=review,
                                  llm_advisory=_MODE in ("additive", "both"), max_llm_calls=25)
             row["findings"] = [_result_row(r) for r in report.correlation.get("results", [])]
+            if report.correlation.get("errors"):        # an incomplete scan is not a clean one
+                row["error"] = "correlation: %s" % "; ".join(
+                    map(str, report.correlation["errors"]))[:200]
             row["review"] = dict(Counter(
                 "%s/%s" % (d.get("status"), d.get("disposition")) for d in report.dispositions))
             row["llm_applied"] = report.correlation.get("llm_applied", 0)
@@ -162,7 +168,7 @@ def load_records(data_dir, split, sample_per_label=None, seed=7, only_ids=None):
     wanted = {"dev": {"train", "validation"}}.get(split, {split})
     df = df[df["split"].isin(wanted)].copy()
     df["text"] = df["skill_text"].where(df["skill_text"].notna(), df["public_skill_text"])
-    df = df[df["text"].notna()]
+    df["text"] = df["text"].fillna("")             # scan_one records these as unanalyzed
     if only_ids is not None:
         df = df[df["benchmark_id"].isin(only_ids)]
     if sample_per_label:
@@ -212,15 +218,18 @@ def main(argv=None):
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     t0 = time.perf_counter()
     n_err = 0
-    with open(args.out, "w", encoding="utf-8") as out, \
-            Pool(workers, initializer=_init, initargs=(work, args.llm_mode, args.fake_llm)) as pool:
-        for i, row in enumerate(pool.imap_unordered(scan_one, records, chunksize=4), 1):
-            n_err += row["error"] is not None
-            out.write(json.dumps(row, ensure_ascii=True) + "\n")
-            if i % 250 == 0 or i == len(records):
-                sys.stderr.write("  %d/%d  errors=%d  %.0fs\n" % (
-                    i, len(records), n_err, time.perf_counter() - t0))
-    shutil.rmtree(work, ignore_errors=True)
+    try:
+        with open(args.out, "w", encoding="utf-8") as out, \
+                Pool(workers, initializer=_init,
+                     initargs=(work, args.llm_mode, args.fake_llm)) as pool:
+            for i, row in enumerate(pool.imap_unordered(scan_one, records, chunksize=4), 1):
+                n_err += row["error"] is not None
+                out.write(json.dumps(row, ensure_ascii=True) + "\n")
+                if i % 250 == 0 or i == len(records):
+                    sys.stderr.write("  %d/%d  errors=%d  %.0fs\n" % (
+                        i, len(records), n_err, time.perf_counter() - t0))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)    # also after a failure or an interruption
     sys.stderr.write("done: %d records, %d errors, %.1fs, mode=%s -> %s\n" % (
         len(records), n_err, time.perf_counter() - t0, args.llm_mode, args.out))
     return 0

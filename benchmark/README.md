@@ -33,7 +33,8 @@ files over 1 MiB), so nothing unanalyzed is counted as clean.
 
 The headline verdict is **T1/T2 vector at high/critical** (Cisco's HIGH/CRITICAL blocking
 threshold plus the attack tiers). MEDIUM+ and any-finding are reported alongside. T3
-capability/hygiene findings never count as a malicious verdict.
+capability/hygiene findings never count in that headline verdict; the HIGH+, MEDIUM+ and
+any-finding views include every tier.
 
 Before/after on the same identities (a per-record diff, exact because detection is additive
 and deterministic):
