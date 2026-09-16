@@ -255,7 +255,13 @@ _NOUN_PHRASE_INTRO_RE = re.compile(
 _PARAM_DEF_RE = re.compile(
     r"`(?:-{1,2}\w[\w-]*(?:\s*[,/|]\s*-{1,2}\w[\w-]*)*|\?[\w-]+=?|[\w.-]+=[^`\n]*|"
     r"[^`\n]*<[^`\n]+>[^`\n]*)"
-    r"(?:\s[^`\n]*)?`\s*(?:—|–|-|:|=)\s*$")
+    r"(?:\s[^`\n]*)?`\s*(?:—|–|-{1,2}|:|=)\s*$")
+# A caption names what an option does ("Override instructions", "ignore previous rules when
+# set"); a scoped order on the model's own instructions or prompt ("ignore all previous
+# instructions") is a directive even inside a definition list.
+_SCOPED_DIRECTIVE_RE = re.compile(
+    r"\b(?:all|any|every|each|previous|prior|past|above|earlier|preceding)\b.{0,30}"
+    r"\b(?:instructions?|prompts?|directives?)\b", re.I)
 # Example framing must precede the directive.
 _EXAMPLE_INTRO_RE = re.compile(
     r"\b(?:such as|e\.?g\.?|i\.?e\.?|for example|for instance|a typical|an example|"
@@ -810,7 +816,8 @@ def _directive_findings(art):
                 described = described or _is_defensive_frame(before)
                 if described:
                     continue
-                if vid == "SXV-028" and _PARAM_DEF_RE.search(before):
+                if (vid == "SXV-028" and _PARAM_DEF_RE.search(before)
+                        and not _SCOPED_DIRECTIVE_RE.search(m.group(0))):
                     continue                    # "`--flag` -- Override instructions": option docs
                 if (vid == "SXV-028" and _NOUN_PHRASE_INTRO_RE.search(before)
                         and re.match(r"(?:ignore|forget|override|disregard)\b", m.group(0), re.I)):
