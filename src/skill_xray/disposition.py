@@ -151,7 +151,7 @@ def apply_dispositions(parsed, correlated, triads, *, policy=None, context_error
 LLM_APPLY_VERSION = "skill-xray/llm-apply/v1"
 # Only the text-pattern directive vectors the review contracts cover. Code-lane, taint, byte
 # forensics and every other mechanically anchored vector are never model-adjustable.
-_LLM_APPLY_VECTORS = frozenset({"SXV-028", "SXV-029", "SXV-030", "SXV-031"})
+LLM_APPLY_VECTORS = frozenset({"SXV-028", "SXV-029", "SXV-030", "SXV-031"})
 
 
 def apply_llm_review(final, decisions, *, effective_severity="low"):
@@ -175,7 +175,7 @@ def apply_llm_review(final, decisions, *, effective_severity="low"):
             continue
         finding = result["finding"]
         if (result["disposition"] != "reported" or result["coverage"] != "no-reported-gap"
-                or finding["vector"] not in _LLM_APPLY_VECTORS
+                or finding["vector"] not in LLM_APPLY_VECTORS
                 or any(p["provenance"] != "deterministic-check-output"
                        for p in result["provenance"])
                 or SEVERITY_RANK[effective_severity] <= SEVERITY_RANK.get(finding["severity"], 99)):

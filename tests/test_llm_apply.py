@@ -170,6 +170,13 @@ def test_applied_correction_passes_sarif_validation(make_package, monkeypatch, t
             decision["proposal"]["verdict"] = "retain_finding"
     with pytest.raises(ValueError, match="SARIF validation failed"):
         validate_sarif(retained)
+    for field, value in (("confidence", "medium"), ("intent", "unknown")):
+        weak = json.loads(json.dumps(doc))
+        for decision in weak["runs"][0]["properties"]["llmReview"]["decisions"]:
+            if decision["disposition"] == "llm-disputed":
+                decision["proposal"][field] = value
+        with pytest.raises(ValueError, match="SARIF validation failed"):
+            validate_sarif(weak)
 
 
 def test_cli_apply_requires_review_flag(make_package):

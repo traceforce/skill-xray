@@ -688,10 +688,11 @@ def test_openai_reasoning_model_omits_temperature_and_seed(monkeypatch):
         assert "temperature" not in body and "seed" not in body
 
 
-def test_compatible_endpoint_pins_temperature_and_seed(monkeypatch):
+def test_compatible_endpoint_pins_temperature_without_seed(monkeypatch):
+    # `seed` is OpenAI-specific; an arbitrary compatible endpoint may reject unknown fields
     body = _openai_body(monkeypatch, "llama-3.3-70b", provider="openai-compatible",
                         base="https://vllm.example/v1")
-    assert body["temperature"] == 0 and body["seed"] == 0
+    assert body["temperature"] == 0 and "seed" not in body
 
 
 def test_non_latin1_key_becomes_llmerror(monkeypatch):
