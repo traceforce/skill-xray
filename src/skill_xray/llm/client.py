@@ -119,10 +119,12 @@ class HTTPLLMClient(LLMClient):
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": user}]}
         if token_field == "max_tokens":
-            # Greedy decoding plus OpenAI's best-effort `seed`: removes one source of run-to-run
-            # variance, guarantees nothing. Reasoning models reject both fields with a 400.
+            # Greedy decoding removes one source of run-to-run variance, guarantees nothing.
+            # Reasoning models reject both fields with a 400. `seed` is OpenAI's own optional
+            # field; a compatible third-party endpoint may reject unknown fields, so it stays off.
             body["temperature"] = 0
-            body["seed"] = 0
+            if self.cfg.provider == "openai":
+                body["seed"] = 0
         else:
             # Hidden reasoning shares the output cap; keep it low and the cap large enough.
             body[token_field] = max(self.cfg.max_tokens, _REASONING_MIN_OUTPUT)
