@@ -125,18 +125,37 @@ def _usage_section(llm_rows, price_in, price_out):
                 est, price_in, price_out), ""]
 
 
-def _verdict_section(rows):
-    out = ["## Package verdicts by lane", ""]
+def _lanes(llm_rows):
+    """Which LLM lanes actually ran, from the flags every LLM session records."""
+    usage = [r["llm_usage"] for r in llm_rows]
+    return {"review": bool(usage) and all(u.get("judge_enabled") and u.get("apply_enabled")
+                                           for u in usage),
+            "additive": bool(usage) and all(u.get("advisory_enabled") for u in usage)}
+
+
+def _verdict_section(rows, lanes):
+    # a view is reported only for a lane that ran: a review-only run says nothing about the
+    # additive lane, and the other way round
+    active = ["deterministic"]
+    if lanes["review"]:
+        active.append("review only")
+    if lanes["additive"]:
+        active.append("additive only")
+    if lanes["review"] and lanes["additive"]:
+        active.append("review + additive")
+    out = ["## Package verdicts by lane", "",
+           "Lanes that ran: %s." % (", ".join(k for k, v in lanes.items() if v)
+                                    or "none (deterministic view only)"), ""]
     names = {"blocking": "blocking (T1/T2 at high/critical)", "high+": "HIGH+ any tier",
              "medium+": "MEDIUM+ any tier"}
     for threshold in _THRESHOLDS:
         out += ["### %s" % names[threshold], "",
                 "| view | precision | recall | F1 | FPR | TP / FP / TN / FN |",
                 "|---|---|---|---|---|---|"]
-        for view in _VIEWS:
+        for view in active:
             out.append("| %s | %s |" % (view, _fmt_row(_metrics(rows, view, threshold))))
         out.append("")
-        for view in ("review only", "additive only"):
+        for view in [v for v in ("review only", "additive only") if v in active]:
             fl = _flips(rows, view, threshold)
             if not any(fl.values()):
                 continue
@@ -277,7 +296,7 @@ def report(rows, base_rows, price_in, price_out, title):
             "%s: %s" % (r["benchmark_id"], r["error"][:80]) for r in errors[:5]))
     out.append("")
     out += _usage_section(llm_rows, price_in, price_out)
-    out += _verdict_section(rows)
+    out += _verdict_section(rows, _lanes(llm_rows))
     if base_rows is not None:
         out += _base_section(rows, base_rows)
     out += _judge_section(llm_rows)

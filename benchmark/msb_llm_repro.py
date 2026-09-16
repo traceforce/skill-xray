@@ -43,6 +43,11 @@ def _medium(rows):
 
 def compare(name_a, a, name_b, b):
     common = set(a) & set(b)
+    missing_b, missing_a = sorted(set(a) - common), sorted(set(b) - common)
+    if missing_a or missing_b:
+        raise SystemExit("%s and %s do not cover the same identities (%d only in the first, %d "
+                         "only in the second); compare runs over the same records" % (
+                             name_a, name_b, len(missing_b), len(missing_a)))
     conflict = sorted(bid for bid in common if a[bid]["label"] != b[bid]["label"])
     if conflict:
         raise SystemExit("%s and %s disagree on the label of %d shared identities, e.g. %s" % (
@@ -74,9 +79,11 @@ def compare(name_a, a, name_b, b):
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("jsonl", nargs="+")
+    ap.add_argument("jsonl", nargs="+", help="two or more runs over the same identities")
     ap.add_argument("--md")
     args = ap.parse_args(argv)
+    if len(args.jsonl) < 2:
+        ap.error("give at least two run files to compare")
     runs = [(os.path.basename(p), _load(p)) for p in args.jsonl]
     out = ["# LLM-lane reproducibility", ""]
     for (na, a), (nb, b) in itertools.combinations(runs, 2):
