@@ -1087,7 +1087,8 @@ _EXFIL_VERB = (
     r"attach(?:es|ed|ing)?|export(?:s|ed|ing)?|cop(?:y|ies|ying)|sav(?:e|es)|writ(?:e|es)|"
     r"push(?:es|ed|ing)?|sync(?:s|ed|ing)?|synchroni[sz](?:e|es|ed|ing)|rout(?:e|es|ed|ing)|"
     r"ship(?:s|ped|ping)?|dispatch(?:es|ed|ing)?|giv(?:e|es|en|ing)|gave|provid(?:e|es|ed|ing)|"
-    r"report(?:s|ed|ing)?|back(?:s|ed|ing)?\s+(?:it|them|this|these|that|those|\w+)\s+up|"
+    r"report(?:s|ed|ing)?|back(?:s|ed|ing)?\s+up|"
+    r"back(?:s|ed|ing)?\s+(?:it|them|this|these|that|those|\w+)\s+up|"
     r"backup(?:s)?|past(?:e|es|ed|ing)|drop(?:s|ped|ping)?|stash(?:es|ed|ing)?|"
     r"hand(?:s|ed|ing)?\s+(?:it|them|this|these|that|those|\w+)?\s*over|leak(?:s|ed|ing)?|"
     r"exfiltrat\w*|publish(?:es|ed|ing)?|expos(?:e|es|ed|ing)|feed(?:s|ing)?|pip(?:e|es|ed|ing)|"
@@ -1138,7 +1139,8 @@ _EXFIL_ACQUIRE_RE = re.compile(
 _EXFIL_NEG_PREFIX_RE = re.compile(
     r"\b(?:do not|don'?t|never|must not|must never|cannot|can'?t|will not|won'?t|should not|"
     r"shouldn'?t|under no circumstances|refrain from|forbidden to|not (?:allowed|permitted) to|"
-    r"avoid|prohibited from)\b(?!\W+(?:hesitate|forget|fail|neglect|wait)\b)", re.I)
+    r"avoid(?:ing)?\s+(?:send|upload|shar|forward|post|transmit|e-?mail|export|leak|disclos|"
+    r"transfer|giv)\w*|prohibited from)\b(?!\W+(?:hesitate|forget|fail|neglect|wait)\b)", re.I)
 _EXFIL_CONTRAST_RE = re.compile(
     r"\b(?:without(?: ever)?|instead of|rather than|in place of|as opposed to)\s+(?:\w+\s+){0,2}$",
     re.I)
@@ -1215,6 +1217,15 @@ def _sentences(raw):
         out.append((start, piece))
         pos = start + len(piece)
     return out
+
+
+def _own_sentence(text, match):
+    """The sentence of ``text`` that contains ``match`` (up to 60 chars of lead-in)."""
+    pre = text[max(0, match.start() - 60):match.start()]
+    cut = max(pre.rfind(". "), pre.rfind("! "), pre.rfind("? "))
+    end = _SENTENCE_END_RE.search(text, match.end())
+    return (pre if cut == -1 else pre[cut + 2:]) + text[match.start():end.start() if end
+                                                        else len(text)]
 
 
 def _exfil_recipient(addr):
@@ -1305,18 +1316,19 @@ def _data_exfil_findings(art):
                     obj = pre
                 # the block so far, plus the tail of the previous paragraph or list item
                 window = prev_tail + " " + raw[:s_start + m.start()]
-                acquired = _EXFIL_ACQUIRE_RE.search(window)
+                acquisitions = list(_EXFIL_ACQUIRE_RE.finditer(window))
                 owned = _EXFIL_POSSESSIVE_RE.search(obj) or (
                     re.search(r"\byour\b", obj, re.I) and _EXFIL_SENSITIVE_RE.search(obj))
-                if acquired is None and not owned:            # "send your passwords to ..."
+                if not acquisitions and not owned:            # "send your passwords to ..."
                     continue
-                if acquired:                # negation counts inside the acquisition's own sentence
-                    pre = window[max(0, acquired.start() - 60):acquired.start()]
-                    cut = max(pre.rfind(". "), pre.rfind("! "), pre.rfind("? "))
-                    neg_text = (pre if cut == -1 else pre[cut + 2:]) + window[acquired.start():]
-                else:
-                    neg_text = sentence[:m.start()]
-                if (_EXFIL_NEG_PREFIX_RE.search(neg_text)
+                # Negation is judged sentence by sentence: an acquisition counts unless its own
+                # sentence negates it, and the delivery sentence must not negate or contrast it.
+                acquired = next((a for a in acquisitions
+                                 if not _EXFIL_NEG_PREFIX_RE.search(_own_sentence(window, a))),
+                                None)
+                if acquisitions and acquired is None:
+                    continue
+                if (_EXFIL_NEG_PREFIX_RE.search(sentence[:m.end()])     # "avoid sending"
                         or _EXFIL_CONTRAST_RE.search(sentence[:m.start()])):
                     continue
                 # a disclosure, not an order: third-person delivery verb or a product subject
