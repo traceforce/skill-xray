@@ -215,8 +215,9 @@ def main(argv=None):
         _init(True)                      # fail on a missing key in the parent, before any worker
     variants = ("base", "enhanced") if args.variant == "both" else (args.variant,)
     prefix, canonical, items = enhanced_prefix(args.repo), load_canonical(args.repo), []
-    work = tempfile.mkdtemp(prefix="injecagent-pkgs-",
-                            dir=args.work or os.path.dirname(os.path.abspath(args.out)))
+    out_dir = os.path.dirname(os.path.abspath(args.out))
+    os.makedirs(out_dir, exist_ok=True)
+    work = tempfile.mkdtemp(prefix="injecagent-pkgs-", dir=args.work or out_dir)
     for v in variants:
         if args.unit != "response":
             items += [{**c, "id": "%s-%s" % (c["id"], v), "variant": v, "work": work,
@@ -225,10 +226,9 @@ def main(argv=None):
             items += [{**r, "work": work} for r in load_responses(args.repo, v)]
     rev = subprocess.run(["git", "-C", args.repo, "rev-parse", "HEAD"], capture_output=True,
                          text=True).stdout.strip()
-    os.makedirs(work, exist_ok=True)
     n_err = 0
     with open(args.out, "w", encoding="utf-8") as out, \
-            Pool(min(args.workers, 4), initializer=_init, initargs=(args.llm,)) as pool:
+            Pool(max(1, min(4, args.workers)), initializer=_init, initargs=(args.llm,)) as pool:
         for i, row in enumerate(pool.imap_unordered(scan_one, items, chunksize=4), 1):
             n_err += row["error"] is not None
             out.write(json.dumps(row, ensure_ascii=True) + "\n")

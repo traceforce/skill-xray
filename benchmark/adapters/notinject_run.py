@@ -27,8 +27,6 @@ import traceback
 from collections import Counter
 from multiprocessing import Pool
 
-import pandas as pd
-
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))
 
 from skill_xray.ingest import build_package  # noqa: E402
@@ -75,6 +73,7 @@ def load_records(data_dir, work):
     if not os.path.isdir(os.path.join(data_dir, "data")):
         from huggingface_hub import snapshot_download
         snapshot_download(DATASET, repo_type="dataset", revision=REVISION, local_dir=data_dir)
+    import pandas as pd                  # run mode only; --score works without pandas
     records = []
     for level in LEVELS:
         path = os.path.join(data_dir, "data", "NotInject_%s-00000-of-00001.parquet" % level)
@@ -86,9 +85,9 @@ def load_records(data_dir, work):
 
 
 def run(args):
-    work = tempfile.mkdtemp(prefix="notinject-pkgs-",
-                            dir=args.work or os.path.dirname(os.path.abspath(args.out)))
-    os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
+    out_dir = os.path.dirname(os.path.abspath(args.out))
+    os.makedirs(out_dir, exist_ok=True)
+    work = tempfile.mkdtemp(prefix="notinject-pkgs-", dir=args.work or out_dir)
     records = load_records(args.data, work)
     t0, n_err = time.perf_counter(), 0
     with open(args.out, "w", encoding="utf-8") as out, Pool(max(1, min(4, args.workers))) as pool:
@@ -150,6 +149,10 @@ def cell(k, n):
 
 
 def score(rows):
+    # a record whose scan failed is not a clean record: it leaves the rate and its CI, and is
+    # reported under errors, so an all-crash run cannot read as a perfect 0%
+    errored = [r["id"] for r in rows if r["error"]]
+    rows = [r for r in rows if not r["error"]]
     n = len(rows)
     counts = {name: sum(fn(r["findings"]) for r in rows) for name, fn in VERDICTS.items()}
     per_vector = Counter(v for r in rows for v in {f["vector"] for f in _real(r["findings"])})
@@ -161,7 +164,7 @@ def score(rows):
         "dataset": DATASET, "revision": REVISION, "total": n,
         "levels": dict(Counter(r["level"] for r in rows)),
         "categories": dict(Counter(r["category"] for r in rows)),
-        "errors": sum(r["error"] is not None for r in rows), "counts": counts,
+        "errors": len(errored), "counts": counts,
         "headline": {"metric": "injection-class flag rate at MEDIUM+", "count": k, "total": n,
                      "rate_pct": 100 * k / n, "ci95_clopper_pearson_pct": [100 * lo, 100 * hi],
                      "ci95_wilson_upper_pct": 100 * wilson_upper(k, n), "cell": cell(k, n)},
@@ -171,7 +174,7 @@ def score(rows):
                    "triggers": r["triggers"],
                    "findings": [{k2: f[k2] for k2 in _KEYS[:4]} for f in _real(r["findings"])]}
                   for r in sorted(rows, key=lambda r: r["id"]) if _real(r["findings"])],
-        "error_ids": [r["id"] for r in rows if r["error"]],
+        "error_ids": errored,
     }
 
 

@@ -105,8 +105,9 @@ def load_groups(csv_path):
 
 def run(args):
     records, meta = load_groups(args.csv)
-    work = tempfile.mkdtemp(prefix="inpage-pkgs-",
-                            dir=args.work or os.path.dirname(os.path.abspath(args.out)))
+    out_dir = os.path.dirname(os.path.abspath(args.out))
+    os.makedirs(out_dir, exist_ok=True)
+    work = tempfile.mkdtemp(prefix="inpage-pkgs-", dir=args.work or out_dir)
     records = [dict(r, work=work) for r in records]
     with open(args.out + ".meta.json", "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=1)
