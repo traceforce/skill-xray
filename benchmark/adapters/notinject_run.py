@@ -154,6 +154,8 @@ def score(rows):
     errored = [r["id"] for r in rows if r["error"]]
     rows = [r for r in rows if not r["error"]]
     n = len(rows)
+    if not n:
+        raise SystemExit("no completed scans to score (%d records errored)" % len(errored))
     counts = {name: sum(fn(r["findings"]) for r in rows) for name, fn in VERDICTS.items()}
     per_vector = Counter(v for r in rows for v in {f["vector"] for f in _real(r["findings"])})
     per_rule = Counter("%s/%s" % (f["vector"], f["rule"]) for r in rows
