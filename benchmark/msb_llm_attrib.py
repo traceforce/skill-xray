@@ -58,7 +58,9 @@ def _metrics(rows, view, threshold):
                         threshold=threshold)
         if r["label"] == 1:
             tp += flagged
-            fn += not flagged
+            fn += not flagged                   # an unscanned attack is a miss, not a pass
+        elif r.get("error"):
+            continue                            # an unscanned benign record is not a verified TN
         else:
             fp += flagged
             tn += not flagged

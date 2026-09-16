@@ -43,6 +43,10 @@ def _medium(rows):
 
 def compare(name_a, a, name_b, b):
     common = set(a) & set(b)
+    conflict = sorted(bid for bid in common if a[bid]["label"] != b[bid]["label"])
+    if conflict:
+        raise SystemExit("%s and %s disagree on the label of %d shared identities, e.g. %s" % (
+            name_a, name_b, len(conflict), ", ".join(conflict[:3])))
     labels = {bid: a[bid]["label"] for bid in common}
     out = ["### %s vs %s (%d shared identities)" % (name_a, name_b, len(common)), ""]
     for title, pick in (("SXV-038 hit", _hits), ("MEDIUM+ effective verdict", _medium)):
