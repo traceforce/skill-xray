@@ -337,6 +337,16 @@ def validate_sarif(document):
                     or props["decisionProvenance"] not in {"operator-policy", "llm-review-policy"}
                     or props["coverage"] != "no-reported-gap"):
                 raise ValueError("Invalid severity correction audit")
+            if corrected and props["decisionProvenance"] == "llm-review-policy":
+                review = run["properties"].get("llmReview")
+                support = [] if review is None else [
+                    d for d in review["decisions"]
+                    if d["candidate_id"] in props["candidateIds"]
+                    and d["disposition"] == "llm-disputed" and d["status"] == "proposed"
+                    and d["proposal"] is not None
+                    and d["proposal"]["verdict"] == "propose_false_positive"]
+                if review is None or review["mode"] != "annotated" or not support:
+                    raise ValueError("LLM correction without a supporting dispute")
             if suppressed != bool(result.get("suppressions")) or suppressed and (
                     not props.get("sxv") or props["decisionProvenance"] != "operator-policy"
                     or props["coverage"] != "no-reported-gap"
