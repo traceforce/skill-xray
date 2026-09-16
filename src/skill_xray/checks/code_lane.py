@@ -214,7 +214,7 @@ _DROP_HOST_RE = re.compile(
 # file (`-K`, `--config`) that can carry `insecure`: never part of a first-party installer.
 _INSECURE_FLAG_RE = re.compile(
     r"(?<![\w-])(?:--insecure|--no-check-certificate|--check-certificate=(?:false|no|0)|"
-    r"--verify=(?:no|false|0)|--config(?:=\S+)?|-[A-Za-z]*[kK][A-Za-z]*)(?![\w-])")
+    r"--verify[= ](?:no|false|0)|--config(?:=\S+)?|-[A-Za-z]*[kK][A-Za-z]*)(?![\w-])")
 # An interpreter running inline code as the consumer (`| python -c 'exec(open(0).read())'`) is a
 # dropper shape; vendor installers pipe into a shell or into `python3 -`.
 _INLINE_CODE_CONSUMER_RE = re.compile(
@@ -293,5 +293,6 @@ def installer_idiom(command_text) -> bool:
         return False
     if "$" in path or "{" in path or "%" in path:
         return False
+    path = path.split("?", 1)[0].split("#", 1)[0]     # the query is not the fetched path
     stripped = path.rstrip("/")                        # bare vendor host serves the installer
     return stripped == "" or bool(_INSTALLER_PATH_RE.search(stripped))
