@@ -1141,9 +1141,11 @@ _EXFIL_NEG_PREFIX_RE = re.compile(
     r"shouldn'?t|under no circumstances|refrain from|forbidden to|not (?:allowed|permitted) to|"
     r"avoid(?:ing)?\s+(?:send|upload|shar|forward|post|transmit|e-?mail|export|leak|disclos|"
     r"transfer|giv)\w*|prohibited from)\b(?!\W+(?:hesitate|forget|fail|neglect|wait)\b)", re.I)
+# "without ever uploading", "instead of first sending": the contrast must sit right before the
+# delivery verb, with only these fillers between ("without delay and send" is not a contrast)
 _EXFIL_CONTRAST_RE = re.compile(
-    r"\b(?:without(?: ever)?|instead of|rather than|in place of|as opposed to)\s+(?:\w+\s+){0,2}$",
-    re.I)
+    r"\b(?:without(?: ever)?|instead of|rather than|in place of|as opposed to)\s+"
+    r"(?:(?:ever|first|actually|also|then|directly|immediately|simply|just)\s+){0,2}$", re.I)
 _EXFIL_DISCLOSURE_RE = re.compile(
     r"\b(?:this|the|our|its?)\s+(?:\w+\s+){0,2}(?:skill|tool|cli|plugin|app|extension|agent|"
     r"script|service|library|integration|telemetry|module)\b[^.!?\n]{0,40}?"
