@@ -70,12 +70,14 @@ def discover(data_dir):
 
 
 def _copy_text_files(src, dst):
-    """Copy UTF-8 text files at their relative paths; return (copied, skipped_binary, oversize)."""
+    """Copy UTF-8 text files at their relative paths; symlinks and binaries are counted as
+    skipped, never followed. Returns (copied, skipped, oversize)."""
     copied = skipped = oversize = 0
-    for dirpath, _dirs, files in os.walk(src):
+    for dirpath, dirs, files in os.walk(src):
+        dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(dirpath, d))]
         for name in files:
             path = os.path.join(dirpath, name)
-            if os.path.splitext(name)[1].lower() not in _TEXT_EXT:
+            if os.path.islink(path) or os.path.splitext(name)[1].lower() not in _TEXT_EXT:
                 skipped += 1
                 continue
             with open(path, "rb") as fh:

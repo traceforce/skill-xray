@@ -62,15 +62,19 @@ def _is_text(data):
 
 
 def materialize(src, dst):
-    """Copy text/markdown/source files at their relative paths; skip binaries. Returns counts
-    plus the files that could not be written or read back."""
-    n_text = n_bin = 0
+    """Copy text/markdown/source files at their relative paths; skip binaries and symlinks.
+    Returns the counts plus the files that could not be written or read back."""
+    n_text = n_bin = n_link = 0
     errors = []
     for dirpath, dirnames, filenames in os.walk(src):
-        dirnames[:] = [d for d in dirnames if d != ".git"]
+        dirnames[:] = [d for d in dirnames if d != ".git"
+                       and not os.path.islink(os.path.join(dirpath, d))]
         for name in filenames:
             path = os.path.join(dirpath, name)
             rel = os.path.relpath(path, src).replace(os.sep, "/")
+            if os.path.islink(path):            # may point outside the package; never read
+                n_link += 1
+                continue
             if os.path.splitext(name)[1].lower() in _BINARY_EXT:
                 n_bin += 1
                 continue
@@ -89,7 +93,7 @@ def materialize(src, dst):
                 n_text += 1
             except OSError as exc:
                 errors.append("%s: %s" % (rel, str(exc)[:120]))
-    return n_text, n_bin, errors
+    return n_text, n_bin, n_link, errors
 
 
 def _finding_row(f):
@@ -107,7 +111,7 @@ def scan_one(item):
     root, t0 = os.path.join(item["work"], item["id"].replace("/", "__")), time.perf_counter()
     try:
         os.makedirs(root, exist_ok=True)
-        n_text, n_bin, errs = materialize(item["src"], root)
+        n_text, n_bin, n_link, errs = materialize(item["src"], root)
         row.update(files_text=n_text, files_binary_skipped=n_bin, materialize_errors=errs)
         pkg = build_package(root)
         ledger = build_ledger(pkg)
