@@ -51,7 +51,7 @@ def metrics(rows, verdict):
         if r["label"] == 1:
             tp += flagged
             fn += not flagged                   # an unscanned attack is a miss, not a pass
-        elif r.get("error") or r.get("oversize"):
+        elif r.get("error") or r.get("oversize") or r.get("ledger_skipped"):
             unanalyzed += 1                     # an unscanned benign record is not a verified TN
         else:
             fp += flagged
@@ -149,9 +149,12 @@ def report(rows, title):
 
 def compare(rows, base_rows):
     """Before/after on the same identities: metrics per verdict, blocking-FP vectors, and which
-    vectors carry the newly caught malicious packages."""
+    vectors carry the newly caught malicious packages. An after-run that covers a subset of the
+    base identities (``--only-flagged``) leaves every other base record unchanged, so the numbers
+    describe the whole split rather than the subset."""
     base = {r["benchmark_id"]: r for r in base_rows}
-    paired = [(r, base[r["benchmark_id"]]) for r in rows if r["benchmark_id"] in base]
+    after_by = {r["benchmark_id"]: r for r in rows if r["benchmark_id"] in base}
+    paired = [(after_by.get(bid, b), b) for bid, b in base.items()]
     after, before = [a for a, _ in paired], [b for _, b in paired]
     lines = ["", "## Before / after on %d paired identities" % len(paired), "",
              "| verdict | before P / R / F1 / FPR | after P / R / F1 / FPR "
