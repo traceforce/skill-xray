@@ -213,22 +213,27 @@ _DROP_HOST_RE = re.compile(
 # A TLS bypass in any spelling, including a clustered short flag (`-sk`, `-fsSLk`) or a config
 # file (`-K`, `--config`) that can carry `insecure`: never part of a first-party installer.
 _INSECURE_FLAG_RE = re.compile(
-    r"(?<![\w-])(?:--insecure|--no-check-certificate|--config(?:=\S+)?|-[A-Za-z]*[kK][A-Za-z]*)"
-    r"(?![\w-])")
+    r"(?<![\w-])(?:--insecure|--no-check-certificate|--check-certificate=(?:false|no|0)|"
+    r"--verify=(?:no|false|0)|--config(?:=\S+)?|-[A-Za-z]*[kK][A-Za-z]*)(?![\w-])")
 # An interpreter running inline code as the consumer (`| python -c 'exec(open(0).read())'`) is a
 # dropper shape; vendor installers pipe into a shell or into `python3 -`.
 _INLINE_CODE_CONSUMER_RE = re.compile(
     r"\b(?:python[0-9.]*|perl|ruby|node|php)\b[^|;&\n]{0,40}?\s-[A-Za-z]*[ce]\b")
 # A schemeless host among the fetch operands (`curl -H 'X: https://vendor/install.sh'
 # evil.host/p`) means the counted URL is not what is fetched.
-_BARE_HOST_RE = re.compile(r"^(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:/\S*)?$", re.I)
+_BARE_HOST_RE = re.compile(
+    r"^(?:(?:[a-z0-9-]+\.)+[a-z]{2,}|\d{1,3}(?:\.\d{1,3}){3}|localhost|\[[0-9a-f:.]+\])"
+    r"(?::\d+)?(?:/\S*)?$", re.I)
 # Any URL scheme, for counting. The idiom is exactly ONE URL, the fetch operand: a header value,
 # a docs link on the same line or a second command each add a URL and disqualify the shape.
 _ANY_URL_RE = re.compile(r"[a-z][a-z0-9+.-]*://[^\s'\"|;&`)<>]+", re.I)
-# Command substitution or a shell variable anywhere in the FETCH (before the first unquoted pipe)
-# means the bytes run are not the URL as written. Text after the pipe (`| bash && export
-# PATH=$HOME/...`) is fine.
-_SUBSTITUTION_RE = re.compile(r"[`$]")
+# Command or process substitution or a shell variable anywhere in the FETCH (before the first
+# unquoted pipe) means the bytes run are not the URL as written. Text after the pipe (`| bash &&
+# export PATH=$HOME/...`) is fine. `sh <(curl -L https://vendor/install)` is unwrapped first so the
+# fetch itself is what gets judged.
+_SUBSTITUTION_RE = re.compile(r"[`$]|[<>]\(")
+_PROCESS_SUB_FETCH_RE = re.compile(r"^\s*(?:sudo\s+)?(?:sh|bash|zsh|dash|ksh)\s+<\((.*)\)\s*$",
+                                   re.S)
 # RFC 2606/6761 reserved names and loopback: a placeholder host is nobody's vendor domain, so an
 # install piped from it is not a first-party installer.
 _PLACEHOLDER_HOST_RE = re.compile(
@@ -259,6 +264,9 @@ def _fetch_text(text):
 def installer_idiom(command_text) -> bool:
     """True when a fetch-and-run command is a first-party HTTPS installer, see above."""
     text = command_text or ""
+    unwrapped = _PROCESS_SUB_FETCH_RE.match(text)
+    if unwrapped:
+        text = unwrapped.group(1)
     fetch = _fetch_text(text)
     if fetch is None or _INSECURE_FLAG_RE.search(fetch) or _SUBSTITUTION_RE.search(fetch):
         return False
