@@ -21,7 +21,7 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from msb_score import _ATTACK, _HC, _MP  # noqa: E402
+from msb_score import _ATTACK, _HC, _MP, incomplete  # noqa: E402
 
 _VIEWS = {"deterministic": (False, False), "review only": (True, False),
           "additive only": (False, True), "review + additive": (True, True)}
@@ -59,11 +59,12 @@ def _metrics(rows, view, threshold):
         if r["label"] == 1:
             tp += flagged
             fn += not flagged                   # an unscanned attack is a miss, not a pass
-        elif r.get("error") or r.get("oversize"):
+        elif flagged:
+            fp += 1                             # a positive prediction counts, complete or not
+        elif incomplete(r):
             continue                            # an unscanned benign record is not a verified TN
         else:
-            fp += flagged
-            tn += not flagged
+            tn += 1
     p = tp / (tp + fp) if tp + fp else 0.0
     rc = tp / (tp + fn) if tp + fn else 0.0
     return {"TP": tp, "FP": fp, "TN": tn, "FN": fn, "precision": p, "recall": rc,
