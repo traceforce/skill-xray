@@ -16,9 +16,11 @@ directory, scanned in-process, then deleted. Nothing is executed.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -91,11 +93,18 @@ def materialize(src, dst, row):
                 row["mat_errors"].append("%s: %s" % (rel.replace(os.sep, "/"), exc))
 
 
+def _scratch_name(pkg_id):
+    """One scratch directory per package id: a sanitized stem plus a hash of the full id, so two
+    ids that differ only in separators never share a directory (workers delete their own)."""
+    return "%s-%s" % (re.sub(r"[^A-Za-z0-9_-]", "_", pkg_id)[:40],
+                      hashlib.sha1(pkg_id.encode("utf-8")).hexdigest()[:10])
+
+
 def scan_one(work, pkg):
     row = {"id": pkg["id"], "label": 1, "split": pkg["split"], "category": pkg["category"],
            "findings": [], "error": None, "files_written": 0, "files_skipped_binary": 0,
            "mat_errors": [], "analyzed": 0, "ledger_skipped": 0, "elapsed_ms": 0}
-    dst = os.path.join(work, "pkgs", pkg["id"].replace("/", "__"))
+    dst = os.path.join(work, "pkgs", _scratch_name(pkg["id"]))
     t0 = time.perf_counter()
     try:
         os.makedirs(dst, exist_ok=True)
@@ -139,10 +148,12 @@ def wilson(k, n, z=1.96):
 
 
 def _incomplete(r):
-    """A crashed scan or a high-severity diagnostic without a vector (OpenGrep unavailable,
-    analysis cut short): the package was not fully analyzed, so a miss on it says nothing."""
-    return r["error"] is not None or any(
-        f.get("severity") in _HC and not f.get("vector") for f in r["findings"])
+    """A crashed scan, a file lost at materialization, a ledger skip, or a high-severity
+    diagnostic without a vector (OpenGrep unavailable, analysis cut short): the package was not
+    fully analyzed, so a miss on it says nothing."""
+    return bool(r["error"] is not None or r.get("mat_errors") or r.get("files_oversize")
+                or r.get("ledger_skipped") or any(
+                    f.get("severity") in _HC and not f.get("vector") for f in r["findings"]))
 
 
 def score(rows):

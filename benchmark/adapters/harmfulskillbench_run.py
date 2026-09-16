@@ -142,10 +142,11 @@ def _real(fs):
 
 
 def _incomplete(r):
-    """A crashed scan or a high-severity diagnostic without a vector (OpenGrep unavailable,
-    analysis cut short): the package was not fully analyzed, so a miss on it says nothing."""
-    return r["error"] is not None or any(
-        f.get("severity") in _HC and not f.get("vector") for f in r["findings"])
+    """A crashed scan, an oversize file left out, or a high-severity diagnostic without a vector
+    (OpenGrep unavailable, analysis cut short): the package was not fully analyzed, so a miss on
+    it says nothing."""
+    return bool(r["error"] is not None or r.get("oversize") or any(
+        f.get("severity") in _HC and not f.get("vector") for f in r["findings"]))
 
 
 VERDICTS = {
@@ -229,10 +230,14 @@ def main(argv=None):
                 json.dump(s, fh, indent=1)
         print(json.dumps(s, indent=1))
         return 0
-    if not args.data or not args.out:
-        ap.error("run mode needs --data and --out")
+    if not args.data:
+        ap.error("run mode needs --data")
     if args.fetch:
         fetch(args.data, args.revision)
+        if not args.out:                    # fetch-only step of the documented two-step flow
+            return 0
+    if not args.out:
+        ap.error("run mode needs --out")
     records = discover(args.data)
     if not records:
         raise SystemExit("no skills/**/SKILL.md under %s" % args.data)

@@ -11,9 +11,11 @@ the code lane and OpenGrep active, then removed. Nothing is executed; only bytes
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -106,13 +108,20 @@ def _finding_row(f):
     return {**row, "vector": row["vector"] or "", "message": (d.get("message") or "")[:300]}
 
 
+def _scratch_name(pkg_id):
+    """One scratch directory per package id: a sanitized stem plus a hash of the full id, so two
+    ids that differ only in separators never share a directory (workers delete their own)."""
+    return "%s-%s" % (re.sub(r"[^A-Za-z0-9_-]", "_", pkg_id)[:40],
+                      hashlib.sha1(pkg_id.encode("utf-8")).hexdigest()[:10])
+
+
 def scan_one(item):
-    """Materialize one package under <work>/<id>/, scan it whole, delete it."""
+    """Materialize one package under its own scratch directory, scan it whole, delete it."""
     row = {"id": item["id"], "name": os.path.basename(item["src"]), "label": 0,
            "category": "official", "files_text": 0, "files_binary_skipped": 0,
            "materialize_errors": [], "analyzed": 0, "ledger_skipped": 0, "findings": [],
            "error": None, "elapsed_ms": 0}
-    root, t0 = os.path.join(item["work"], item["id"].replace("/", "__")), time.perf_counter()
+    root, t0 = os.path.join(item["work"], _scratch_name(item["id"])), time.perf_counter()
     try:
         os.makedirs(root, exist_ok=True)
         n_text, n_bin, n_link, errs = materialize(item["src"], root)
@@ -146,12 +155,14 @@ def score(rows):
     """Package-level flag rates from the JSONL; every real finding is a compatibility flag. A
     package whose scan failed is reported under errors and leaves every rate. A package that
     ended in a high-severity diagnostic without a vector (OpenGrep unavailable, analysis cut
-    short) was not fully analyzed: an unflagged outcome on it is unknown rather than clean, so at
-    each threshold it counts only where it is flagged, and the eligible count is reported."""
+    short), lost a file at materialization, or had an artifact skipped by the ledger was not fully
+    analyzed: an unflagged outcome on it is unknown rather than clean, so at each threshold it
+    counts only where it is flagged, and the eligible count is reported."""
     errored = [r["id"] for r in rows if r.get("error")]
     rows = [r for r in rows if not r.get("error")]
     incomplete = [r["id"] for r in rows
-                  if any(f.get("severity") in _HC and not f.get("vector") for f in r["findings"])]
+                  if r.get("materialize_errors") or r.get("ledger_skipped")
+                  or any(f.get("severity") in _HC and not f.get("vector") for f in r["findings"])]
     unknown = set(incomplete)
     n = len(rows)
     real = {r["id"]: [f for f in r["findings"] if f.get("vector")] for r in rows}
