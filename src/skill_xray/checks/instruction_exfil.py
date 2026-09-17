@@ -1112,7 +1112,7 @@ _EXFIL_DITRANS_RE = re.compile(
     r"text(?:s)?)\s+(?:the\s+)?(?P<addr>[\w.+-]+@[\w-]+(?:\.[\w-]+)+)\s+"
     r"(?P<gap>(?:[^.!?\n]|\.(?=\S)){1,80})", re.I)
 _EXFIL_PARAM_RECIPIENT_RE = re.compile(
-    r"\b(?:to|recipients?|cc|bcc|dest(?:ination)?|target|address|mailto)\s*[=:]\s*['\"]?"
+    r"(?<![?&/;])\b(?:to|recipients?|cc|bcc|dest(?:ination)?|target|address|mailto)\s*[=:]\s*['\"]?"
     r"(?P<addr>[\w.+-]+@[\w-]+(?:\.[\w-]+)+|https?://[^\s'\"<>)\]]+)", re.I)
 _EXFIL_PASSIVE_RE = re.compile(
     r"\b(?:should|must|will|shall|may|can|to|then|be|is|are|was|were|get|gets|got)\s+(?:be\s+)?"
@@ -1166,10 +1166,6 @@ _EXFIL_ROLE_LOCAL_RE = re.compile(
     r"^(?:support|help(?:desk)?|bugs?|bug-?reports?|crash(?:es)?|feedback|security|issues?|"
     r"privacy|abuse|info|contact|hello|hi|team|dev(?:s|ops)?|ops|oncall|alerts?|sales|billing|"
     r"legal|press|careers|jobs|hr|postmaster|webmaster|noreply|no-reply|admin|root|it)$", re.I)
-_EXFIL_ROLE_HOST_RE = re.compile(
-    r"^(?:support|help(?:desk)?|issues?|bugs?|tracker|sentry|crash(?:es)?|gitlab|github|jira|"
-    r"feedback|status|telemetry|metrics|logs?|ingest|errors?|ci|build|artifacts?|deploy|hooks?|"
-    r"webhooks?)\.", re.I)
 # The user's own account at a known SaaS API is the endpoint the skill exists to call, not a
 # third-party recipient.
 # An api-looking host that is not a known service is a soft cue: the user's own endpoint for
@@ -1317,7 +1313,7 @@ def _data_exfil_findings(art):
                 else:
                     obj = pre
                 # the block so far, plus the tail of the previous paragraph or list item
-                window = prev_tail + " " + raw[:s_start + m.start()]
+                window = (prev_tail + " " + raw[:s_start + m.start()])[-4000:]
                 acquisitions = list(_EXFIL_ACQUIRE_RE.finditer(window))
                 owned = _EXFIL_POSSESSIVE_RE.search(obj) or (
                     re.search(r"\byour\b", obj, re.I) and _EXFIL_SENSITIVE_RE.search(obj))
@@ -1341,17 +1337,16 @@ def _data_exfil_findings(art):
                 if (third_person or _EXFIL_DISCLOSURE_RE.search(acq_sentence)
                         or _EXFIL_DISCLOSURE_RE.search(sentence[:m.start()])):
                     continue
-                if _EXFIL_SERVICE_HOST_RE.search(host):
-                    continue
                 data = window + " " + (gap or "")
-                shared = (_EXFIL_ROLE_LOCAL_RE.match(local) or _EXFIL_ROLE_HOST_RE.match(host)
-                          or _EXFIL_DEV_HOST_RE.search(host))
+                if _EXFIL_SERVICE_HOST_RE.search(host) and not _EXFIL_CREDENTIAL_RE.search(data):
+                    continue
+                shared = _EXFIL_ROLE_LOCAL_RE.match(local) or _EXFIL_DEV_HOST_RE.search(host)
                 if shared and not _EXFIL_SENSITIVE_RE.search(data):
                     continue
                 soft = placeholder_local or example_section or _EXFIL_API_PREFIX_RE.search(host)
                 if soft and not _EXFIL_CREDENTIAL_RE.search(data):
                     continue
-                before = raw[:s_start + m.start()]
+                before = raw[max(0, s_start + m.start() - 4000):s_start + m.start()]
                 if (_SXV042_EXAMPLE_INTRO_RE.search(sentence[:m.start()]) or intro_prev
                         or _EXFIL_QUOTE_INTRO_RE.search(sentence[:m.start()])
                         or _is_defensive_frame(before)):
