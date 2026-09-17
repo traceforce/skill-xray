@@ -42,7 +42,7 @@ import re
 from urllib.parse import urlsplit
 
 from ..findings import Finding
-from .code_lane import installer_idiom
+from .code_lane import _DROP_HOST_RE, installer_idiom
 
 # Standing agent instructions are part of the instruction lane.
 _LANE_KINDS = {"skill_manifest", "instruction", "agent_identity"}
@@ -1079,6 +1079,8 @@ def _covert_script_findings(art):
 # sections, defensive frames, third-person disclosures, known SaaS API endpoints, role mailboxes
 # and developer hosts receiving non-sensitive data, placeholder recipients, inline code and
 # fenced code. Each guard's regex carries its own note.
+# preceding prose searched for the acquisition and the defensive frame; keeps one paragraph linear
+_EXFIL_WINDOW = 4000
 _EXFIL_ADDR_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+|https?://[^\s'\"<>)\]]+", re.I)
 _EXFIL_VERB = (
     r"(?:send(?:s|ing)?|sent|e-?mail(?:s|ed|ing)?|mail(?:s|ed|ing)?|forward(?:s|ed|ing)?|"
@@ -1167,11 +1169,11 @@ _EXFIL_ROLE_LOCAL_RE = re.compile(
     r"^(?:support|help(?:desk)?|bugs?|bug-?reports?|crash(?:es)?|feedback|security|issues?|"
     r"privacy|abuse|info|contact|hello|hi|team|dev(?:s|ops)?|ops|oncall|alerts?|sales|billing|"
     r"legal|press|careers|jobs|hr|postmaster|webmaster|noreply|no-reply|admin|root|it)$", re.I)
-# The user's own account at a known SaaS API is the endpoint the skill exists to call, not a
-# third-party recipient.
 # An api-looking host that is not a known service is a soft cue: the user's own endpoint for
 # business data, but no excuse for credentials or private history.
 _EXFIL_API_PREFIX_RE = re.compile(r"^(?:api|apis|graph|rest|gateway)\d*\.|\.(?:api|apis)\.", re.I)
+# The user's own account at a known SaaS API is the endpoint the skill exists to call, not a
+# third-party recipient, except credentials or private history, which no SaaS account excuses.
 _EXFIL_SERVICE_HOST_RE = re.compile(
     r"(?:^|\.)(?:(?:www|gmail|people|drive|sheets|calendar|oauth2|docs|admin)\.googleapis\.com|"
     r"graph\.microsoft\.com|api\.hubspot\.com|salesforce\.com|force\.com|dropboxapi\.com|"
@@ -1189,6 +1191,13 @@ _EXFIL_DEV_HOST_RE = re.compile(
     r"atlassian\.net|readthedocs\.io|huggingface\.co|hf\.co|s3(?:[.-][\w-]+)*\.amazonaws\.com|"
     r"storage\.googleapis\.com|blob\.core\.windows\.net|r2\.cloudflarestorage\.com|circleci\.com|"
     r"buildkite\.com|travis-ci\.com|jenkins\.io|semaphoreci\.com|dev\.azure\.com)$", re.I)
+# Telemetry sent to a telemetry-labelled endpoint is the product's own reporting, not the
+# user's data; user, credential or possessive wording and tunnel hosts keep it.
+_EXFIL_TELEMETRY_DATA_RE = re.compile(
+    r"\b(?:logs?|crash (?:logs?|reports?|dumps?)|error logs?|build logs?|stack traces?|"
+    r"diagnostics|metrics|telemetry|usage (?:data|stats))\b", re.I)
+_EXFIL_TELEMETRY_HOST_RE = re.compile(
+    r"^(?:crash(?:es)?|errors?|logs?|telemetry|metrics|ingest|diagnostics|sentry|events?)\.", re.I)
 # Credential-class data: the soft cues (api-looking host, placeholder-looking mailbox, example
 # heading) excuse business data going to a plausible destination, never this.
 _EXFIL_CREDENTIAL_RE = re.compile(
@@ -1314,7 +1323,7 @@ def _data_exfil_findings(art):
                 else:
                     obj = pre
                 # the block so far, plus the tail of the previous paragraph or list item
-                window = (prev_tail + " " + raw[:s_start + m.start()])[-4000:]
+                window = (prev_tail + " " + raw[:s_start + m.start()])[-_EXFIL_WINDOW:]
                 acquisitions = list(_EXFIL_ACQUIRE_RE.finditer(window))
                 owned = _EXFIL_POSSESSIVE_RE.search(obj) or (
                     re.search(r"\byour\b", obj, re.I) and _EXFIL_SENSITIVE_RE.search(obj))
@@ -1344,10 +1353,19 @@ def _data_exfil_findings(art):
                 shared = _EXFIL_ROLE_LOCAL_RE.match(local) or _EXFIL_DEV_HOST_RE.search(host)
                 if shared and not _EXFIL_SENSITIVE_RE.search(data):
                     continue
+                if (_EXFIL_TELEMETRY_HOST_RE.match(host)
+                        and (_EXFIL_TELEMETRY_DATA_RE.search(obj)
+                             or _EXFIL_TELEMETRY_DATA_RE.search(acq_sentence))
+                        and not _EXFIL_SENSITIVE_RE.search(data)
+                        and not _EXFIL_CREDENTIAL_RE.search(data)
+                        and not _EXFIL_POSSESSIVE_RE.search(sentence)
+                        and not _EXFIL_POSSESSIVE_RE.search(acq_sentence)
+                        and not _DROP_HOST_RE.search(host)):
+                    continue
                 soft = placeholder_local or example_section or _EXFIL_API_PREFIX_RE.search(host)
                 if soft and not _EXFIL_CREDENTIAL_RE.search(data):
                     continue
-                before = raw[max(0, s_start + m.start() - 4000):s_start + m.start()]
+                before = raw[max(0, s_start + m.start() - _EXFIL_WINDOW):s_start + m.start()]
                 if (_SXV042_EXAMPLE_INTRO_RE.search(sentence[:m.start()]) or intro_prev
                         or _EXFIL_QUOTE_INTRO_RE.search(sentence[:m.start()])
                         or _is_defensive_frame(before)):
