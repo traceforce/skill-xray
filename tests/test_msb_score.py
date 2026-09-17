@@ -24,6 +24,7 @@ def _note(rule):
     ((_note("llm-unavailable"),), True, 0, 1),
     ((_note("llm-budget"),), True, 0, 1),
     ((_note("llm-unparseable"),), True, 0, 1),
+    ((_note("llm-inconclusive"),), True, 0, 1),
     ((_note("llm-truncated"),), False, 1, 0),
     ((), False, 1, 0),
 ])
