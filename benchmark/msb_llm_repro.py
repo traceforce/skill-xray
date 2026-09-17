@@ -57,7 +57,10 @@ def compare(name_a, a, name_b, b):
     for title, pick in (("SXV-038 hit", _hits), ("MEDIUM+ effective verdict", _medium)):
         sa, sb = pick(a) & common, pick(b) & common
         union = sa | sb
-        jac = len(sa & sb) / len(union) if union else 1.0
+        if not union:
+            out += ["%s sets: no packages hit this set in either run." % title, ""]
+            continue
+        jac = len(sa & sb) / len(union)
         only_a, only_b = sa - sb, sb - sa
         out += ["| %s | benign | malicious | total |" % title, "|---|---|---|---|"]
         rows = [("in both", sa & sb), ("only in " + name_a, only_a), ("only in " + name_b, only_b)]

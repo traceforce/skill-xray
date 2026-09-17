@@ -144,6 +144,8 @@ def _verdict_section(rows, lanes):
     if lanes["review"] and lanes["additive"]:
         active.append("review + additive")
     out = ["## Package verdicts by lane", "",
+           "Rates are over the %d records in this file; an --only-flagged run is a subset of "
+           "the split." % len(rows),
            "Lanes that ran: %s." % (", ".join(k for k, v in lanes.items() if v)
                                     or "none (deterministic view only)"), ""]
     names = {"blocking": "blocking (T1/T2 at high/critical)", "high+": "HIGH+ any tier",
