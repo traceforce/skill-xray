@@ -115,7 +115,8 @@ def report(rows, title):
     lines = ["# %s" % title, "",
              "records: %d  (malicious %d / benign %d)  errors: %d  oversize: %d" % (
                  len(rows), sum(r["label"] == 1 for r in rows), sum(r["label"] == 0 for r in rows),
-                 sum(r["error"] is not None for r in rows), sum(r["oversize"] for r in rows)),
+                 sum(r.get("error") is not None for r in rows),
+                 sum(bool(r.get("oversize")) for r in rows)),
              "", "| verdict | TP | FP | TN | FN | precision | recall | F1 | FPR |",
              "|---|---|---|---|---|---|---|---|---|"]
     for name, fn in VERDICTS.items():
@@ -152,7 +153,7 @@ def report(rows, title):
     for v in sorted(set(vec_by_label[1]) | set(vec_by_label[0])):
         lines.append("| %s | %s | %d | %d |" % (v, tiers.get(v), vec_by_label[1][v],
                                                vec_by_label[0][v]))
-    errs = Counter(r["error"].split(":")[0] for r in rows if r["error"])
+    errs = Counter(r["error"].split(":")[0] for r in rows if r.get("error"))
     if errs:
         lines += ["", "## Errors", ""] + ["- %s: %d" % kv for kv in errs.most_common()]
     return "\n".join(lines) + "\n"
