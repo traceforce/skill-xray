@@ -1,4 +1,4 @@
-"""A first-party HTTPS installer is an unpinned remote install (reported, medium), not a dropper
+"""An installer-shaped HTTPS fetch is an unpinned remote install (reported, medium), not a dropper
 (high). The shape is narrow: anything that looks like a payload drop keeps dropper severity, and
 the check binds to the ONE URL the shell actually receives -- a header URL, a docs link or a
 second URL on the line, a `vendor@evil` userinfo prefix, a clustered `-k` or a config file, a
@@ -105,7 +105,7 @@ def _sxv009_severities(make_package, command):
     return sorted({f.severity for f in scanmod.scan(parsed) if f.vector == "SXV-009"})
 
 
-def test_first_party_installer_fence_is_reported_at_medium(make_package):
+def test_installer_shaped_fence_is_reported_at_medium(make_package):
     sev = _sxv009_severities(make_package,
                              "curl -fsSL https://cli.acme-tools.io/install.sh | bash")
     assert sev == ["medium"], sev

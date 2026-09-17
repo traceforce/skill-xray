@@ -222,9 +222,10 @@ _INSECURE_FLAG_RE = re.compile(
     r"(?<![\w-])(?:--(?:proxy-|doh-)?insecure|--no-check-certificate|"
     r"--check-certificate[= ](?:false|no|off|0)|--verify[= ](?:no|false|0)|--config(?:=\S+)?|"
     r"-[A-Za-z]*[kK][A-Za-z]*)(?![\w-])")
+# shell command separators; only the last command before the pipe may fetch
+_COMMAND_SPLIT_RE = re.compile(r"\|\||&&|;")
 # A second fetch later on the same line (`... | sh; curl -k $URL | sh`) is not part of the
 # installer and may carry its own bypass or an unresolved URL; the line keeps dropper severity.
-_COMMAND_SPLIT_RE = re.compile(r"\|\||&&|;")
 _LATER_FETCH_RE = re.compile(
     r"[;&|][^;&|\n]*?\b(?:curl|wget|aria2c|https?|httpie|fetch)\b")
 # An interpreter running inline code as the consumer (`| python -c 'exec(open(0).read())'`,
@@ -293,7 +294,6 @@ def installer_idiom(command_text) -> bool:
     # before the last `||`, `&&` or `;` must not fetch, name a host or carry the URL itself
     *before, fetch = _COMMAND_SPLIT_RE.split(fetch)
     if before and (_LATER_FETCH_RE.search(";" + ";".join(before))
-                   or _ANY_URL_RE.search(";".join(before))
                    or any(_BARE_HOST_RE.match(t) for b in before for t in b.split())):
         return False
     urls = _ANY_URL_RE.findall(text)

@@ -1572,7 +1572,7 @@ def findings_from_report(
             continue
         if severity not in ("critical", "high", "medium", "low"):
             severity = _SEVERITY.get(str(extra.get("severity", "")).upper(), "medium")
-        # A first-party HTTPS installer (`curl https://cli.vendor.com/install.sh | sh`) is an
+        # An installer-shaped HTTPS fetch (`curl https://cli.vendor.com/install.sh | sh`) is an
         # unpinned remote install, not a dropper: keep the finding, report it at medium. The whole
         # matched line is required so a TLS-bypass flag cannot hide inside the pattern's `...`.
         installer = False
