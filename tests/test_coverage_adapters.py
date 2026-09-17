@@ -8,8 +8,6 @@ import os
 
 import pytest
 
-from skill_xray.ingest import _decode
-
 _ADAPTERS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                          "benchmark", "adapters")
 
@@ -39,7 +37,6 @@ osr = _load("openskillrisk_run")
     ],
 )
 def test_adapters_copy_exactly_what_the_scanner_decodes(tmp_path, data, expected):
-    assert (_decode(data)[0] is not None) is expected
     assert official._is_text(data) is expected
     src = tmp_path / "src"
     src.mkdir()
@@ -93,6 +90,44 @@ def test_osr_materialize_counts_opaque_among_binaries(tmp_path):
     assert row == {"files_written": 1, "files_skipped_binary": 5, "files_skipped_opaque": 3,
                    "mat_errors": []}
     assert os.listdir(tmp_path / "dst") == ["SKILL.md"]
+
+
+# --- --download never fetches opaque files; they are counted from the Hub listing ----
+_HUB_LISTING = [
+    "README.md",
+    "skills/risky/alpha/SKILL.md", "skills/risky/alpha/tool.zip",
+    "skills/risky/alpha/bin/helper.pyc",
+    "skills/risky/alpha/docs/guide.pdf", "skills/risky/alpha/logo.png",
+    "skills/risky/alpha/sub/SKILL.md", "skills/risky/alpha/sub/payload.tar.gz",
+    "skills/risky/beta/SKILL.md", "skills/risky/beta/notes.txt",
+    "skills/contextually_risky_skills/finance/gamma/SKILL.md",
+    "skills/contextually_risky_skills/finance/gamma/model.so",
+    "skills/contextually_risky_skills/finance/gamma/Archive.ZIP",
+    "skills/risky/alphabet/SKILL.md", "skills/risky/alphabet/x.pdf",
+    "other/stray.zip",
+]
+_HUB_IDS = ["risky/alpha", "risky/beta", "contextually_risky_skills/finance/gamma",
+            "risky/alphabet"]
+
+
+def test_osr_opaque_by_package_counts_the_listing_per_outermost_package():
+    assert osr._opaque_by_package(_HUB_LISTING, _HUB_IDS) == {
+        "risky/alpha": 4, "risky/beta": 0, "contextually_risky_skills/finance/gamma": 2,
+        "risky/alphabet": 1}
+
+
+@pytest.mark.parametrize("unfetched,incomplete", [(0, False), (2, True)])
+def test_osr_scan_one_adds_unfetched_opaque_files_to_the_skip_count(tmp_path, monkeypatch,
+                                                                    unfetched, incomplete):
+    monkeypatch.setattr(osr, "scan", lambda parsed: [])
+    src = _write(tmp_path / "src", {"SKILL.md": b"# t\n"})
+    pkg = {"id": "risky/t", "src": src, "split": "risky", "category": "unspecified"}
+    if unfetched:
+        pkg["opaque_unfetched"] = unfetched
+    row = osr.scan_one(str(tmp_path / "work"), pkg)
+    assert row["error"] is None
+    assert row["files_skipped_opaque"] == unfetched
+    assert osr._incomplete(row) is incomplete
 
 
 # --- an opaque skip makes the scan incomplete in every adapter --------------

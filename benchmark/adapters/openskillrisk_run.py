@@ -35,12 +35,13 @@ from multiprocessing import Pool
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))
 
 from skill_xray import ingest  # noqa: E402
+from skill_xray.ingest import COMPILED_EXT, NESTED_ARCHIVE_EXT  # noqa: E402
 from skill_xray.parse import parse_package  # noqa: E402
 from skill_xray.scan import scan  # noqa: E402
 
 REPO = "Miaow-Lab/OpenSkillRisk"
 # archives, compiled code and PDFs: the scanner cannot read them and marks the package incomplete
-_OPAQUE_EXT = set(ingest.COMPILED_EXT) | set(ingest.NESTED_ARCHIVE_EXT) | {".pdf"}
+_OPAQUE_EXT = NESTED_ARCHIVE_EXT | set(COMPILED_EXT) | {".pdf"}
 BINARY_EXT = set(ingest.ASSET_EXT) | _OPAQUE_EXT
 _HC, _MP = {"high", "critical"}, {"medium", "high", "critical"}
 _INJ = {"SXV-027", "SXV-028", "SXV-029", "SXV-030", "SXV-031", "SXV-041", "SXV-042",
@@ -64,6 +65,22 @@ def enumerate_packages(root, only_ids=None):
             dirnames.sort()
     return sorted((p for p in pkgs if only_ids is None or p["id"] in only_ids),
                   key=lambda p: p["id"])
+
+
+def _opaque_by_package(files, ids):
+    """Per package id, how many listed paths under skills/ carry an opaque extension. A path
+    belongs to the shortest id it sits under (matched on id + "/"), the outermost package, as
+    enumerate_packages owns a nested SKILL.md directory. Paths outside skills/ are ignored."""
+    by_len = sorted(ids, key=len)
+    counts = {i: 0 for i in ids}
+    for f in files:
+        if not f.startswith("skills/") or os.path.splitext(f)[1].lower() not in _OPAQUE_EXT:
+            continue
+        rel = f[len("skills/"):]
+        owner = next((i for i in by_len if rel.startswith(i + "/")), None)
+        if owner is not None:
+            counts[owner] += 1
+    return counts
 
 
 def materialize(src, dst, row):
@@ -117,6 +134,7 @@ def scan_one(work, pkg):
     try:
         os.makedirs(dst, exist_ok=True)
         materialize(pkg["src"], dst, row)
+        row["files_skipped_opaque"] += pkg.get("opaque_unfetched", 0)
         if not any(f.lower() == "skill.md" for f in os.listdir(dst)):
             raise OSError("SKILL.md could not be materialized")
         package = ingest.build_package(dst)
@@ -137,13 +155,16 @@ def scan_one(work, pkg):
 
 def download(work, revision):
     """Snapshot skills/**, leaving known binary extensions on the Hub; anything else is judged
-    by content in materialize(). Needs HF_TOKEN with approved access."""
+    by content in materialize(). Opaque files are counted from the repository listing, never
+    fetched. Needs HF_TOKEN with approved access."""
     from huggingface_hub import HfApi, snapshot_download
-    sha = HfApi().dataset_info(REPO, revision=revision).sha
+    api = HfApi()
+    sha = api.dataset_info(REPO, revision=revision).sha
+    files = api.list_repo_files(REPO, repo_type="dataset", revision=sha)
     path = snapshot_download(REPO, repo_type="dataset", revision=sha, allow_patterns=["skills/**"],
                              ignore_patterns=["*" + e for e in sorted(BINARY_EXT)],
                              local_dir=os.path.join(work, "snapshot"))
-    return path, sha
+    return path, sha, files
 
 
 def wilson(k, n, z=1.96):
@@ -230,13 +251,17 @@ def main(argv=None):
     if not args.out or not (args.source_dir or args.download):
         ap.error("--out plus --source-dir or --download is required (or --score)")
     os.makedirs(args.work, exist_ok=True)
-    root, sha = (download(args.work, args.revision) if args.download
-                 else (args.source_dir, args.revision))
+    root, sha, files = (download(args.work, args.revision) if args.download
+                        else (args.source_dir, args.revision, None))
     only = None
     if args.ids:
         with open(args.ids, encoding="utf-8") as fh:
             only = {line.strip() for line in fh if line.strip()}
     pkgs = enumerate_packages(root, only)
+    if files is not None:
+        counts = _opaque_by_package(files, [p["id"] for p in pkgs])
+        for p in pkgs:
+            p["opaque_unfetched"] = counts.get(p["id"], 0)
     if not pkgs:
         sys.exit("no packages selected: check --source-dir / --download and --ids")
     if only is not None:
