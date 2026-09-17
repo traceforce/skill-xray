@@ -105,6 +105,9 @@ def load_groups(csv_path):
 
 def run(args):
     records, meta = load_groups(args.csv)
+    if not meta["csv_sha256_matches_pin"]:
+        raise SystemExit("%s sha256 %s does not match the pin %s for revision %s" % (
+            args.csv, meta["csv_sha256"], CSV_SHA256, REVISION))
     out_dir = os.path.dirname(os.path.abspath(args.out))
     os.makedirs(out_dir, exist_ok=True)
     work = tempfile.mkdtemp(prefix="inpage-pkgs-", dir=args.work or out_dir)
@@ -154,6 +157,8 @@ def cell(k, n):
 
 
 def score(rows, meta):
+    if not rows:
+        raise SystemExit("no rows to score")
     n = len(rows)
     counts = {name: sum(fn(r["findings"]) for r in rows) for name, fn in VERDICTS.items()}
     hit = {r["id"]: VERDICTS["injection_any"](r["findings"]) for r in rows}

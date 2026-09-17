@@ -155,7 +155,9 @@ def score_group(rows, texts):
               "medium_plus": n_with(lambda f: f["severity"] in _MP),
               "high_plus": n_with(lambda f: f["severity"] in _HC),
               "critical": n_with(lambda f: f["severity"] == "critical"),
-              "blocking": n_with(lambda f: f["tier"] in {"T1", "T2"} and f["severity"] in _HC)}
+              "blocking": n_with(lambda f: f["tier"] in {"T1", "T2"} and f["severity"] in _HC),
+              "llm_notes": sum(any(not f.get("vector") and (f.get("rule") or "").startswith("llm-")
+                                   for f in r["findings"]) for r in rows)}
     cats = Counter(r["category"] for r in rows)
     hits = Counter(r["category"] for r in rows if inj[r["id"]])
     misses = [r["id"] for r in rows if not inj[r["id"]] and r["error"] is None]
@@ -237,8 +239,7 @@ def main(argv=None):
     with open(args.out + ".meta.json", "w", encoding="utf-8") as fh:
         json.dump({"repo": "https://github.com/uiuc-kang-lab/InjecAgent", "revision": rev,
                    "canonical_count": len(canonical), "enhanced_prefix": prefix,
-                   "canonical_texts": {i["id"]: i["text"] for i in items
-                                       if i["unit"] == "canonical"}}, fh, indent=1)
+                   "canonical_texts": {i["id"]: i["text"] for i in items}}, fh, indent=1)
     shutil.rmtree(work, ignore_errors=True)
     sys.stderr.write("done: %d items, %d errors -> %s\n" % (len(items), n_err, args.out))
     return 0
