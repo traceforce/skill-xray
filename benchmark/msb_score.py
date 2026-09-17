@@ -45,12 +45,18 @@ VERDICTS = {
 }
 
 
+_LLM_FAILED = {"llm-error", "llm-unavailable", "llm-budget", "llm-unparseable"}
+
+
 def incomplete(r):
-    """The scan of this record did not complete: an exception, an oversize or skipped file, or a
+    """The scan of this record did not complete: an exception, an oversize or skipped file, a
     high-severity diagnostic without a vector (a check error, an OpenGrep failure, an incomplete
-    analysis). Derived from the row so runs written before this field existed score the same."""
+    analysis), or an LLM lane that did not run (error, unavailable, budget, unparseable);
+    truncation is not a failure. Derived from the row so runs written before this field existed
+    score the same."""
     return bool(r.get("error") or r.get("oversize") or r.get("ledger_skipped")
-                or any(not f.get("vector") and f.get("severity") == "high"
+                or any(not f.get("vector")
+                       and (f.get("severity") == "high" or f.get("rule") in _LLM_FAILED)
                        for f in r["findings"]))
 
 
