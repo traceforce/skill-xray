@@ -156,7 +156,7 @@ def scan_report(parsed, *, client=None, llm_shadow=False, opengrep_executable=No
             except ValueError as exc:
                 errors.append("disposition-policy-error: %s" % type(exc).__name__)
                 correlation = apply_dispositions(parsed, correlation, triads, context_errors=errors)
-            if llm_apply and dispositions:
+            if llm_apply:
                 correlation = apply_llm_review(correlation, dispositions)
         except Exception as exc:
             errors.append("disposition-error: %s" % type(exc).__name__)

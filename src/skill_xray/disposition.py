@@ -154,8 +154,8 @@ LLM_APPLY_VERSION = "skill-xray/llm-apply/v1"
 LLM_APPLY_VECTORS = frozenset({"SXV-028", "SXV-029", "SXV-030", "SXV-031"})
 
 
-def apply_llm_review(final, decisions, *, effective_severity="low"):
-    """Opt-in: a validated ``llm-disputed`` review demotes its result to ``effective_severity``.
+def apply_llm_review(final, decisions):
+    """Opt-in: a validated ``llm-disputed`` review demotes its result to ``low``.
 
     Only the one text-pattern result the dispute covers, only for vectors in the review
     contracts, and never a result the deterministic policy already protected (incomplete
@@ -163,8 +163,6 @@ def apply_llm_review(final, decisions, *, effective_severity="low"):
     The result stays in the audit as ``corrected`` with ``llm-review-policy`` provenance, like an
     operator demote.
     """
-    if effective_severity not in SEVERITY_RANK:
-        raise ValueError("Invalid LLM demotion severity")
     disputed = {d["candidate_id"]: d for d in decisions
                 if d.get("disposition") == "llm-disputed" and d.get("status") == "proposed"}
     results = {r["id"]: r for r in final["results"]}
@@ -178,9 +176,9 @@ def apply_llm_review(final, decisions, *, effective_severity="low"):
                 or finding["vector"] not in LLM_APPLY_VECTORS
                 or any(p["provenance"] != "deterministic-check-output"
                        or p.get("analyzer") == "opengrep" for p in result["provenance"])
-                or SEVERITY_RANK[effective_severity] <= SEVERITY_RANK.get(finding["severity"], 99)):
+                or SEVERITY_RANK["low"] <= SEVERITY_RANK.get(finding["severity"], 99)):
             continue
-        result.update(disposition="corrected", effective_severity=effective_severity,
+        result.update(disposition="corrected", effective_severity="low",
                       decision_reason=decision.get("reason") or "LLM review disputed the finding",
                       decision_provenance="llm-review-policy", policy_version=LLM_APPLY_VERSION,
                       llm_applied=True, llm_candidate_id=link["candidate_id"])

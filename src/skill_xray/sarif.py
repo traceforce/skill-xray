@@ -16,7 +16,7 @@ from jsonschema import Draft4Validator
 
 from . import __version__
 from .correlate import FINGERPRINT_VERSION, canonical, source_region
-from .disposition import LLM_APPLY_VECTORS, POLICY_VERSION
+from .disposition import LLM_APPLY_VECTORS, LLM_APPLY_VERSION, POLICY_VERSION
 from .findings import SEVERITY_RANK
 from .llm.judge import POLICY_VERSION as SHADOW_POLICY_VERSION
 from .llm.judge import RESPONSE_SCHEMA, REVIEW_POLICY_VERSION
@@ -354,7 +354,8 @@ def validate_sarif(document):
                     for cid in props["candidateIds"])
                 if (review is None or review["mode"] != "annotated" or not support or mechanical
                         or props["sxv"] not in LLM_APPLY_VECTORS
-                        or props["effectiveSeverity"] != "low"):
+                        or props["effectiveSeverity"] != "low"
+                        or props["policyVersion"] != LLM_APPLY_VERSION):
                     raise ValueError("LLM correction without a supporting dispute")
             if suppressed != bool(result.get("suppressions")) or suppressed and (
                     not props.get("sxv") or props["decisionProvenance"] != "operator-policy"

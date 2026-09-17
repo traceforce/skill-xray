@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from skill_xray import cli, ingest, parse
-from skill_xray.disposition import apply_llm_review
+from skill_xray.disposition import LLM_APPLY_VERSION, apply_llm_review
 from skill_xray.findings import Finding
 from skill_xray.sarif import build_sarif, validate_sarif, write_sarif
 
@@ -189,6 +189,41 @@ def test_applied_correction_passes_sarif_validation(make_package, monkeypatch, t
                 decision["proposal"][field] = value
         with pytest.raises(ValueError, match="SARIF validation failed"):
             validate_sarif(weak)
+
+
+def test_apply_has_no_severity_knob():
+    final = {"results": [], "links": []}
+    with pytest.raises(TypeError):
+        apply_llm_review(final, [], effective_severity="medium")
+
+
+def test_apply_on_a_clean_package_reports_zero(make_package, monkeypatch):
+    report = run(make_package, monkeypatch, raw=[], llm_apply=True)
+    assert report.correlation["results"] == []
+    assert report.correlation["llm_applied"] == 0
+
+
+@pytest.mark.parametrize("version, ok", [
+    (LLM_APPLY_VERSION, True),
+    ("skill-xray/llm-apply/v0", False),
+])
+def test_applied_correction_must_carry_the_apply_policy_version(
+        make_package, monkeypatch, tmp_path, version, ok):
+    parsed = fixture(make_package)
+    monkeypatch.setattr(scanmod, "run_checks", lambda *_a, **_kw: [finding()])
+    report = scanmod.scan_report(parsed, client=Reviewer(), llm_review=True, llm_apply=True)
+    out = tmp_path / "reports" / "skill.sarif"
+    out.parent.mkdir()
+    write_sarif(build_sarif(parsed, report), str(out), source_root=str(tmp_path / "pkg"))
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    props = doc["runs"][0]["results"][0]["properties"]
+    assert props["disposition"] == "corrected"
+    props["policyVersion"] = version
+    if ok:
+        validate_sarif(doc)
+    else:
+        with pytest.raises(ValueError, match="SARIF validation failed"):
+            validate_sarif(doc)
 
 
 def test_cli_apply_requires_review_flag(make_package):
