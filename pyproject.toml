@@ -24,6 +24,10 @@ dependencies = [
     "jsonschema==4.26.0",  # offline validation against the official SARIF schema
 ]
 
+[project.optional-dependencies]
+# Benchmark harness only (benchmark/): dataset download and Parquet reading.
+benchmark = ["pandas", "pyarrow", "huggingface_hub"]
+
 [project.scripts]
 skill-xray = "skill_xray.cli:main"
 
