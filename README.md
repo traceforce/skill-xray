@@ -90,7 +90,7 @@ Four rules keep "risky" apart from "malicious" in the deterministic lanes:
 
 | vector | reports | severity |
 |---|---|---|
-| SXV-009 / SXV-041 | a first-party HTTPS installer (`curl -fsSL https://cli.vendor.com/install.sh \| sh`: one URL, a named installer path or bare vendor host, no `user@`, no TLS bypass, no IP, no paste/tunnel/shortener or placeholder host, no shell substitution in the fetch) as an unpinned remote install | medium |
+| SXV-009 / SXV-041 | an installer-shaped HTTPS fetch (`curl -fsSL https://cli.vendor.com/install.sh \| sh`: one URL, a named installer path or bare host, no `user@`, no TLS bypass, no IP, no paste/tunnel/shortener or placeholder host, no shell substitution in the fetch) as an unpinned remote install | medium |
 | SXV-033 | permission understatement, a T3 capability-consistency signal | medium |
 | SXV-042 | a prose directive to run a script shipped with the skill, framed as hidden from the user (`covert-bundled-script-run`) or as an unconditional precondition of every task (`coerced-bundled-preflight`) | high; medium with a single coercion cue |
 | SXV-043 | a prose directive to obtain the user's data and send it to an e-mail address or URL hard-coded in the skill text | high |
