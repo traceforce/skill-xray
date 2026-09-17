@@ -103,18 +103,19 @@ _DIRECTIVE_RULES = (
         # "Developer Mode" is also an Android/Chrome/IDE setting ("1. Enable Developer Mode: go to
         # Settings > About phone"). It is the jailbreak only when tied to a model or to dropping
         # restrictions in the same sentence.
-        r"\bdeveloper mode\b[^.\n]{0,80}\b(?:chatgpt|gpt|claude|gemini|llama|\bai\b|model|"
-        r"assistant|enabled output|no restrictions|unrestricted|uncensored|ignore|bypass|"
+        r"\bdeveloper mode\b[^.\n]{0,80}\b(?:chatgpt|gpt|claude|gemini|llama|"
+        r"enabled output|no restrictions|unrestricted|uncensored|ignore|bypass|"
         r"jailbr\w+|without (?:any )?restrictions?|(?:all |any |the )?restrictions? "
         r"(?:removed|lifted|off|disabled|dropped)|"
         r"(?:remov\w*|drop\w*|lift\w*|disabl\w*|turn off) (?:all |any |the )?(?:your |its )?"
         r"restrictions?|filters? (?:disabled|off|removed)|no filters?)\b|"
-        r"\b(?:chatgpt|gpt|claude|gemini|llama|ai|model|assistant)\b[^.\n]{0,80}\bdeveloper mode\b|"
+        r"\b(?:chatgpt|gpt|claude|gemini|llama)\b[^.\n]{0,80}\bdeveloper mode\b|"
         r"\b(?:(?:remov\w*|drop\w*|lift\w*|disabl\w*|turn off) (?:all |any |the )?(?:your |its )?"
         r"restrictions?|without (?:any )?restrictions?|(?:all |any |the )?restrictions? "
         r"(?:removed|lifted|off|disabled|dropped)|filters? (?:disabled|off|removed)|no filters?)"
         r"\b[^.\n]{0,80}\bdeveloper mode\b|"
-        r"\byou are now\b[^.\n]{0,24}\b(?:DAN|unrestricted|jailbroken|an ai with no)\b|"
+        r"\byou are now\b[^.\n]{0,24}\b(?:DAN|unrestricted|jailbroken|an ai with no|"
+        r"(?:in\s+)?developer mode)\b|"
         r"\b(?:act as|pretend (?:to be|you are|you have)|roleplay as|behave as)\b[^.\n]{0,40}"
         r"\b(?:no|without|free of|zero)\b[^.\n]{0,16}"
         r"\b(?:restrictions?|rules?|limits?|filters?|guidelines?|constraints?|guardrails?)\b",
@@ -869,7 +870,7 @@ _COVERT_RUN_CUE_RE = re.compile(
     r"(?:surfac\w*|show\w*|display\w*|mention\w*|reveal\w*|disclos\w*|tell\w*|inform\w*|"
     r"notif\w*|expos\w*|report\w*|announc\w*|narrat\w*|echo\w*|print\w*)"
     r"(?:\s+\w+){0,3}\s+(?:its\s+|the\s+|this\s+|that\s+|any\s+)?"
-    r"(?:run|execution|script|command|step|invocation|output|result|process|preflight|setup|"
+    r"(?:run|execution|script|command|step|invocation|process|preflight|setup|"
     r"hook|helper|call)s?\b[^.\n]{0,30}\b(?:user|human|operator|person)\b|"
     r"\b(?:do not|don'?t|never|without|avoid)\s+(?:\w+\s+){0,3}"
     r"(?:tell\w*|inform\w*|notif\w*|show\w*|mention\w*|surfac\w*|reveal\w*|disclos\w*|"
