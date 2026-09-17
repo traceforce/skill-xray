@@ -114,6 +114,9 @@ _VECTORS = {
     "SXV-041": {"title": "Remote instruction loading in the instruction lane "
                          "(fetch-and-follow / progressive disclosure)",
                 "tier": "T2", "cwe": ["CWE-829", "CWE-1427"]},
+    "SXV-042": {"title": "Covert bundled-script execution directive (run a shipped script "
+                         "hidden from or forced on the user)",
+                "tier": "T2", "cwe": ["CWE-506", "CWE-912", "CWE-1427"]},
 }
 
 
