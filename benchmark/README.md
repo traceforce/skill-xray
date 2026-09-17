@@ -6,8 +6,8 @@ The scanner is static; nothing in the corpus is executed.
 
 ## Get the data (35 MB, Parquet)
 
-The harness needs three packages the scanner itself does not: `pip install huggingface_hub
-pandas pyarrow`.
+The harness needs three packages the scanner itself does not (`huggingface_hub` to download the
+dataset, `pandas` and `pyarrow` to read the Parquet files): `pip install -e .[benchmark]`.
 
 ```python
 from huggingface_hub import hf_hub_download
