@@ -10,8 +10,10 @@ HIGH+). The Hugging Face repo is gated: request access on the dataset page, expo
     python benchmark/adapters/harmfulskillbench_run.py --score out/hsb.jsonl [--summary s.json]
 
 Each skill directory is copied verbatim as its own package, scanned in-process (nothing is
-executed) and deleted. Only UTF-8 text files are materialized; anything else is counted in
-``skipped_binary``. Per-item exceptions are recorded in ``error``, never dropped.
+executed) and deleted. Only text files the scanner itself decodes (UTF-8 or CP-1252) are
+materialized; anything else is counted in ``skipped_binary``, and a skipped archive, compiled or
+PDF file also in ``files_skipped_opaque``, which marks the scan incomplete. Per-item exceptions
+are recorded in ``error``, never dropped.
 """
 
 from __future__ import annotations
@@ -31,7 +33,14 @@ from multiprocessing import Pool
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))
 
-from skill_xray.ingest import MAX_FILE_BYTES, build_ledger, build_package  # noqa: E402
+from skill_xray.ingest import (  # noqa: E402
+    COMPILED_EXT,
+    MAX_FILE_BYTES,
+    NESTED_ARCHIVE_EXT,
+    _decode,
+    build_ledger,
+    build_package,
+)
 from skill_xray.parse import parse_package  # noqa: E402
 from skill_xray.scan import scan  # noqa: E402
 
@@ -41,6 +50,8 @@ _MP = {"medium", "high", "critical"}
 _ATTACK = {"T1", "T2"}
 _INJECTION = {"SXV-027", "SXV-028", "SXV-029", "SXV-030", "SXV-031", "SXV-041", "SXV-042",
               "SXV-043"}
+# archives, compiled code and PDFs: the scanner cannot read them and marks the package incomplete
+_OPAQUE_EXT = NESTED_ARCHIVE_EXT | set(COMPILED_EXT) | {".pdf"}
 _WORK = None
 
 
@@ -70,11 +81,12 @@ def discover(data_dir):
 
 
 def _copy_text_files(src, dst):
-    """Copy UTF-8 text files at their relative paths, judged by content rather than extension;
+    """Copy text files (as the scanner decodes them) at their relative paths, judged by content;
+    archives, compiled code and PDFs are skipped by extension and also counted as opaque;
     symlinks and binaries are counted as skipped, never followed. The dataset's own label file
     (_meta.json at the package root) is not skill content and is left out. Returns (copied,
-    skipped, oversize)."""
-    copied = skipped = oversize = 0
+    skipped, oversize, opaque)."""
+    copied = skipped = oversize = opaque = 0
     for dirpath, dirs, files in os.walk(src):
         dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(dirpath, d))]
         for name in files:
@@ -84,16 +96,16 @@ def _copy_text_files(src, dst):
             if os.path.islink(path):
                 skipped += 1
                 continue
+            if os.path.splitext(name)[1].lower() in _OPAQUE_EXT:
+                skipped += 1
+                opaque += 1
+                continue
             with open(path, "rb") as fh:
                 raw = fh.read(MAX_FILE_BYTES + 1)         # bounded: the scanner skips it too
             if len(raw) > MAX_FILE_BYTES:
                 oversize += 1
                 continue
-            try:
-                if b"\x00" in raw[:8192]:
-                    raise UnicodeDecodeError("utf-8", b"", 0, 1, "binary")
-                raw.decode("utf-8")
-            except UnicodeDecodeError:
+            if _decode(raw)[0] is None:
                 skipped += 1
                 continue
             out = os.path.join(dst, os.path.relpath(path, src))
@@ -101,7 +113,7 @@ def _copy_text_files(src, dst):
             with open(out, "wb") as fh:
                 fh.write(raw)
             copied += 1
-    return copied, skipped, oversize
+    return copied, skipped, oversize, opaque
 
 
 def _finding_row(f):
@@ -114,7 +126,8 @@ def scan_one(rec):
     """Materialize <work>/pkgs/<id>/ from the skill directory, scan it in-process, delete it."""
     row = {"id": rec["id"], "label": 1, "category": rec["category"], "harm_tier": rec["harm_tier"],
            "platform": rec["platform"], "files": 0, "skipped_binary": 0, "oversize": 0,
-           "ledger_skipped": 0, "analyzed": 0, "findings": [], "error": None, "elapsed_ms": 0}
+           "files_skipped_opaque": 0, "ledger_skipped": 0, "analyzed": 0, "findings": [],
+           "error": None, "elapsed_ms": 0}
     # the dataset id is data, not a path: a sanitized stem plus a hash keeps every package in
     # its own child of the scratch root, whatever the id contains
     pkg_dir = os.path.join(_WORK, "pkgs", "%s-%s" % (
@@ -123,7 +136,8 @@ def scan_one(rec):
     t0 = time.perf_counter()
     try:
         os.makedirs(pkg_dir, exist_ok=True)
-        row["files"], row["skipped_binary"], row["oversize"] = _copy_text_files(rec["dir"], pkg_dir)
+        (row["files"], row["skipped_binary"], row["oversize"],
+         row["files_skipped_opaque"]) = _copy_text_files(rec["dir"], pkg_dir)
         if not os.path.isfile(os.path.join(pkg_dir, "SKILL.md")):
             raise RuntimeError("SKILL.md could not be materialized or read back")
         pkg = build_package(pkg_dir)
@@ -145,12 +159,14 @@ def _real(fs):
 
 
 def _incomplete(r):
-    """A crashed scan, an oversize file left out, a ledger skip, or a high-severity diagnostic
-    without a vector (OpenGrep unavailable, analysis cut short): the package was not fully
-    analyzed. On this all-malicious set it still counts as a miss in every rate (the scanner did
-    not catch it); the count is reported so those misses can be told apart from real ones."""
-    return bool(r["error"] is not None or r.get("oversize") or r.get("ledger_skipped") or any(
-        f.get("severity") in _HC and not f.get("vector") for f in r["findings"]))
+    """A crashed scan, an oversize or opaque (archive, compiled, PDF) file left out, a ledger
+    skip, or a high-severity diagnostic without a vector (OpenGrep unavailable, analysis cut
+    short): the package was not fully analyzed. On this all-malicious set it still counts as a
+    miss in every rate (the scanner did not catch it); the count is reported so those misses can
+    be told apart from real ones."""
+    return bool(r["error"] is not None or r.get("oversize") or r.get("files_skipped_opaque")
+                or r.get("ledger_skipped") or any(
+                    f.get("severity") in _HC and not f.get("vector") for f in r["findings"]))
 
 
 VERDICTS = {
@@ -180,7 +196,8 @@ def score(rows):
     out = {"evaluated": n, "errors": sum(r["error"] is not None for r in rows),
            "incomplete": sum(_incomplete(r) for r in rows),
            "skipped_binary_files": sum(r.get("skipped_binary", 0) for r in rows),
-           "oversize_files": sum(r.get("oversize", 0) for r in rows)}
+           "oversize_files": sum(r.get("oversize", 0) for r in rows),
+           "files_skipped_opaque": sum(r.get("files_skipped_opaque", 0) for r in rows)}
     for name, fn in VERDICTS.items():
         hit = sum(fn(r["findings"]) for r in rows)
         out[name] = {"count": hit, "pct": round(100.0 * hit / n, 2) if n else None,

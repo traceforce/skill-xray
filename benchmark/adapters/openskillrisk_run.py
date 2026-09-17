@@ -4,12 +4,15 @@ OpenSkillRisk ships positive-risk skill packages and no benign controls, so the 
 is severity-threshold coverage. The tree holds more SKILL.md roots than the gated task specs
 select, so pass --ids <file of package ids>. With HF_TOKEN set:
 
-    python benchmark/adapters/openskillrisk_run.py --download --work <scratch> --out osr.jsonl
-    python benchmark/adapters/openskillrisk_run.py --source-dir <hf snapshot> --out osr.jsonl
+    python benchmark/adapters/openskillrisk_run.py --download --work <scratch> --ids <ids.txt> \
+        --out osr.jsonl
+    python benchmark/adapters/openskillrisk_run.py --source-dir <hf snapshot> --ids <ids.txt> \
+        --out osr.jsonl
     python benchmark/adapters/openskillrisk_run.py --score osr.jsonl [--summary SUMMARY.json]
 
 Read-only static analysis: each package is copied file-by-file (text only; binary assets,
-compiled code, nested archives and NUL-carrying files are counted and skipped) into its own
+compiled code, nested archives and NUL-carrying files are counted and skipped; a skipped archive,
+compiled or PDF file is also counted as opaque and marks the scan incomplete) into its own
 directory, scanned in-process, then deleted. Nothing is executed.
 """
 
@@ -36,8 +39,9 @@ from skill_xray.parse import parse_package  # noqa: E402
 from skill_xray.scan import scan  # noqa: E402
 
 REPO = "Miaow-Lab/OpenSkillRisk"
-BINARY_EXT = (set(ingest.ASSET_EXT) | set(ingest.COMPILED_EXT)
-              | set(ingest.NESTED_ARCHIVE_EXT) | {".pdf"})
+# archives, compiled code and PDFs: the scanner cannot read them and marks the package incomplete
+_OPAQUE_EXT = set(ingest.COMPILED_EXT) | set(ingest.NESTED_ARCHIVE_EXT) | {".pdf"}
+BINARY_EXT = set(ingest.ASSET_EXT) | _OPAQUE_EXT
 _HC, _MP = {"high", "critical"}, {"medium", "high", "critical"}
 _INJ = {"SXV-027", "SXV-028", "SXV-029", "SXV-030", "SXV-031", "SXV-041", "SXV-042",
         "SXV-043"}
@@ -63,14 +67,17 @@ def enumerate_packages(root, only_ids=None):
 
 
 def materialize(src, dst, row):
-    """Copy text files only, byte-exact; count binaries and record unreadable files."""
+    """Copy text files only, byte-exact; count binaries (and, among them, opaque archives,
+    compiled code and PDFs) and record unreadable files."""
     for dirpath, dirnames, filenames in os.walk(src, followlinks=False):
         dirnames[:] = sorted(d for d in dirnames if not os.path.islink(os.path.join(dirpath, d)))
         for name in sorted(filenames):
             path = os.path.join(dirpath, name)
             rel = os.path.relpath(path, src)
-            if os.path.islink(path) or os.path.splitext(name)[1].lower() in BINARY_EXT:
+            ext = os.path.splitext(name)[1].lower()
+            if os.path.islink(path) or ext in BINARY_EXT:
                 row["files_skipped_binary"] += 1
+                row["files_skipped_opaque"] += ext in _OPAQUE_EXT
                 continue
             try:
                 with open(path, "rb") as fh:
@@ -103,7 +110,8 @@ def _scratch_name(pkg_id):
 def scan_one(work, pkg):
     row = {"id": pkg["id"], "label": 1, "split": pkg["split"], "category": pkg["category"],
            "findings": [], "error": None, "files_written": 0, "files_skipped_binary": 0,
-           "mat_errors": [], "analyzed": 0, "ledger_skipped": 0, "elapsed_ms": 0}
+           "files_skipped_opaque": 0, "mat_errors": [], "analyzed": 0, "ledger_skipped": 0,
+           "elapsed_ms": 0}
     dst = os.path.join(work, "pkgs", _scratch_name(pkg["id"]))
     t0 = time.perf_counter()
     try:
@@ -148,12 +156,13 @@ def wilson(k, n, z=1.96):
 
 
 def _incomplete(r):
-    """A crashed scan, a file lost at materialization, a ledger skip, or a high-severity
-    diagnostic without a vector (OpenGrep unavailable, analysis cut short): the package was not
-    fully analyzed. On this all-malicious set it still counts as a miss in every rate (the
-    scanner did not catch it); the count is reported so those misses can be told apart."""
+    """A crashed scan, a file lost at materialization, an opaque (archive, compiled, PDF) file
+    left out, a ledger skip, or a high-severity diagnostic without a vector (OpenGrep
+    unavailable, analysis cut short): the package was not fully analyzed. On this all-malicious
+    set it still counts as a miss in every rate (the scanner did not catch it); the count is
+    reported so those misses can be told apart."""
     return bool(r["error"] is not None or r.get("mat_errors") or r.get("files_oversize")
-                or r.get("ledger_skipped") or any(
+                or r.get("files_skipped_opaque") or r.get("ledger_skipped") or any(
                     f.get("severity") in _HC and not f.get("vector") for f in r["findings"]))
 
 
@@ -184,6 +193,7 @@ def score(rows):
             "incomplete": sum(_incomplete(r) for r in rows),
             "files_skipped_binary": sum(r["files_skipped_binary"] for r in rows),
             "files_oversize": sum(r.get("files_oversize", 0) for r in rows),
+            "files_skipped_opaque": sum(r.get("files_skipped_opaque", 0) for r in rows),
             "materialization_errors": sum(len(r["mat_errors"]) for r in rows),
             **{k: counts[k] for k in tests}, "pct": pct,
             "ci95_medium_plus": wilson(counts["medium_plus"], n),

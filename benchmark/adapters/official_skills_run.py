@@ -29,8 +29,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 from skill_xray.ingest import (  # noqa: E402
     ASSET_EXT,
+    COMPILED_EXT,
     MAX_FILE_BYTES,
     NESTED_ARCHIVE_EXT,
+    _decode,
     build_ledger,
     build_package,
 )
@@ -42,8 +44,9 @@ _MP = {"medium", "high", "critical"}
 _ATTACK = {"T1", "T2"}
 _INJECTION = {"SXV-027", "SXV-028", "SXV-029", "SXV-030", "SXV-031", "SXV-041", "SXV-042",
               "SXV-043"}
-_BINARY_EXT = ASSET_EXT | NESTED_ARCHIVE_EXT | {
-    ".pdf", ".pyc", ".pyd", ".so", ".dll", ".exe", ".o", ".class", ".jar", ".wasm", ".otf"}
+# archives, compiled code and PDFs: the scanner cannot read them and marks the package incomplete
+_OPAQUE_EXT = NESTED_ARCHIVE_EXT | set(COMPILED_EXT) | {".pdf"}
+_BINARY_EXT = ASSET_EXT | _OPAQUE_EXT | {".otf"}
 
 
 def find_packages(repo):
@@ -58,16 +61,15 @@ def find_packages(repo):
 
 
 def _is_text(data):
-    try:
-        return b"\x00" not in data[:8192] and data.decode("utf-8") is not None
-    except UnicodeDecodeError:
-        return False
+    """The scanner's own decode decision (UTF-8 or CP-1252; a NUL byte means binary)."""
+    return _decode(data)[0] is not None
 
 
 def materialize(src, dst):
     """Copy text/markdown/source files at their relative paths; skip binaries and symlinks.
-    Returns the counts plus the files that could not be written or read back."""
-    n_text = n_bin = n_link = 0
+    Returns the counts (text, binary, symlink, opaque) plus the files that could not be written
+    or read back; opaque files (archives, compiled code, PDFs) are also counted as binary."""
+    n_text = n_bin = n_link = n_opaque = 0
     errors = []
     for dirpath, dirnames, filenames in os.walk(src):
         dirnames[:] = [d for d in dirnames if d != ".git"
@@ -78,8 +80,10 @@ def materialize(src, dst):
             if os.path.islink(path):            # may point outside the package; never read
                 n_link += 1
                 continue
-            if os.path.splitext(name)[1].lower() in _BINARY_EXT:
+            ext = os.path.splitext(name)[1].lower()
+            if ext in _BINARY_EXT:
                 n_bin += 1
+                n_opaque += ext in _OPAQUE_EXT
                 continue
             try:
                 with open(path, "rb") as fh:
@@ -99,7 +103,7 @@ def materialize(src, dst):
                 n_text += 1
             except OSError as exc:
                 errors.append("%s: %s" % (rel, str(exc)[:120]))
-    return n_text, n_bin, n_link, errors
+    return n_text, n_bin, n_link, n_opaque, errors
 
 
 def _finding_row(f):
@@ -119,14 +123,14 @@ def scan_one(item):
     """Materialize one package under its own scratch directory, scan it whole, delete it."""
     row = {"id": item["id"], "name": os.path.basename(item["src"]), "label": 0,
            "category": "official", "files_text": 0, "files_binary_skipped": 0,
-           "materialize_errors": [], "analyzed": 0, "ledger_skipped": 0, "findings": [],
-           "error": None, "elapsed_ms": 0}
+           "files_skipped_opaque": 0, "materialize_errors": [], "analyzed": 0,
+           "ledger_skipped": 0, "findings": [], "error": None, "elapsed_ms": 0}
     root, t0 = os.path.join(item["work"], _scratch_name(item["id"])), time.perf_counter()
     try:
         os.makedirs(root, exist_ok=True)
-        n_text, n_bin, n_link, errs = materialize(item["src"], root)
+        n_text, n_bin, n_link, n_opaque, errs = materialize(item["src"], root)
         row.update(files_text=n_text, files_binary_skipped=n_bin, files_symlinks_skipped=n_link,
-                   materialize_errors=errs)
+                   files_skipped_opaque=n_opaque, materialize_errors=errs)
         if not os.path.isfile(os.path.join(root, "SKILL.md")):
             raise RuntimeError("SKILL.md could not be materialized: " + "; ".join(errs)[:200])
         pkg = build_package(root)
@@ -155,14 +159,15 @@ def score(rows):
     """Package-level flag rates from the JSONL; every real finding is a compatibility flag. A
     package whose scan failed is reported under errors and leaves every rate. A package that
     ended in a high-severity diagnostic without a vector (OpenGrep unavailable, analysis cut
-    short), lost a file at materialization or to a skipped symlink, or had an artifact skipped by
-    the ledger was not fully analyzed: an unflagged outcome on it is unknown rather than clean, so
-    at each threshold it counts only where it is flagged, and the eligible count is reported."""
+    short), lost a file at materialization or to a skipped symlink, carried an archive, compiled
+    or PDF file (the scanner marks such a package incomplete), or had an artifact skipped by the
+    ledger was not fully analyzed: an unflagged outcome on it is unknown rather than clean, so at
+    each threshold it counts only where it is flagged, and the eligible count is reported."""
     errored = [r["id"] for r in rows if r.get("error")]
     rows = [r for r in rows if not r.get("error")]
     incomplete = [r["id"] for r in rows
                   if r.get("materialize_errors") or r.get("ledger_skipped")
-                  or r.get("files_symlinks_skipped")
+                  or r.get("files_symlinks_skipped") or r.get("files_skipped_opaque")
                   or any(f.get("severity") in _HC and not f.get("vector") for f in r["findings"])]
     unknown = set(incomplete)
     n = len(rows)
@@ -188,6 +193,7 @@ def score(rows):
         "files_text": sum(r["files_text"] for r in rows),
         "files_binary_skipped": sum(r["files_binary_skipped"] for r in rows),
         "files_symlinks_skipped": sum(r.get("files_symlinks_skipped", 0) for r in rows),
+        "files_skipped_opaque": sum(r.get("files_skipped_opaque", 0) for r in rows),
         "medium_plus": med[0], "medium_plus_eligible": med[1], "medium_plus_pct": med[2],
         "high_plus": high[0], "high_plus_eligible": high[1], "high_plus_pct": high[2],
         "critical": rate(lambda f: f["severity"] == "critical")[0],
