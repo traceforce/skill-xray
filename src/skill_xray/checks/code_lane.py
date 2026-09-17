@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 from dataclasses import dataclass
 
 from ..findings import Finding
@@ -190,3 +191,132 @@ def build_code_lane(parsed) -> tuple[list[CodeUnit], list[Finding]]:
                 dialect=dialect,
             ))
     return units, notes
+
+
+# --- installer-shaped HTTPS fetch --------------------------------------------------------
+# `curl -fsSL https://cli.vendor.com/install.sh | sh` installs the tool a skill wraps: an unpinned
+# remote install worth reporting, not a dropper. Recognised narrowly -- HTTPS, a named host with
+# an installer-shaped path (or the bare host), no TLS bypass, no paste/tunnel/shortener host, no
+# raw IP, no unresolved variable -- and anything outside that shape keeps dropper severity. The
+# check judges shape only, never who owns the host.
+_INSTALLER_URL_RE = re.compile(
+    r"https://(?P<host>[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)"
+    r"(?::\d+)?(?P<path>/[^\s'\"|;&`)<>]*)?", re.I)
+_INSTALLER_PATH_RE = re.compile(
+    r"(?:^|/)(?:install(?:er)?(?:\.(?:sh|bash|py))?|setup(?:\.sh)?|get(?:-[\w-]+)?(?:\.sh)?|"
+    r"bootstrap(?:\.sh)?|latest|download(?:/[\w.-]+)*|releases?(?:/[\w.-]+)*)$", re.I)
+# Mirrors the staging-host list in rules/opengrep-phase1.yml (SXV-020) plus shorteners and gists.
+# raw.githubusercontent.com is deliberately not listed: genuine vendor installers live there too.
+_DROP_HOST_RE = re.compile(
+    r"(?:^|\.)(?:pastebin\.com|paste\.ee|hastebin\.com|ghostbin\.\w+|rentry\.co|transfer\.sh|"
+    r"0x0\.st|file\.io|anonfiles\.com|gofile\.io|mega\.nz|ngrok(?:-free)?\.(?:io|app|dev)|"
+    r"trycloudflare\.com|loca\.lt|serveo\.net|localhost\.run|discordapp\.(?:com|net)|"
+    r"ipfs\.io|dweb\.link|bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly|rb\.gy|"
+    r"gist\.githubusercontent\.com|gist\.github\.com|github\.io|termbin\.com|dpaste\.\w+|"
+    r"glot\.io|ix\.io|sprunge\.us|bashupload\.com|temp\.sh|webhook\.site|requestbin\.net|"
+    r"oast\.fun|interact\.sh|tmpfiles\.org|catbox\.moe|uguu\.se|envs\.sh|oshi\.at|paste\.rs|"
+    r"controlc\.com|justpaste\.it|srv\.us|bore\.pub|pastes\.io|filebin\.net)$", re.I)
+# A TLS bypass in any spelling, including a clustered short flag (`-sk`, `-fsSLk`) or a config
+# file (`-K`, `--config`) that can carry `insecure`: never part of an installer-shaped fetch.
+_INSECURE_FLAG_RE = re.compile(
+    r"(?<![\w-])(?:--(?:proxy-|doh-)?insecure|--no-check-certificate|"
+    r"--check-certificate[= ](?:false|no|off|0)|--verify[= ](?:no|false|0)|--config(?:=\S+)?|"
+    r"-[A-Za-z]*[kK][A-Za-z]*)(?![\w-])")
+# shell command separators; only the last command before the pipe may fetch
+_COMMAND_SPLIT_RE = re.compile(r"\|\||&&|;")
+# A second fetch later on the same line (`... | sh; curl -k $URL | sh`) is not part of the
+# installer and may carry its own bypass or an unresolved URL; the line keeps dropper severity.
+_LATER_FETCH_RE = re.compile(
+    r"[;&|][^;&|\n]*?\b(?:curl|wget|aria2c|https?|httpie|fetch)\b")
+# An interpreter running inline code as the consumer (`| python -c 'exec(open(0).read())'`,
+# `| bash -c '...'`) is a dropper shape; vendor installers pipe into a shell or into `python3 -`.
+_INLINE_CODE_CONSUMER_RE = re.compile(
+    r"\b(?:python[0-9.]*|perl|ruby|node|php)\b[^|;&\n]{0,40}?\s-[A-Za-z]*[ce]\b|"
+    r"\b(?:sh|bash|zsh|dash|ksh)\b[^|;&\n]{0,40}?\s-[A-Za-z]*c\b")
+# A schemeless host among the fetch operands (`curl -H 'X: https://vendor/install.sh'
+# evil.host/p`) means the counted URL is not what is fetched.
+_BARE_HOST_RE = re.compile(
+    r"^(?:(?:[a-z0-9-]+\.)+[a-z]{2,}|\d{1,3}(?:\.\d{1,3}){3}|localhost|\[[0-9a-f:.]+\])"
+    r"(?::\d+)?(?:/\S*)?$", re.I)
+# Any URL scheme, for counting. The idiom is exactly ONE URL, the fetch operand: a header value,
+# a docs link on the same line or a second command each add a URL and disqualify the shape.
+_ANY_URL_RE = re.compile(r"[a-z][a-z0-9+.-]*://[^\s'\"|;&`)<>]+", re.I)
+# Command or process substitution or a shell variable anywhere in the FETCH (before the first
+# unquoted pipe) means the bytes run are not the URL as written. Text after the pipe (`| bash &&
+# export PATH=$HOME/...`) is fine. `sh <(curl -L https://vendor/install)` is unwrapped first so the
+# fetch itself is what gets judged.
+_SUBSTITUTION_RE = re.compile(r"[`$]|[<>]\(")
+_PROCESS_SUB_FETCH_RE = re.compile(r"^\s*(?:sudo\s+)?(?:sh|bash|zsh|dash|ksh)\s+<\((.*)\)\s*$",
+                                   re.S)
+# RFC 2606/6761 reserved names and loopback: a placeholder host is nobody's vendor domain, so an
+# install piped from it is not installer-shaped.
+_PLACEHOLDER_HOST_RE = re.compile(
+    r"(?:^|\.)example\.(?:com|net|org)$|\.(?:example|test|invalid|localhost|local)$|^localhost$",
+    re.I)
+
+
+def _fetch_text(text):
+    """The fetch command up to the first pipe that is neither quoted nor escaped, quotes kept;
+    None when a quote is left open, which the caller treats as not installer-shaped."""
+    quote = None
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote is None and ch in "'\"":
+            quote = ch
+        elif ch == quote:
+            quote = None
+        elif quote is None and ch == "|":
+            if text[i + 1:i + 2] == "|":               # `a || b` is a shell OR, not a pipe
+                i += 2
+                continue
+            return text[:i]
+        i += 1
+    return None if quote else text
+
+
+def installer_idiom(command_text) -> bool:
+    """True when a fetch-and-run command is an installer-shaped HTTPS fetch, see above."""
+    text = command_text or ""
+    unwrapped = _PROCESS_SUB_FETCH_RE.match(text)
+    if unwrapped:
+        text = unwrapped.group(1)
+    fetch = _fetch_text(text)
+    if fetch is None or _INSECURE_FLAG_RE.search(fetch) or _SUBSTITUTION_RE.search(fetch):
+        return False
+    tail = text[len(fetch):]
+    if _INLINE_CODE_CONSUMER_RE.search(tail) or _LATER_FETCH_RE.search(tail):
+        return False
+    # `command -v tool >/dev/null || curl ... | sh` fetches only in its last command; anything
+    # before the last `||`, `&&` or `;` must not fetch, name a host or carry the URL itself
+    *before, fetch = _COMMAND_SPLIT_RE.split(fetch)
+    if before and (_LATER_FETCH_RE.search(";" + ";".join(before))
+                   or any(_BARE_HOST_RE.match(t) for b in before for t in b.split())):
+        return False
+    urls = _ANY_URL_RE.findall(text)
+    if len(urls) != 1:                                 # header/docs URL or a second command
+        return False
+    try:
+        tokens = shlex.split(fetch)
+    except ValueError:
+        return False
+    operands = [t.strip("()<>") for t in tokens[1:] if not t.startswith("-")]
+    if operands.count(urls[0]) != 1:                   # the URL sits inside an option value
+        return False
+    if any(_BARE_HOST_RE.match(t) for t in operands if t != urls[0]):
+        return False                                   # something else is fetched
+    match = _INSTALLER_URL_RE.fullmatch(urls[0])      # https only; the host class cannot span
+    if match is None:                                  # '@', so `vendor@evil.host` fails here
+        return False
+    host, path = match.group("host").lower(), (match.group("path") or "/")
+    if (re.fullmatch(r"[\d.]+", host) or _DROP_HOST_RE.search(host)
+            or _PLACEHOLDER_HOST_RE.search(host)):
+        return False
+    if "$" in path or "{" in path or "%" in path:
+        return False
+    bare = path.rstrip("/") == ""                      # bare vendor host serves the installer
+    path = path.split("?", 1)[0].split("#", 1)[0]     # the query is not the fetched path
+    return bare or bool(_INSTALLER_PATH_RE.search(path.rstrip("/")))

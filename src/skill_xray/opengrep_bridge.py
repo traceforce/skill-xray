@@ -20,6 +20,7 @@ from .checks.code_lane import (
     _governing_manifest,
     _manifest_index,
     build_code_lane,
+    installer_idiom,
 )
 from .checks.grants import declared_capabilities, denied_capabilities, effective_grants
 from .findings import Finding, cap_findings, dedupe_findings, vector_registry
@@ -1571,6 +1572,15 @@ def findings_from_report(
             continue
         if severity not in ("critical", "high", "medium", "low"):
             severity = _SEVERITY.get(str(extra.get("severity", "")).upper(), "medium")
+        # An installer-shaped HTTPS fetch (`curl https://cli.vendor.com/install.sh | sh`) is an
+        # unpinned remote install, not a dropper: keep the finding, report it at medium. The whole
+        # matched line is required so a TLS-bypass flag cannot hide inside the pattern's `...`.
+        installer = False
+        if rule == "opengrep-shell-fetch-pipe-exec" and severity in ("critical", "high"):
+            matched_lines = extra.get("lines")
+            if (isinstance(matched_lines, str) and matched_lines.strip()
+                    and installer_idiom(matched_lines)):
+                severity, installer = "medium", True
         mapped_location = _location(result, target)
         if mapped_location is None:
             findings.append(_coverage(
@@ -1759,6 +1769,8 @@ def findings_from_report(
             "origin": target.origin,
             **location,
         }
+        if installer:
+            evidence["installer_idiom"] = "https-named-installer"
         if capability is not None:
             evidence.update({
                 "understated_capability": capability,

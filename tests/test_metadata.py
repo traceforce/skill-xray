@@ -30,8 +30,10 @@ def test_observed_capability_under_restrictive_manifest_reports_sxv033(
     hit = next(f for f in findings if f.vector == "SXV-033"
                and f.evidence["understated_capability"] == capability)
 
+    # medium, T3: a manifest that under-declares what its code does is a capability-consistency
+    # signal, not evidence of malice on its own (the behavior itself is reported by its vector).
     assert (hit.rule, hit.severity, hit.path, hit.line) == (
-        "permission-understatement", "high", path, line,
+        "permission-understatement", "medium", path, line,
     )
     assert hit.evidence["manifest"] == "SKILL.md"
     assert hit.evidence["declared_tools"] == ["Read"]

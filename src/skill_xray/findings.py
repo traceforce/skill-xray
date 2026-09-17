@@ -87,8 +87,11 @@ _VECTORS = {
                 "tier": "T3", "cwe": ["CWE-1427"]},
     "SXV-032": {"title": "Cross-agent configuration snooping in a skill script",
                 "tier": "T2", "cwe": ["CWE-200", "CWE-497"]},
+    # T3: a manifest that under-declares what its fenced commands use is a capability-consistency
+    # signal (like an over-broad grant), not evidence of malicious behavior on its own; the
+    # behavior the fences show is reported by its own vector.
     "SXV-033": {"title": "Permission understatement: manifest declares less than the code does",
-                "tier": "T2", "cwe": ["CWE-280", "CWE-863"]},
+                "tier": "T3", "cwe": ["CWE-280", "CWE-863"]},
     "SXV-034": {"title": "Unsafe YAML deserialisation tag in skill metadata",
                 "tier": "T2", "cwe": ["CWE-502", "CWE-94"]},
     "SXV-035": {"title": "File byte-signature contradicts its declared type",
