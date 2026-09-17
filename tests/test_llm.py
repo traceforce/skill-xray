@@ -562,6 +562,8 @@ def test_complete_anthropic_shapes_request(monkeypatch):
     assert c.complete("sys-prompt", "user-text") == "ok"
     assert captured["url"] == "https://api.anthropic.com/v1/messages"
     assert captured["body"]["system"] == "sys-prompt"
+    assert captured["body"]["temperature"] == 0     # greedy; Anthropic has no seed field
+    assert "seed" not in captured["body"]
 
 
 def test_complete_openai_shapes_request(monkeypatch):
@@ -671,6 +673,26 @@ def test_compatible_endpoint_keeps_max_tokens_for_reasoning_name(monkeypatch):
     # a compatible endpoint understands only max_tokens; the switch is scoped to real OpenAI.
     body = _openai_body(monkeypatch, "o1", provider="openai-compatible", base="https://vllm.example/v1")
     assert "max_tokens" in body and "max_completion_tokens" not in body
+
+
+def test_openai_classic_model_pins_temperature_and_seed(monkeypatch):
+    # Classic chat models get greedy temperature 0 and OpenAI's best-effort seed.
+    body = _openai_body(monkeypatch, "gpt-4.1-mini")
+    assert body["temperature"] == 0 and body["seed"] == 0
+
+
+def test_openai_reasoning_model_omits_temperature_and_seed(monkeypatch):
+    # o-series / gpt-5 reject temperature and seed with a 400.
+    for model in ("o3", "gpt-5-mini", "gpt-5.1"):
+        body = _openai_body(monkeypatch, model)
+        assert "temperature" not in body and "seed" not in body
+
+
+def test_compatible_endpoint_pins_temperature_without_seed(monkeypatch):
+    # `seed` is OpenAI-specific; an arbitrary compatible endpoint may reject unknown fields
+    body = _openai_body(monkeypatch, "llama-3.3-70b", provider="openai-compatible",
+                        base="https://vllm.example/v1")
+    assert body["temperature"] == 0 and "seed" not in body
 
 
 def test_non_latin1_key_becomes_llmerror(monkeypatch):

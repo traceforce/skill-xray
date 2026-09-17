@@ -130,6 +130,10 @@ def main(argv=None) -> int:
                          "requires --llm --json")
     ap.add_argument("--llm-additive", action="store_true",
                     help="also run SXV-038 after LLM review, using the remaining shared budget")
+    ap.add_argument("--llm-apply", action="store_true",
+                    help="let a validated llm-disputed review demote that text-pattern finding to "
+                         "low in the correlated results (audited as corrected, never removed); "
+                         "requires --llm-review")
     ap.add_argument("--install-opengrep", action="store_true",
                     help="download and verify the pinned OpenGrep runtime, then exit")
     ap.add_argument("--json", action="store_true", help="emit the inventory as JSON")
@@ -145,7 +149,8 @@ def main(argv=None) -> int:
     if args.install_opengrep:
         if (args.package or args.scan_known_skills or args.analyze
                 or args.json or args.opengrep_bin or args.llm or args.enrich or args.llm_shadow
-                or args.llm_additive or args.llm_review or args.sarif or args.policy):
+                or args.llm_additive or args.llm_review or args.llm_apply or args.sarif
+                or args.policy):
             ap.error("--install-opengrep is a standalone action")
         try:
             installed = install_opengrep()
@@ -160,7 +165,8 @@ def main(argv=None) -> int:
         if args.package:
             ap.error("--scan-known-skills takes no package argument")
         if (args.analyze or args.opengrep_bin or args.llm or args.enrich or args.llm_shadow
-                or args.llm_additive or args.llm_review or args.sarif or args.policy):
+                or args.llm_additive or args.llm_review or args.llm_apply or args.sarif
+                or args.policy):
             ap.error("--scan-known-skills does not accept analysis options")
         return _scan_known(args.json)
 
@@ -181,6 +187,8 @@ def main(argv=None) -> int:
         ap.error("--llm-shadow and --llm-review are mutually exclusive")
     if args.llm_additive and not reviewing:
         ap.error("--llm-additive requires --llm-shadow or --llm-review")
+    if args.llm_apply and not args.llm_review:
+        ap.error("--llm-apply requires --llm-review")
 
     # Build the opt-in LLM client up front so a misconfiguration fails before the scan runs.
     client = None
@@ -239,7 +247,8 @@ def main(argv=None) -> int:
                     **({"llm_shadow": args.llm_shadow,
                         "llm_review": args.llm_review,
                         "llm_advisory": args.llm_additive or not reviewing,
-                        "disposition_policy": policy}
+                        "disposition_policy": policy,
+                        "llm_apply": args.llm_apply}
                        if enriched else {}),
                 )
                 report = result if enriched else None

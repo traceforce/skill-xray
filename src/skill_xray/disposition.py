@@ -146,3 +146,47 @@ def apply_dispositions(parsed, correlated, triads, *, policy=None, context_error
         not item["finding"]["vector"] and item["finding"]["severity"] in {"critical", "high"}
         for item in raw))
     return final
+
+
+LLM_APPLY_VERSION = "skill-xray/llm-apply/v1"
+# Only the text-pattern directive vectors the review contracts cover. Code-lane, taint, byte
+# forensics and every other mechanically anchored vector are never model-adjustable.
+LLM_APPLY_VECTORS = frozenset({"SXV-028", "SXV-029", "SXV-030", "SXV-031"})
+
+
+def apply_llm_review(final, decisions):
+    """Opt-in: a validated ``llm-disputed`` review demotes its result to ``low``.
+
+    Only the one text-pattern result the dispute covers, only for vectors in the review
+    contracts, and never a result the deterministic policy already protected (incomplete
+    context, non-deterministic provenance, coverage gap). It never suppresses and never raises.
+    The result stays in the audit as ``corrected`` with ``llm-review-policy`` provenance, like an
+    operator demote.
+    """
+    disputed = {d["candidate_id"]: d for d in decisions
+                if d.get("disposition") == "llm-disputed" and d.get("status") == "proposed"}
+    results = {r["id"]: r for r in final["results"]}
+    applied = 0
+    for link in final["links"]:
+        decision, result = disputed.get(link["candidate_id"]), results.get(link["result_id"])
+        if decision is None or result is None or result.get("llm_applied"):
+            continue
+        finding = result["finding"]
+        if (result["disposition"] != "reported" or result["coverage"] != "no-reported-gap"
+                or finding["vector"] not in LLM_APPLY_VECTORS
+                or any(p["provenance"] != "deterministic-check-output"
+                       or p.get("analyzer") == "opengrep" for p in result["provenance"])
+                or SEVERITY_RANK["low"] <= SEVERITY_RANK.get(finding["severity"], 99)):
+            continue
+        result.update(disposition="corrected", effective_severity="low",
+                      decision_reason=decision.get("reason") or "LLM review disputed the finding",
+                      decision_provenance="llm-review-policy", policy_version=LLM_APPLY_VERSION,
+                      llm_applied=True, llm_candidate_id=link["candidate_id"])
+        applied += 1
+    for link in final["links"]:
+        result = results[link["result_id"]]
+        if link["disposition"] != "duplicate" and result.get("llm_applied"):
+            link.update(disposition="corrected", reason=result["decision_reason"],
+                        provenance="llm-review-policy", policy_version=LLM_APPLY_VERSION)
+    final["llm_applied"] = applied
+    return final

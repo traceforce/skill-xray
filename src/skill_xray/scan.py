@@ -14,7 +14,7 @@ from .capability import build_triads
 from .checks import run_checks
 from .checks.coverage import is_inventory_note
 from .correlate import correlate
-from .disposition import apply_dispositions
+from .disposition import apply_dispositions, apply_llm_review
 from .findings import Finding, dedupe_findings
 from .llm import adjudicate
 from .llm.judge import POLICY_VERSION, REVIEW_POLICY_VERSION, judge_candidates
@@ -78,10 +78,16 @@ class ScanReport:
 
 def scan_report(parsed, *, client=None, llm_shadow=False, opengrep_executable=None,
                 max_llm_calls=25, llm_advisory=None, llm_review=False,
-                disposition_policy=None) -> ScanReport:
-    """Compatible opt-in context report. Candidate IDs are scan-local, not baseline identities."""
+                disposition_policy=None, llm_apply=False) -> ScanReport:
+    """Compatible opt-in context report. Candidate IDs are scan-local, not baseline identities.
+
+    ``llm_apply`` (requires ``llm_review``) lets a validated ``llm-disputed`` review demote its
+    text-pattern result in the correlated results; ``findings`` and raw candidates are never
+    changed, so the original deterministic evidence stays auditable."""
     if llm_shadow and llm_review:
         raise ValueError("Choose shadow or annotated LLM review, not both")
+    if llm_apply and not llm_review:
+        raise ValueError("LLM-applied demotion requires annotated LLM review")
     review_enabled = llm_shadow or llm_review
     if review_enabled and client is None:
         raise ValueError("LLM review requires an explicitly supplied client")
@@ -129,7 +135,8 @@ def scan_report(parsed, *, client=None, llm_shadow=False, opengrep_executable=No
     findings += supplemental
     usage = session.usage() if session else {}
     if session is not None:
-        usage.update(advisory_enabled=llm_advisory, judge_enabled=review_enabled)
+        usage.update(advisory_enabled=llm_advisory, judge_enabled=review_enabled,
+                     apply_enabled=bool(llm_apply))
     report_candidates = candidates + [
         {"candidate_id": "advisory-%06d" % i, "finding": deepcopy(f.to_dict()),
          "analyzer": "llm", "provenance": "advisory-output",
@@ -149,6 +156,8 @@ def scan_report(parsed, *, client=None, llm_shadow=False, opengrep_executable=No
             except ValueError as exc:
                 errors.append("disposition-policy-error: %s" % type(exc).__name__)
                 correlation = apply_dispositions(parsed, correlation, triads, context_errors=errors)
+            if llm_apply:
+                correlation = apply_llm_review(correlation, dispositions)
         except Exception as exc:
             errors.append("disposition-error: %s" % type(exc).__name__)
             correlation["errors"] = [errors[-1]]
