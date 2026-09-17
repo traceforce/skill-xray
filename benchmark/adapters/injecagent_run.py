@@ -175,7 +175,7 @@ def score(path, summary_path=None):
         rows = [json.loads(line) for line in fh if line.strip()]
     meta_path = path + ".meta.json"
     meta = json.load(open(meta_path, encoding="utf-8")) if os.path.exists(meta_path) else {}
-    texts = meta.pop("canonical_texts", {})
+    texts = meta.pop("texts", None) or meta.pop("canonical_texts", {})
     groups = defaultdict(list)
     for r in rows:
         groups["%s/%s" % (r["unit"], r["variant"])].append(r)
@@ -239,7 +239,7 @@ def main(argv=None):
     with open(args.out + ".meta.json", "w", encoding="utf-8") as fh:
         json.dump({"repo": "https://github.com/uiuc-kang-lab/InjecAgent", "revision": rev,
                    "canonical_count": len(canonical), "enhanced_prefix": prefix,
-                   "canonical_texts": {i["id"]: i["text"] for i in items}}, fh, indent=1)
+                   "texts": {i["id"]: i["text"] for i in items}}, fh, indent=1)
     shutil.rmtree(work, ignore_errors=True)
     sys.stderr.write("done: %d items, %d errors -> %s\n" % (len(items), n_err, args.out))
     return 0
