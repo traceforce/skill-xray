@@ -46,6 +46,14 @@ def _openai_token_field(cfg):
     return "max_tokens"
 
 
+# Thinking-by-default Claude families reject the sampling fields (temperature/top_p/top_k) with
+# a 400; they get low effort and a 4096-token output floor so reasoning cannot truncate the JSON.
+_ANTHROPIC_THINKING_FAMILY_RE = re.compile(
+    r"^claude-(?:opus-(?:4-[7-9]|5)|sonnet-5|fable|mythos)")
+_REASONING_MIN_OUTPUT = 4096
+_REASONING_EFFORT = "low"
+
+
 class LLMError(Exception):
     """An LLM call could not be completed; the caller must fail closed. A plain LLMError is a
     TRANSPORT/endpoint failure (unreachable, HTTP error) -- the caller stops, since every file
@@ -95,8 +103,12 @@ class HTTPLLMClient(LLMClient):
             headers = {"x-api-key": self.cfg.api_key, "anthropic-version": "2023-06-01",
                        "content-type": "application/json"}
             body = {"model": self.cfg.model, "max_tokens": self.cfg.max_tokens,
-                    "temperature": 0,
                     "system": system, "messages": [{"role": "user", "content": user}]}
+            if _ANTHROPIC_THINKING_FAMILY_RE.match(self.cfg.model.lower()):
+                body["max_tokens"] = max(self.cfg.max_tokens, _REASONING_MIN_OUTPUT)
+                body["output_config"] = {"effort": _REASONING_EFFORT}
+            else:
+                body["temperature"] = 0
             return self._extract(self._post(url, headers, body), "anthropic")
         # openai and openai-compatible share the chat/completions shape
         url = self.cfg.base_url + "/chat/completions"
@@ -113,6 +125,10 @@ class HTTPLLMClient(LLMClient):
             body["temperature"] = 0
             if self.cfg.provider == "openai":
                 body["seed"] = 0
+        else:
+            # Hidden reasoning shares the output cap; keep it low and the cap large enough.
+            body[token_field] = max(self.cfg.max_tokens, _REASONING_MIN_OUTPUT)
+            body["reasoning_effort"] = _REASONING_EFFORT
         if schema is not None:
             body["response_format"] = {"type": "json_schema", "json_schema": {
                 "name": "finding_review", "strict": True, "schema": schema}}
