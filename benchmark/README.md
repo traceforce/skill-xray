@@ -98,3 +98,16 @@ the harness writes in LLM modes (`review_decisions`: vector, status, `failure_re
 intent), every dispute the judge raised on a *malicious* package, SXV-038 hits by label and
 severity, the fail-closed `llm-*` coverage notes, and an order-of-magnitude spend estimate
 (`--price-in/--price-out`, USD per million tokens; defaults are gpt-4.1-mini list prices).
+
+## Frozen snapshot
+
+The numbers quoted for this scanner are measured on the snapshot recorded in `MSB_FROZEN.json`:
+revision `d4b42ce5766a6e0359c987cf59c1007cb3795a90`, 9,740 records, the SHA-256 of every file and a
+digest of the sorted ids per split (`msb_frozen_ids.json` holds the ids). Before a run that will be
+compared with those numbers:
+
+```bash
+python benchmark/msb_freeze.py --data <snapshot dir> --verify
+```
+
+A mismatch means a different dataset, and the run is not comparable.

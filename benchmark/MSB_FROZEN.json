@@ -1,0 +1,81 @@
+{
+ "dataset": "ProtectSkills/MaliciousSkillBench",
+ "pinned_revision": "d4b42ce5766a6e0359c987cf59c1007cb3795a90",
+ "files": {
+  "README.md": {
+   "sha256": "77efbc84cce3873b7a394b01429e838f9d0f6ee090e4b1331eaa173fe936d7b5",
+   "bytes": 10091
+  },
+  "attack_taxonomy.parquet": {
+   "sha256": "1194229b60984a0d238797d99d34572e94a9dcb5964caebe2e79c39b619fe00d",
+   "bytes": 205714
+  },
+  "impact_taxonomy.parquet": {
+   "sha256": "5a6e30443666ab03ca3f6974186c4e805a089f20151d8e0ee19c2a2394c323c5",
+   "bytes": 91025
+  },
+  "metadata.parquet": {
+   "sha256": "4ef1d5d7a7769f11c961c95f8571cb3c9d8fa7b1d09b93dcb11b85de641f742b",
+   "bytes": 776262
+  },
+  "package_manifest.csv": {
+   "sha256": "0225ebe52782dae384ca6eb622566021c9c6b309867d65a8f1007d516242096a",
+   "bytes": 4101527
+  },
+  "primary.parquet": {
+   "sha256": "1d6382017f259bde0b699d402318f3c03f16b2e8ed2363a346b77a5465f06a06",
+   "bytes": 28600360
+  },
+  "schema.json": {
+   "sha256": "2165cc30c6555873b31800869734637fd571148bbf12c40315ce4600ae602378",
+   "bytes": 22795
+  },
+  "source_registry.csv": {
+   "sha256": "b0f776d222097c6c33b98fa4d120c44014f2eef1ece5a73a1d1769b95f7ce8a6",
+   "bytes": 4072
+  },
+  "splits/random.parquet": {
+   "sha256": "e5820606dcff84db3d7a9a152cb9f42606d1a8675f156b4aa36d5194428903a1",
+   "bytes": 27889
+  },
+  "splits/source_disjoint.parquet": {
+   "sha256": "9fae37c53b6ad47070d118e9bc4cdafd82c416a68b7e74847b4e0dd9d66bd276",
+   "bytes": 27820
+  }
+ },
+ "records": 9740,
+ "split_counts": {
+  "excluded": {
+   "total": 8,
+   "malicious": 8,
+   "benign": 0
+  },
+  "test": {
+   "total": 1384,
+   "malicious": 839,
+   "benign": 545
+  },
+  "train": {
+   "total": 7513,
+   "malicious": 5992,
+   "benign": 1521
+  },
+  "validation": {
+   "total": 835,
+   "malicious": 666,
+   "benign": 169
+  },
+  "dev": {
+   "total": 8348,
+   "malicious": 6658,
+   "benign": 1690
+  }
+ },
+ "id_list_sha256": {
+  "excluded": "f6d775fc011c62b02642de7a8078c0ffb9bd61ffdd5dfd800994a1890cd8347a",
+  "test": "3cf59383d752094a9d25022d8bd90890db8ad6d1b54620af8088ff1b8ae0b7bb",
+  "train": "f5e66d02a9f18289a87bbb5e0e60657383ee0898de41ebbd233438f122d2aee4",
+  "validation": "809c55a11cd1a95d7dec22d8dc0338588cedb9d6708696f51cf0f7ff40c16cd0",
+  "dev": "f01c122ea57d0a73c153cdbcc685a87a0af0be85f8a3115112253c6224b6e457"
+ }
+}
