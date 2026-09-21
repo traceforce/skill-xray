@@ -395,6 +395,23 @@ var (
 	closeQuoteRE = regexp.MustCompile(`["”»'’]`)
 	// _QUOTED_FRAGMENT_RE
 	quotedFragmentRE = regexp.MustCompile(`["'“‘«][^"'”’»\n]{3,}["'”’»]`)
+	// _CITED_LIST_INTRO_RE, searched through findAll for its leading \b: a list introduced as
+	// patterns, phrases or examples ("suspicious patterns:", "instructions like:") cites its
+	// quoted items; an unquoted item, or a list under any other line, is an order.
+	citedListIntroRE = pytext.PyRE(`(?i)\b(?:patterns?|phrases?|indicators?|red flags|examples?|such as|for example|` +
+		`(?:instructions|prompts|messages|emails|content|inputs?) like)\s*:\s*$`)
+	// _QUOTED_ITEM_RE (a .match, so ^): a list item that opens with one complete quoted string,
+	// each opening quote paired with its own closing quote; _PURE_QUOTED_ITEM_RE (a .fullmatch,
+	// so ^ and $) is that string alone. Python's \d is \p{Nd}.
+	quotedItemRE     = pytext.PyRE(`^\s*(?:[-*+]|\p{Nd}+[.)])\s+(?:"[^"\n]*"|'[^'\n]*'|“[^”\n]*”|‘[^’\n]*’|«[^»\n]*»)`)
+	pureQuotedItemRE = pytext.PyRE(`^\s*(?:[-*+]|\p{Nd}+[.)])\s+(?:"[^"\n]*"|'[^'\n]*'|“[^”\n]*”|‘[^’\n]*’|«[^»\n]*»)\s*$`)
+	// _SETEXT_UNDERLINE_RE and _MARKED_LINE_RE (both a .match, so ^) and _HTML_COMMENT_RE (re.S):
+	// "Suspicious patterns:" over "---" is a setext heading whose underline the parser keeps
+	// outside the heading's span; under a list item, heading or quote the same line is a rule.
+	// An HTML comment between two items is invisible to the reader and does not end the list.
+	setextUnderlineRE = pytext.PyRE(`^ {0,3}(?:-+|=+)\s*$`)
+	markedLineRE      = pytext.PyRE(`^\s*(?:#|>|[-*+]\s|\p{Nd}+[.)]\s)`)
+	htmlCommentRE     = regexp.MustCompile(`(?s)<!--.*?-->`)
 	// _DISCUSSED_RE, _REFUSAL_CUE_RE and _COMPLIANCE_RE without their enclosing \b, which
 	// wordBounded re-checks with Python's Unicode word rule; Python's \w is [\pL\pN_].
 	discussedRE = regexp.MustCompile(`(?i)(?:attack|inject[\pL\pN_]*|malicious|suspicious|phish[\pL\pN_]*|refus[\pL\pN_]*|` +
@@ -453,9 +470,9 @@ func closeQuote(s string) []int {
 func restOfLine(raw string, pos int) string { line, _, _ := strings.Cut(raw[pos:], "\n"); return line }
 
 // quoted is _quoted: the cue at raw[start:end] sits inside a quotation opened on its line behind a
-// citation frame, and either the line holds several quoted fragments or the prose after the
-// closing quote discusses the quotation instead of giving the order.
-func quoted(raw string, start, end int) bool {
+// citation frame, and the item is cited, or the line holds several quoted fragments, or the prose
+// after the closing quote discusses the quotation instead of giving the order.
+func quoted(raw string, start, end int, cited bool) bool {
 	lineStart := strings.LastIndexByte(raw[:start], '\n') + 1
 	opens := openQuotes(raw[lineStart:start])
 	if len(opens) == 0 {
@@ -469,11 +486,16 @@ func quoted(raw string, start, end int) bool {
 		return false
 	}
 	line, after := restOfLine(raw, lineStart), restOfLine(raw, end)
-	if len(quotedFragmentRE.FindAllStringIndex(line, -1)) >= 2 {
+	if cited || len(quotedFragmentRE.FindAllStringIndex(line, -1)) >= 2 {
 		return true
 	}
 	close := closeQuote(after) // the discussion follows the closing quote
 	return close != nil && len(wordBounded(discussedRE, after[close[1]:])) > 0
+}
+
+// citedListIntro is _CITED_LIST_INTRO_RE.search(s) is not None.
+func citedListIntro(s string) bool {
+	return len(findAll(citedListIntroRE, s, func([]int) bool { return true })) > 0
 }
 
 // reportedRefusal is the directive loop's reported check: conditional reported speech before the

@@ -299,12 +299,36 @@ func directiveFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []findin
 	totals := map[string]int{}
 	var vectorOrder []string
 	previous := ""
+	citedPrev := false
+	prevEnd := 0
+	var lines []string
 	for _, b := range proseBlocks(a) {
 		raw := FlattenProse(b.Text)
 		if raw == "" {
 			continue
 		}
 		introPrev := exampleIntroRE.MatchString(previous)
+		// each list item is its own block: the cue on the intro carries through items that are
+		// one quoted string each, so an item with prose of its own is the last one cited, and
+		// any block the parser did not lift as prose (a fence, a rule) between two items ends
+		// the list as well
+		cited := quotedItemRE.MatchString(raw) && (citedListIntro(previous) || citedPrev)
+		if cited {
+			if lines == nil {
+				text := ""
+				if a.Text != nil {
+					text = *a.Text
+				}
+				lines = strings.Split(text, "\n")
+			}
+			gap := prevEnd
+			if gap < b.Start-1 && setextUnderlineRE.MatchString(lines[gap]) && !markedLineRE.MatchString(previous) {
+				gap++ // the intro's own underline
+			}
+			hi := min(b.Start-1, len(lines)) // Python slices clamp
+			between := strings.Join(lines[min(gap, hi):hi], "\n")
+			cited = pytext.Strip(htmlCommentRE.ReplaceAllString(between, "")) == ""
+		}
 		for _, rule := range directiveRules {
 			for _, m := range ruleMatches(rule, raw) {
 				group := raw[m[0]:m[1]]
@@ -314,7 +338,7 @@ func directiveFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []findin
 					continue
 				}
 				before := raw[:m[0]]
-				if exampleIntroRE.MatchString(before) || introPrev || isDefensiveFrame(before) || quoted(raw, m[0], m[1]) {
+				if exampleIntroRE.MatchString(before) || introPrev || isDefensiveFrame(before) || quoted(raw, m[0], m[1], cited) {
 					continue
 				}
 				if rule.vector == "SXV-028" && (bareWeakNounRE.MatchString(matched) || reportedRefusal(before, restOfLine(raw, m[1]))) {
@@ -351,10 +375,12 @@ func directiveFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []findin
 						"selector": rule.tag + ":" + cutRunes(pytext.Lower(matched), 50), "snippet": cutRunes(raw, 200)}})
 			}
 		}
+		citedPrev = cited && pureQuotedItemRE.MatchString(raw)
 		previous = raw
 		if inFrontmatter(a, b.Start) {
 			previous = ""
 		}
+		prevEnd = b.Start + strings.Count(b.Text, "\n")
 	}
 	for _, v := range vectorOrder {
 		if totals[v] > findingCap {
@@ -868,7 +894,7 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 		j := joined.String()
 		var covert []int // the first covert cue that is not itself a quoted citation
 		for _, c := range covertRunCueRE.FindAllStringIndex(j, -1) {
-			if !quoted(j, c[0], c[1]) {
+			if !quoted(j, c[0], c[1], false) {
 				covert = c
 				break
 			}
