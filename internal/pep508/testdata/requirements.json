@@ -1,0 +1,3893 @@
+{
+ "requirements": [
+  {
+   "from": "test_requirements_deps_pinned",
+   "input": "requests==2.32.3",
+   "valid": true,
+   "name": "requests",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "2.32.3"
+    ]
+   ],
+   "specifier_str": "==2.32.3",
+   "pinned": true
+  },
+  {
+   "from": "test_requirements_deps_pinned",
+   "input": "flask[async]>=3",
+   "valid": true,
+   "name": "flask",
+   "url": "",
+   "specifiers": [
+    [
+     ">=",
+     "3"
+    ]
+   ],
+   "specifier_str": ">=3",
+   "pinned": false
+  },
+  {
+   "from": "test_requirements_deps_pinned",
+   "input": "-r other.txt",
+   "valid": false
+  },
+  {
+   "from": "test_requirements_prefix_range_not_pinned",
+   "input": "requests==2.*",
+   "valid": true,
+   "name": "requests",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "2.*"
+    ]
+   ],
+   "specifier_str": "==2.*",
+   "pinned": false
+  },
+  {
+   "from": "test_pyproject_deps_parsed",
+   "input": "flask>=3",
+   "valid": true,
+   "name": "flask",
+   "url": "",
+   "specifiers": [
+    [
+     ">=",
+     "3"
+    ]
+   ],
+   "specifier_str": ">=3",
+   "pinned": false
+  },
+  {
+   "from": "test_pyproject_build_system_requires_captured",
+   "input": "setuptools",
+   "valid": true,
+   "name": "setuptools",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "test_pyproject_build_system_requires_captured",
+   "input": "poison==1",
+   "valid": true,
+   "name": "poison",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1"
+    ]
+   ],
+   "specifier_str": "==1",
+   "pinned": true
+  },
+  {
+   "from": "test_pyproject_dependency_groups_captured",
+   "input": "pytest==8",
+   "valid": true,
+   "name": "pytest",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "8"
+    ]
+   ],
+   "specifier_str": "==8",
+   "pinned": true
+  },
+  {
+   "from": "test_requirements_url_continuation_and_comment",
+   "input": "pkg @ https://h/p.whl#sha256=abc",
+   "valid": true,
+   "name": "pkg",
+   "url": "https://h/p.whl#sha256=abc",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "test_requirements_url_continuation_and_comment",
+   "input": "flask==3.0.0",
+   "valid": true,
+   "name": "flask",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "3.0.0"
+    ]
+   ],
+   "specifier_str": "==3.0.0",
+   "pinned": true
+  },
+  {
+   "from": "test_requirements_trailing_backslash_not_dropped",
+   "input": "evil==1.0",
+   "valid": true,
+   "name": "evil",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "==1.0",
+   "pinned": true
+  },
+  {
+   "from": "test_requirements_vcs_and_local_surfaced",
+   "input": "git+https://h/r.git#egg=pkg",
+   "valid": false
+  },
+  {
+   "from": "test_requirements_vcs_and_local_surfaced",
+   "input": "./local",
+   "valid": false
+  },
+  {
+   "from": "test_pyproject_optional_dependencies_collected",
+   "input": "requests>=2",
+   "valid": true,
+   "name": "requests",
+   "url": "",
+   "specifiers": [
+    [
+     ">=",
+     "2"
+    ]
+   ],
+   "specifier_str": ">=2",
+   "pinned": false
+  },
+  {
+   "from": "test_pyproject_optional_dependencies_collected",
+   "input": "pytest==8.0.0",
+   "valid": true,
+   "name": "pytest",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "8.0.0"
+    ]
+   ],
+   "specifier_str": "==8.0.0",
+   "pinned": true
+  },
+  {
+   "from": "test_requirements_continuation_is_linear",
+   "input": "a",
+   "valid": true,
+   "name": "a",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "test_requirements_unpinned_fires_pinned_is_silent",
+   "input": "flask>=2.0",
+   "valid": true,
+   "name": "flask",
+   "url": "",
+   "specifiers": [
+    [
+     ">=",
+     "2.0"
+    ]
+   ],
+   "specifier_str": ">=2.0",
+   "pinned": false
+  },
+  {
+   "from": "test_pyproject_unpinned_is_pypi",
+   "input": "requests>=2.0",
+   "valid": true,
+   "name": "requests",
+   "url": "",
+   "specifiers": [
+    [
+     ">=",
+     "2.0"
+    ]
+   ],
+   "specifier_str": ">=2.0",
+   "pinned": false
+  },
+  {
+   "from": "test_pyproject_unpinned_is_pypi",
+   "input": "click==8.1.7",
+   "valid": true,
+   "name": "click",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "8.1.7"
+    ]
+   ],
+   "specifier_str": "==8.1.7",
+   "pinned": true
+  },
+  {
+   "from": "test_all_pinned_manifest_is_clean",
+   "input": "urllib3==2.2.2",
+   "valid": true,
+   "name": "urllib3",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "2.2.2"
+    ]
+   ],
+   "specifier_str": "==2.2.2",
+   "pinned": true
+  },
+  {
+   "from": "test_pep508_direct_url_reference_fires",
+   "input": "internal-lib @ https://artifacts.corp.example.com/internal-lib/latest",
+   "valid": true,
+   "name": "internal-lib",
+   "url": "https://artifacts.corp.example.com/internal-lib/latest",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "test_pep508_direct_ref_reported_once_not_also_low_unpinned",
+   "input": "mylib @ https://example.com/mylib-1.0.tar.gz",
+   "valid": true,
+   "name": "mylib",
+   "url": "https://example.com/mylib-1.0.tar.gz",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "test_pep508_extras_do_not_duplicate_direct_reference",
+   "input": "requests[socks] @ https://host/pkg.whl",
+   "valid": true,
+   "name": "requests",
+   "url": "https://host/pkg.whl",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "test_floating_mcp_package_reports",
+   "input": "tool~=1.4",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "~=",
+     "1.4"
+    ]
+   ],
+   "specifier_str": "~=1.4",
+   "pinned": false
+  },
+  {
+   "from": "test_floating_mcp_package_reports",
+   "input": "tool",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "test_pinned_or_local_mcp_server_does_not_report_floating_package",
+   "input": "tool==1.4.0",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.4.0"
+    ]
+   ],
+   "specifier_str": "==1.4.0",
+   "pinned": true
+  },
+  {
+   "from": "test_pinned_or_local_mcp_server_does_not_report_floating_package",
+   "input": "tool==1",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1"
+    ]
+   ],
+   "specifier_str": "==1",
+   "pinned": true
+  },
+  {
+   "from": "test_python_wildcard_pin_is_still_floating",
+   "input": "tool==1.4.*",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.4.*"
+    ]
+   ],
+   "specifier_str": "==1.4.*",
+   "pinned": false
+  },
+  {
+   "from": "test_pipx_python_option_value_is_not_the_package",
+   "input": "tool==1.0",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "==1.0",
+   "pinned": true
+  },
+  {
+   "from": "test_pep508_direct_reference_sha_is_a_pin",
+   "input": "tool @ git+https://example.invalid/repo.git@0123456789abcdef0123456789abcdef01234567",
+   "valid": true,
+   "name": "tool",
+   "url": "git+https://example.invalid/repo.git@0123456789abcdef0123456789abcdef01234567",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "test_direct_reference_sha_with_subdir_fragment_is_a_pin",
+   "input": "tool @ git+https://example.invalid/repo.git@0123456789abcdef0123456789abcdef01234567#subdirectory=python",
+   "valid": true,
+   "name": "tool",
+   "url": "git+https://example.invalid/repo.git@0123456789abcdef0123456789abcdef01234567#subdirectory=python",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "test_pep508_file_reference_is_local_pin",
+   "input": "tool @ file:///workspace/tool",
+   "valid": true,
+   "name": "tool",
+   "url": "file:///workspace/tool",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "test_flat_mcp_map_and_snake_case_wrapper_are_supported",
+   "input": "snake-tool",
+   "valid": true,
+   "name": "snake-tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool@1.0",
+   "valid": true,
+   "name": "tool",
+   "url": "1.0",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "==1.0",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "_bad==1",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool ==1.0;",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0 ;",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool[extra]==1.0; python_version>'3'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "==1.0",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool >= 1, == 2",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "2"
+    ],
+    [
+     ">=",
+     "1"
+    ]
+   ],
+   "specifier_str": "==2,>=1",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==abc",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool===anything",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "===",
+     "anything"
+    ]
+   ],
+   "specifier_str": "===anything",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool===",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "===",
+     ""
+    ]
+   ],
+   "specifier_str": "===",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool===1,==2",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "2"
+    ],
+    [
+     "===",
+     "1"
+    ]
+   ],
+   "specifier_str": "==2,===1",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool~=1",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool~=1.0",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "~=",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "~=1.0",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool>=1.0+local",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0+local",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0+local"
+    ]
+   ],
+   "specifier_str": "==1.0+local",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0+ABC",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0+ABC"
+    ]
+   ],
+   "specifier_str": "==1.0+ABC",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0a1.*",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool>=1.0.*",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool (>=1, <2)",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "<",
+     "2"
+    ],
+    [
+     ">=",
+     "1"
+    ]
+   ],
+   "specifier_str": "<2,>=1",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool (>=1",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool[a, b]",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool[a b]",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool[]",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool[a,a]",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool [x] >= 1",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     ">=",
+     "1"
+    ]
+   ],
+   "specifier_str": ">=1",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "  tool  ",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0\n",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "==1.0",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0\n\n",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==  1.0",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "==1.0",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool== 1.0 , >=0.5",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0"
+    ],
+    [
+     ">=",
+     "0.5"
+    ]
+   ],
+   "specifier_str": "==1.0,>=0.5",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0,==1",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "==1.0",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0,==1.0",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "==1.0",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool>=1.0,>=1",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     ">=",
+     "1.0"
+    ]
+   ],
+   "specifier_str": ">=1.0",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool~=1.0,~=1.0.0",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "~=",
+     "1.0"
+    ],
+    [
+     "~=",
+     "1.0.0"
+    ]
+   ],
+   "specifier_str": "~=1.0,~=1.0.0",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0,==1.0.0",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "==1.0",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0a,==1.0a0",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0a"
+    ]
+   ],
+   "specifier_str": "==1.0a",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0.RC1",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0.RC1"
+    ]
+   ],
+   "specifier_str": "==1.0.RC1",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==V1.0",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "V1.0"
+    ]
+   ],
+   "specifier_str": "==V1.0",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0-1",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0-1"
+    ]
+   ],
+   "specifier_str": "==1.0-1",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0.dev",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0.dev"
+    ]
+   ],
+   "specifier_str": "==1.0.dev",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0.0abc",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==99999999999999999999999",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "99999999999999999999999"
+    ]
+   ],
+   "specifier_str": "==99999999999999999999999",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1!2.0",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1!2.0"
+    ]
+   ],
+   "specifier_str": "==1!2.0",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool<1.0a1",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "<",
+     "1.0a1"
+    ]
+   ],
+   "specifier_str": "<1.0a1",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool!=1.*",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "!=",
+     "1.*"
+    ]
+   ],
+   "specifier_str": "!=1.*",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "TOOL==1",
+   "valid": true,
+   "name": "TOOL",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1"
+    ]
+   ],
+   "specifier_str": "==1",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool.",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool-",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": ".tool",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0 # c",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0;python_version>'3'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "==1.0",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool\u00a0==1",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==\u00a01",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1"
+    ]
+   ],
+   "specifier_str": "==1",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1\u00a0",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==\n1",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1"
+    ]
+   ],
+   "specifier_str": "==1",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool @ https://x y",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool@",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool @ url extra",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool @ url ; python_version>'3'",
+   "valid": true,
+   "name": "tool",
+   "url": "url",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool @ url ;",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool @ url;",
+   "valid": true,
+   "name": "tool",
+   "url": "url;",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool @ file:tool",
+   "valid": true,
+   "name": "tool",
+   "url": "file:tool",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool @ git+https://h/r.git@abc",
+   "valid": true,
+   "name": "tool",
+   "url": "git+https://h/r.git@abc",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool @ https://h/r.git@0123456789abcdef0123456789abcdef01234567?x=1",
+   "valid": true,
+   "name": "tool",
+   "url": "https://h/r.git@0123456789abcdef0123456789abcdef01234567?x=1",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool @ https://h/r.git@0123456789abcdef0123456789abcdef01234567x",
+   "valid": true,
+   "name": "tool",
+   "url": "https://h/r.git@0123456789abcdef0123456789abcdef01234567x",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; extra == 'x'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; extra == \"x\" and os_name != 'nt'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; (python_version>'3' or os_name=='nt') and implementation_name=='cpython'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version in '3.9 3.10'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; 'x' not in extra",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version not  in 'x'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version notin 'x'",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version ~= '3'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version === '3'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version in'3'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; foo",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version >",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version > 3",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; platform.version == 'x'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_versionx == 'x'",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; (python_version == 'x'",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version == 'x' and",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version == 'x' andos_name == 'y'",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool; python_version == 'x' or (os_name == 'y')",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool[socks]==1.0,!=1.0.1",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "!=",
+     "1.0.1"
+    ],
+    [
+     "==",
+     "1.0"
+    ]
+   ],
+   "specifier_str": "!=1.0.1,==1.0",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool>=1,<2",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "<",
+     "2"
+    ],
+    [
+     ">=",
+     "1"
+    ]
+   ],
+   "specifier_str": "<2,>=1",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool >= 1 , < 2 ; extra == 'a'",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "<",
+     "2"
+    ],
+    [
+     ">=",
+     "1"
+    ]
+   ],
+   "specifier_str": "<2,>=1",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "   ",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool@1.2.3",
+   "valid": true,
+   "name": "tool",
+   "url": "1.2.3",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "tool@latest",
+   "valid": true,
+   "name": "tool",
+   "url": "latest",
+   "specifiers": [],
+   "specifier_str": "",
+   "pinned": false
+  },
+  {
+   "from": "edge",
+   "input": "@scope/tool@1.2.3",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool\u00e9==1",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "1tool==1",
+   "valid": true,
+   "name": "1tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1"
+    ]
+   ],
+   "specifier_str": "==1",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool_x==1",
+   "valid": true,
+   "name": "tool_x",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1"
+    ]
+   ],
+   "specifier_str": "==1",
+   "pinned": true
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0.*.*",
+   "valid": false
+  },
+  {
+   "from": "edge",
+   "input": "tool==1.0.*,==1.0.*",
+   "valid": true,
+   "name": "tool",
+   "url": "",
+   "specifiers": [
+    [
+     "==",
+     "1.0.*"
+    ]
+   ],
+   "specifier_str": "==1.0.*",
+   "pinned": false
+  }
+ ],
+ "exact_pin": [
+  {
+   "runner": "npx",
+   "spec": "requests==2.32.3",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "flask[async]>=3",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "-r other.txt",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "requests==2.*",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "flask>=3",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "setuptools",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "poison==1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "pytest==8",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "pkg @ https://h/p.whl#sha256=abc",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "flask==3.0.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "evil==1.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "git+https://h/r.git#egg=pkg",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "./local",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "requests>=2",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "pytest==8.0.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "a",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "flask>=2.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "requests>=2.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "click==8.1.7",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "urllib3==2.2.2",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "internal-lib @ https://artifacts.corp.example.com/internal-lib/latest",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "mylib @ https://example.com/mylib-1.0.tar.gz",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "requests[socks] @ https://host/pkg.whl",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool~=1.4",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.4.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.4.*",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ git+https://example.invalid/repo.git@0123456789abcdef0123456789abcdef01234567",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ git+https://example.invalid/repo.git@0123456789abcdef0123456789abcdef01234567#subdirectory=python",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ file:///workspace/tool",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "snake-tool",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@1.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "==1.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "_bad==1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool ==1.0;",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0 ;",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool[extra]==1.0; python_version>'3'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool >= 1, == 2",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==abc",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool===anything",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool===",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool===1,==2",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool~=1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool~=1.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool>=1.0+local",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0+local",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0+ABC",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0a1.*",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool>=1.0.*",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool (>=1, <2)",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool (>=1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool[a, b]",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool[a b]",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool[]",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool[a,a]",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool [x] >= 1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "  tool  ",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0\n",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0\n\n",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==  1.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool== 1.0 , >=0.5",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0,==1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0,==1.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool>=1.0,>=1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool~=1.0,~=1.0.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0,==1.0.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0a,==1.0a0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0.RC1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==V1.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0-1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0.dev",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0.0abc",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==99999999999999999999999",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1!2.0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool<1.0a1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool!=1.*",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "TOOL==1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool.",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool-",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": ".tool",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0 # c",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0;python_version>'3'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool\u00a0==1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==\u00a01",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1\u00a0",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==\n1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ https://x y",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ url extra",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ url ; python_version>'3'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ url ;",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ url;",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ file:tool",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ git+https://h/r.git@abc",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ https://h/r.git@0123456789abcdef0123456789abcdef01234567?x=1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool @ https://h/r.git@0123456789abcdef0123456789abcdef01234567x",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; extra == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; extra == \"x\" and os_name != 'nt'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; (python_version>'3' or os_name=='nt') and implementation_name=='cpython'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version in '3.9 3.10'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; 'x' not in extra",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version not  in 'x'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version notin 'x'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version ~= '3'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version === '3'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version in'3'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; foo",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version >",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version > 3",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; platform.version == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_versionx == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; (python_version == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version == 'x' and",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version == 'x' andos_name == 'y'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool; python_version == 'x' or (os_name == 'y')",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool[socks]==1.0,!=1.0.1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool>=1,<2",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool >= 1 , < 2 ; extra == 'a'",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "   ",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@1.2.3",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@latest",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "@scope/tool@1.2.3",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "tool\u00e9==1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "1tool==1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool_x==1",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0.*.*",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool==1.0.*,==1.0.*",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@1.2.3",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@latest",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@v1.2.3",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@1.2",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@1.2.3.4",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@1.2.3-beta.1+build.5",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "@scope/tool@1.2.3",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "@scope/tool",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "alias@npm:@scope/tool@1.2.3",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "alias@npm:tool@latest",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "github:owner/tool#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "github:owner/tool",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "github:owner/tool@0123456789abcdef0123456789abcdef01234567#frag",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "git+https://h/r.git#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "git+https://h/r.git@0123456789abcdef0123456789abcdef01234567?x",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "git+https://h/r.git#0123456789abcdef0123456789abcdef01234567x",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "gitlab:o/t#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "bitbucket:o/t#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "git:o/t#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "https://h/tool.tgz",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "http://h/tool.tgz",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "./local",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "../local",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "C:\\repo\\tool",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "c:/repo/tool",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "~/x",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "/x",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "file:x",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "file:///x",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@1.2.3\n",
+   "pin": false
+  },
+  {
+   "runner": "npx",
+   "spec": "github:owner/tool#0123456789abcdef0123456789abcdef01234567\n",
+   "pin": true
+  },
+  {
+   "runner": "npx",
+   "spec": "tool@\u0661.\u0662.\u0663",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "requests==2.32.3",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "flask[async]>=3",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "-r other.txt",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "requests==2.*",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "flask>=3",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "setuptools",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "poison==1",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "pytest==8",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "pkg @ https://h/p.whl#sha256=abc",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "flask==3.0.0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "evil==1.0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "git+https://h/r.git#egg=pkg",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "./local",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "requests>=2",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "pytest==8.0.0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "a",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "flask>=2.0",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "requests>=2.0",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "click==8.1.7",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "urllib3==2.2.2",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "internal-lib @ https://artifacts.corp.example.com/internal-lib/latest",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "mylib @ https://example.com/mylib-1.0.tar.gz",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "requests[socks] @ https://host/pkg.whl",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool~=1.4",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.4.0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.4.*",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ git+https://example.invalid/repo.git@0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ git+https://example.invalid/repo.git@0123456789abcdef0123456789abcdef01234567#subdirectory=python",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ file:///workspace/tool",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "snake-tool",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@1.0",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "==1.0",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "_bad==1",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool ==1.0;",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0 ;",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool[extra]==1.0; python_version>'3'",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool >= 1, == 2",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==abc",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool===anything",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool===",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool===1,==2",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool~=1",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool~=1.0",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool>=1.0+local",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0+local",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0+ABC",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0a1.*",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool>=1.0.*",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool (>=1, <2)",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool (>=1",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool[a, b]",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool[a b]",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool[]",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool[a,a]",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool [x] >= 1",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "  tool  ",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0\n",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0\n\n",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==  1.0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool== 1.0 , >=0.5",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0,==1",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0,==1.0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool>=1.0,>=1",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool~=1.0,~=1.0.0",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0,==1.0.0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0a,==1.0a0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0.RC1",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==V1.0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0-1",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0.dev",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0.0abc",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==99999999999999999999999",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1!2.0",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool<1.0a1",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool!=1.*",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "TOOL==1",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool.",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool-",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": ".tool",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0 # c",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0;python_version>'3'",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool\u00a0==1",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==\u00a01",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1\u00a0",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==\n1",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ https://x y",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ url extra",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ url ; python_version>'3'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ url ;",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ url;",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ file:tool",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ git+https://h/r.git@abc",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ https://h/r.git@0123456789abcdef0123456789abcdef01234567?x=1",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool @ https://h/r.git@0123456789abcdef0123456789abcdef01234567x",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; extra == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; extra == \"x\" and os_name != 'nt'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; (python_version>'3' or os_name=='nt') and implementation_name=='cpython'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version in '3.9 3.10'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; 'x' not in extra",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version not  in 'x'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version notin 'x'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version ~= '3'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version === '3'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version in'3'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; foo",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version >",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version > 3",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; platform.version == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_versionx == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; (python_version == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version == 'x' and",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version == 'x' andos_name == 'y'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool; python_version == 'x' or (os_name == 'y')",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool[socks]==1.0,!=1.0.1",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool>=1,<2",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool >= 1 , < 2 ; extra == 'a'",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "   ",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@latest",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "@scope/tool@1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool\u00e9==1",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "1tool==1",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool_x==1",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0.*.*",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool==1.0.*,==1.0.*",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@latest",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@v1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@1.2",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@1.2.3.4",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@1.2.3-beta.1+build.5",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "@scope/tool@1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "@scope/tool",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "alias@npm:@scope/tool@1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "alias@npm:tool@latest",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "github:owner/tool#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "github:owner/tool",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "github:owner/tool@0123456789abcdef0123456789abcdef01234567#frag",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "git+https://h/r.git#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "git+https://h/r.git@0123456789abcdef0123456789abcdef01234567?x",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "git+https://h/r.git#0123456789abcdef0123456789abcdef01234567x",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "gitlab:o/t#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "bitbucket:o/t#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "git:o/t#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "https://h/tool.tgz",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "http://h/tool.tgz",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "./local",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "../local",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "C:\\repo\\tool",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "c:/repo/tool",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "~/x",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "/x",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "file:x",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "file:///x",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@1.2.3\n",
+   "pin": false
+  },
+  {
+   "runner": "uvx",
+   "spec": "github:owner/tool#0123456789abcdef0123456789abcdef01234567\n",
+   "pin": true
+  },
+  {
+   "runner": "uvx",
+   "spec": "tool@\u0661.\u0662.\u0663",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "requests==2.32.3",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "flask[async]>=3",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "-r other.txt",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "requests==2.*",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "flask>=3",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "setuptools",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "poison==1",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "pytest==8",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "pkg @ https://h/p.whl#sha256=abc",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "flask==3.0.0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "evil==1.0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "git+https://h/r.git#egg=pkg",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "./local",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "requests>=2",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "pytest==8.0.0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "a",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "flask>=2.0",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "requests>=2.0",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "click==8.1.7",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "urllib3==2.2.2",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "internal-lib @ https://artifacts.corp.example.com/internal-lib/latest",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "mylib @ https://example.com/mylib-1.0.tar.gz",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "requests[socks] @ https://host/pkg.whl",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool~=1.4",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.4.0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.4.*",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ git+https://example.invalid/repo.git@0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ git+https://example.invalid/repo.git@0123456789abcdef0123456789abcdef01234567#subdirectory=python",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ file:///workspace/tool",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "snake-tool",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@1.0",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "==1.0",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "_bad==1",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool ==1.0;",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0 ;",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool[extra]==1.0; python_version>'3'",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool >= 1, == 2",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==abc",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool===anything",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool===",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool===1,==2",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool~=1",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool~=1.0",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool>=1.0+local",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0+local",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0+ABC",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0a1.*",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool>=1.0.*",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool (>=1, <2)",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool (>=1",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool[a, b]",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool[a b]",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool[]",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool[a,a]",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool [x] >= 1",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "  tool  ",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0\n",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0\n\n",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==  1.0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool== 1.0 , >=0.5",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0,==1",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0,==1.0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool>=1.0,>=1",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool~=1.0,~=1.0.0",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0,==1.0.0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0a,==1.0a0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0.RC1",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==V1.0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0-1",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0.dev",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0.0abc",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==99999999999999999999999",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1!2.0",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool<1.0a1",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool!=1.*",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "TOOL==1",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool.",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool-",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": ".tool",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0 # c",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0;python_version>'3'",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool\u00a0==1",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==\u00a01",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1\u00a0",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==\n1",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ https://x y",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ url extra",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ url ; python_version>'3'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ url ;",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ url;",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ file:tool",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ git+https://h/r.git@abc",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ https://h/r.git@0123456789abcdef0123456789abcdef01234567?x=1",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool @ https://h/r.git@0123456789abcdef0123456789abcdef01234567x",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; extra == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; extra == \"x\" and os_name != 'nt'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; (python_version>'3' or os_name=='nt') and implementation_name=='cpython'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version in '3.9 3.10'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; 'x' not in extra",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version not  in 'x'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version notin 'x'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version ~= '3'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version === '3'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version in'3'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; foo",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version >",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version > 3",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; platform.version == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_versionx == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; (python_version == 'x'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version == 'x' and",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version == 'x' andos_name == 'y'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool; python_version == 'x' or (os_name == 'y')",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool[socks]==1.0,!=1.0.1",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool>=1,<2",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool >= 1 , < 2 ; extra == 'a'",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "   ",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@latest",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "@scope/tool@1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool\u00e9==1",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "1tool==1",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool_x==1",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0.*.*",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool==1.0.*,==1.0.*",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@latest",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@v1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@1.2",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@1.2.3.4",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@1.2.3-beta.1+build.5",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "@scope/tool@1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "@scope/tool",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "alias@npm:@scope/tool@1.2.3",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "alias@npm:tool@latest",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "github:owner/tool#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "github:owner/tool",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "github:owner/tool@0123456789abcdef0123456789abcdef01234567#frag",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "git+https://h/r.git#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "git+https://h/r.git@0123456789abcdef0123456789abcdef01234567?x",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "git+https://h/r.git#0123456789abcdef0123456789abcdef01234567x",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "gitlab:o/t#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "bitbucket:o/t#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "git:o/t#0123456789abcdef0123456789abcdef01234567",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "https://h/tool.tgz",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "http://h/tool.tgz",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "./local",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "../local",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "C:\\repo\\tool",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "c:/repo/tool",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "~/x",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "/x",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "file:x",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "file:///x",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@1.2.3\n",
+   "pin": false
+  },
+  {
+   "runner": "pipx",
+   "spec": "github:owner/tool#0123456789abcdef0123456789abcdef01234567\n",
+   "pin": true
+  },
+  {
+   "runner": "pipx",
+   "spec": "tool@\u0661.\u0662.\u0663",
+   "pin": false
+  }
+ ]
+}

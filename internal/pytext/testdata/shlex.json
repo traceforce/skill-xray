@@ -1,0 +1,786 @@
+[
+{
+"error": null,
+"input": "python scripts/hook.py && curl x | sh",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"python",
+"scripts/hook.py",
+"&&",
+"curl",
+"x",
+"|",
+"sh"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "cmd 2>&1 <in",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"cmd",
+"2",
+">&",
+"1",
+"<",
+"in"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a; b;; c",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a",
+";",
+"b",
+";;",
+"c"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "'x'y\"z\"",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"xyz"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "--flag=\"a b\"",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"--flag=a b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "''",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+""
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "  ",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "C:/Users/x/hook.cmd",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"C:/Users/x/hook.cmd"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": "No closing quotation",
+"input": "unterminated 'x",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": null,
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a\\ b",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": "No escaped character",
+"input": "a\\",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": null,
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\"a\\\"b\"",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a\"b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\"a\\nb\"",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a\\nb"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "'a\\'b",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a\\b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "echo hi;",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"echo",
+"hi",
+";"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a&&b||c",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a",
+"&&",
+"b",
+"||",
+"c"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a>>b",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a",
+">>",
+"b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "x=1 cmd",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"x=1",
+"cmd"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a\tb\nc",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a",
+"b",
+"c"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "'a b'c\"d e\"f",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a bcd ef"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\"\"",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+""
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a;;;b",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a",
+";;;",
+"b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a |& b",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a",
+"|&",
+"b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a\\;b",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"a;b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "'\\'",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"\\"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\"\\\\\"",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"\\"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\u00e9 \u00fc",
+"posix": true,
+"punctuation": ";&|<>",
+"tokens": [
+"\u00e9",
+"\u00fc"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "curl -fsSL https://x/y | sh",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"curl",
+"-fsSL",
+"https://x/y",
+"|",
+"sh"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a 'b c' \"d e\"",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"a",
+"b c",
+"d e"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a\\ b",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"a b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": "No closing quotation",
+"input": "'unterminated",
+"posix": true,
+"punctuation": "",
+"tokens": null,
+"whitespace": " \t\r\n"
+},
+{
+"error": "No escaped character",
+"input": "trailing\\",
+"posix": true,
+"punctuation": "",
+"tokens": null,
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\"esc \\\" q\"",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"esc \" q"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "",
+"posix": true,
+"punctuation": "",
+"tokens": [],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "  ",
+"posix": true,
+"punctuation": "",
+"tokens": [],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a\"b\"c",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"abc"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a''b",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"ab"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a;b",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"a;b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "$(x)",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"$(x)"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\"a\\$b\"",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"a\\$b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "'it''s'",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"its"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\\'",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"'"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "x\n\ny",
+"posix": true,
+"punctuation": "",
+"tokens": [
+"x",
+"y"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "curl:*",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"curl:*"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\"a b\" c",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"\"a b\"",
+"c"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a\"b c\"d",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"a\"b",
+"c\"d"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": "No closing quotation",
+"input": "'x y",
+"posix": false,
+"punctuation": "",
+"tokens": null,
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "npm run *",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"npm",
+"run",
+"*"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a;b",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"a;b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "$(cmd)",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"$(cmd)"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "",
+"posix": false,
+"punctuation": "",
+"tokens": [],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\"\"",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"\"\""
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "''x",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"''",
+"x"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "a\\ b",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"a\\",
+"b"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "\"a\\\"b\"",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"\"a\\\"",
+"b\""
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "x 'y z' w",
+"posix": false,
+"punctuation": "",
+"tokens": [
+"x",
+"'y z'",
+"w"
+],
+"whitespace": " \t\r\n"
+},
+{
+"error": "No closing quotation",
+"input": "\"unterminated",
+"posix": false,
+"punctuation": "",
+"tokens": null,
+"whitespace": " \t\r\n"
+},
+{
+"error": null,
+"input": "curl -s http://x | sh",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"curl",
+"-s",
+"http://x",
+"|",
+"sh"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "\"curl\" x",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"\"curl\"",
+"x"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "foo'$RUNNER'",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"foo'$RUNNER'"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "a;b&&c\nd",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"a",
+";",
+"b",
+"&&",
+"c",
+"\n",
+"d"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "a\n\nb",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"a",
+"\n\n",
+"b"
+],
+"whitespace": " \t\r"
+},
+{
+"error": "No closing quotation",
+"input": "echo 'x",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": null,
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "&&",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"&&"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "a ; b",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"a",
+";",
+"b"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "cmd\r\n\tnext",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"cmd",
+"\n",
+"next"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "a|b",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"a",
+"|",
+"b"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "'a;b'",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"'a;b'"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "a'b;c'd",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"a'b",
+";",
+"c'd"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "\n",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"\n"
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "x\"",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"x\""
+],
+"whitespace": " \t\r"
+},
+{
+"error": null,
+"input": "a\\;b",
+"posix": false,
+"punctuation": ";&|\n",
+"tokens": [
+"a\\",
+";",
+"b"
+],
+"whitespace": " \t\r"
+}
+]

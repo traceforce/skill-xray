@@ -1,0 +1,137 @@
+[
+{
+"input": "a\nb",
+"output": [
+"a",
+"b"
+]
+},
+{
+"input": "a\r\nb",
+"output": [
+"a",
+"b"
+]
+},
+{
+"input": "a\rb",
+"output": [
+"a",
+"b"
+]
+},
+{
+"input": "a\u000bb\fc",
+"output": [
+"a",
+"b",
+"c"
+]
+},
+{
+"input": "a\u001cb\u001dc\u001ed",
+"output": [
+"a",
+"b",
+"c",
+"d"
+]
+},
+{
+"input": "a\u0085b",
+"output": [
+"a",
+"b"
+]
+},
+{
+"input": "a\u2028b\u2029c",
+"output": [
+"a",
+"b",
+"c"
+]
+},
+{
+"input": "a\n",
+"output": [
+"a"
+]
+},
+{
+"input": "a\n\n",
+"output": [
+"a",
+""
+]
+},
+{
+"input": "\n",
+"output": [
+""
+]
+},
+{
+"input": "",
+"output": []
+},
+{
+"input": "a\r\n\r\n",
+"output": [
+"a",
+""
+]
+},
+{
+"input": "\r\r\n",
+"output": [
+"",
+""
+]
+},
+{
+"input": "a\u001fb",
+"output": [
+"a\u001fb"
+]
+},
+{
+"input": "a\u00a0b",
+"output": [
+"a\u00a0b"
+]
+},
+{
+"input": "\u00e9\n\u00fc",
+"output": [
+"\u00e9",
+"\u00fc"
+]
+},
+{
+"input": "abc",
+"output": [
+"abc"
+]
+},
+{
+"input": "\n\n\n",
+"output": [
+"",
+"",
+""
+]
+},
+{
+"input": "x\r",
+"output": [
+"x"
+]
+},
+{
+"input": "line\u2028",
+"output": [
+"line"
+]
+}
+]

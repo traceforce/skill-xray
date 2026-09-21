@@ -1,0 +1,92 @@
+[
+{
+"ext": "",
+"input": ".env",
+"root": ".env"
+},
+{
+"ext": ".json",
+"input": ".credentials.json",
+"root": ".credentials"
+},
+{
+"ext": "",
+"input": "..foo",
+"root": "..foo"
+},
+{
+"ext": ".",
+"input": "a.",
+"root": "a"
+},
+{
+"ext": ".b",
+"input": ".a.b",
+"root": ".a"
+},
+{
+"ext": "",
+"input": "dir.x/file",
+"root": "dir.x/file"
+},
+{
+"ext": "",
+"input": "a/.b",
+"root": "a/.b"
+},
+{
+"ext": ".gz",
+"input": "a.tar.gz",
+"root": "a.tar"
+},
+{
+"ext": "",
+"input": "",
+"root": ""
+},
+{
+"ext": "",
+"input": "/",
+"root": "/"
+},
+{
+"ext": "",
+"input": ".",
+"root": "."
+},
+{
+"ext": "",
+"input": "..",
+"root": ".."
+},
+{
+"ext": "",
+"input": "x/y.z/",
+"root": "x/y.z/"
+},
+{
+"ext": "",
+"input": "noext",
+"root": "noext"
+},
+{
+"ext": "",
+"input": "a.b/c",
+"root": "a.b/c"
+},
+{
+"ext": "",
+"input": "/.bashrc",
+"root": "/.bashrc"
+},
+{
+"ext": ".py",
+"input": "python\u0663.py",
+"root": "python\u0663"
+},
+{
+"ext": ".b",
+"input": ".git/a.b",
+"root": ".git/a"
+}
+]

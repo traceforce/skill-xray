@@ -1,0 +1,66 @@
+[
+{
+"input": "",
+"output": true
+},
+{
+"input": "abc",
+"output": true
+},
+{
+"input": "a b",
+"output": true
+},
+{
+"input": "a\tb",
+"output": false
+},
+{
+"input": "\u00e9",
+"output": true
+},
+{
+"input": "\u200b",
+"output": false
+},
+{
+"input": "\u00ad",
+"output": false
+},
+{
+"input": "\ud83d\ude00",
+"output": true
+},
+{
+"input": "\u2028",
+"output": false
+},
+{
+"input": "\u007f",
+"output": false
+},
+{
+"input": "\u00a0",
+"output": false
+},
+{
+"input": "a\nb",
+"output": false
+},
+{
+"input": "\ufeff",
+"output": false
+},
+{
+"input": "\u0085",
+"output": false
+},
+{
+"input": "\u03a9",
+"output": true
+},
+{
+"input": "\u0378",
+"output": false
+}
+]

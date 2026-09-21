@@ -1,0 +1,8789 @@
+{
+ "inputs": [
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "b.py",
+   "message": "same spot",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "high",
+   "path": "b.py",
+   "message": "same spot",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "bogus",
+   "path": "a.md",
+   "message": "unknown severity sorts last",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "x",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "y",
+   "line": -1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "offset zero",
+   "line": null,
+   "column": null,
+   "offset": 0,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "offset zero",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "column",
+   "line": null,
+   "column": 7,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "column",
+   "line": 1,
+   "column": 2,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\u00e9",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\ud83d\ude00",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "aZ",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a~",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\uffff",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 6
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 7
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 7
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "validated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 6
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "other",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 6
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": "3",
+      "offset": 3
+     },
+     "end": {
+      "line": true,
+      "col": 5,
+      "offset": 3.0
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 0,
+      "col": 0,
+      "offset": 0
+     },
+     "end": null
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 0,
+      "col": 0,
+      "offset": 0
+     },
+     "end": {
+      "line": 0,
+      "col": 0,
+      "offset": 0
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": [
+     1,
+     2
+    ]
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated"
+   }
+  },
+  {
+   "vector": "SXV-999",
+   "rule": "unregistered",
+   "severity": "medium",
+   "path": "c.md",
+   "message": "no meta",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": 2,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "c.md",
+   "message": "vectorless",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "phase": "static"
+   }
+  },
+  {
+   "vector": "SXV-034",
+   "rule": "unsafe-yaml-tag",
+   "severity": "high",
+   "path": "SKILL.md",
+   "message": "nested evidence",
+   "line": 2,
+   "column": 1,
+   "offset": 10,
+   "length": 5,
+   "evidence": {
+    "tag": "!!python/object",
+    "flags": [
+     true,
+     false,
+     null,
+     1,
+     "s"
+    ],
+    "inner": {
+     "k": [],
+     "z": {}
+    }
+   }
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 25",
+   "line": 26,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 25",
+   "line": 26,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 26",
+   "line": 27,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 27",
+   "line": 28,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 25",
+   "line": 26,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "network",
+   "line": 27,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "network"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "no capability string",
+   "line": 28,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": ""
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "capability not a string",
+   "line": 29,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": 3
+   }
+  }
+ ],
+ "to_dict": [
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "b.py",
+    "message": "same spot",
+    "line": 3,
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "high",
+    "path": "b.py",
+    "message": "same spot",
+    "line": 3,
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "bogus",
+    "path": "a.md",
+    "message": "unknown severity sorts last",
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "x",
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "y",
+    "line": -1,
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "offset",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "offset zero",
+    "offset": 0,
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "offset zero",
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "column",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "column",
+    "column": 7,
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "column",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "column",
+    "line": 1,
+    "column": 2,
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "a\u00e9",
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "a\ud83d\ude00",
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "aZ",
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "a~",
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-001",
+    "rule": "rule",
+    "severity": "low",
+    "path": "a.md",
+    "message": "a\uffff",
+    "title": "Load-time preprocessing execution via inline dynamic-context injection",
+    "cwe": [
+     "CWE-94",
+     "CWE-829"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "gen.py",
+    "message": "m",
+    "line": 1,
+    "evidence": {
+     "engine": "opengrep",
+     "location_mapping": "unvalidated",
+     "engine_location": {
+      "start": {
+       "line": 1,
+       "col": 2,
+       "offset": 3
+      },
+      "end": {
+       "line": 4,
+       "col": 5,
+       "offset": 6
+      }
+     }
+    },
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "gen.py",
+    "message": "m",
+    "line": 1,
+    "evidence": {
+     "engine": "opengrep",
+     "location_mapping": "unvalidated",
+     "engine_location": {
+      "start": {
+       "line": 1,
+       "col": 2,
+       "offset": 3
+      },
+      "end": {
+       "line": 4,
+       "col": 5,
+       "offset": 7
+      }
+     }
+    },
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "gen.py",
+    "message": "m",
+    "line": 1,
+    "evidence": {
+     "engine": "opengrep",
+     "location_mapping": "unvalidated",
+     "engine_location": {
+      "start": {
+       "line": 1,
+       "col": 2,
+       "offset": 3
+      },
+      "end": {
+       "line": 4,
+       "col": 5,
+       "offset": 7
+      }
+     }
+    },
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "gen.py",
+    "message": "m",
+    "line": 1,
+    "evidence": {
+     "engine": "opengrep",
+     "location_mapping": "validated",
+     "engine_location": {
+      "start": {
+       "line": 1,
+       "col": 2,
+       "offset": 3
+      },
+      "end": {
+       "line": 4,
+       "col": 5,
+       "offset": 6
+      }
+     }
+    },
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "gen.py",
+    "message": "m",
+    "line": 1,
+    "evidence": {
+     "engine": "other",
+     "location_mapping": "unvalidated",
+     "engine_location": {
+      "start": {
+       "line": 1,
+       "col": 2,
+       "offset": 3
+      },
+      "end": {
+       "line": 4,
+       "col": 5,
+       "offset": 6
+      }
+     }
+    },
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "gen.py",
+    "message": "m",
+    "line": 1,
+    "evidence": {
+     "engine": "opengrep",
+     "location_mapping": "unvalidated",
+     "engine_location": {
+      "start": {
+       "line": 1,
+       "col": "3",
+       "offset": 3
+      },
+      "end": {
+       "line": true,
+       "col": 5,
+       "offset": 3.0
+      }
+     }
+    },
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "gen.py",
+    "message": "m",
+    "line": 1,
+    "evidence": {
+     "engine": "opengrep",
+     "location_mapping": "unvalidated",
+     "engine_location": {
+      "start": {
+       "line": 0,
+       "col": 0,
+       "offset": 0
+      },
+      "end": null
+     }
+    },
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "gen.py",
+    "message": "m",
+    "line": 1,
+    "evidence": {
+     "engine": "opengrep",
+     "location_mapping": "unvalidated",
+     "engine_location": {
+      "start": {
+       "line": 0,
+       "col": 0,
+       "offset": 0
+      },
+      "end": {
+       "line": 0,
+       "col": 0,
+       "offset": 0
+      }
+     }
+    },
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "gen.py",
+    "message": "m",
+    "line": 1,
+    "evidence": {
+     "engine": "opengrep",
+     "location_mapping": "unvalidated",
+     "engine_location": [
+      1,
+      2
+     ]
+    },
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-008",
+    "rule": "taint",
+    "severity": "critical",
+    "path": "gen.py",
+    "message": "m",
+    "line": 1,
+    "evidence": {
+     "engine": "opengrep",
+     "location_mapping": "unvalidated"
+    },
+    "title": "Untrusted-argument command injection with a proven assignment chain",
+    "cwe": [
+     "CWE-78",
+     "CWE-77"
+    ],
+    "tier": "T1"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "length"
+   ],
+   "value": {
+    "vector": "SXV-999",
+    "rule": "unregistered",
+    "severity": "medium",
+    "path": "c.md",
+    "message": "no meta",
+    "line": 4,
+    "length": 2
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "evidence"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "c.md",
+    "message": "vectorless",
+    "evidence": {
+     "phase": "static"
+    }
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "column",
+    "offset",
+    "length",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-034",
+    "rule": "unsafe-yaml-tag",
+    "severity": "high",
+    "path": "SKILL.md",
+    "message": "nested evidence",
+    "line": 2,
+    "column": 1,
+    "offset": 10,
+    "length": 5,
+    "evidence": {
+     "tag": "!!python/object",
+     "flags": [
+      true,
+      false,
+      null,
+      1,
+      "s"
+     ],
+     "inner": {
+      "k": [],
+      "z": {}
+     }
+    },
+    "title": "Unsafe YAML deserialisation tag in skill metadata",
+    "cwe": [
+     "CWE-502",
+     "CWE-94"
+    ],
+    "tier": "T2"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 00",
+    "line": 1,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 01",
+    "line": 2,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 02",
+    "line": 3,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 03",
+    "line": 4,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 04",
+    "line": 5,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 05",
+    "line": 6,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 06",
+    "line": 7,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 07",
+    "line": 8,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 08",
+    "line": 9,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 09",
+    "line": 10,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 10",
+    "line": 11,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 11",
+    "line": 12,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 12",
+    "line": 13,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 13",
+    "line": 14,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 14",
+    "line": 15,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 15",
+    "line": 16,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 16",
+    "line": 17,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 17",
+    "line": 18,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 18",
+    "line": 19,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 19",
+    "line": 20,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 20",
+    "line": 21,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 21",
+    "line": 22,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 22",
+    "line": 23,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 23",
+    "line": 24,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 24",
+    "line": 25,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-016",
+    "rule": "unpinned",
+    "severity": "medium",
+    "path": "z/req.txt",
+    "message": "dep 25",
+    "line": 26,
+    "title": "Unpinned or direct-URL dependency",
+    "cwe": [
+     "CWE-1395",
+     "CWE-937"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 00",
+    "line": 1
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 01",
+    "line": 2
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 02",
+    "line": 3
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 03",
+    "line": 4
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 04",
+    "line": 5
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 05",
+    "line": 6
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 06",
+    "line": 7
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 07",
+    "line": 8
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 08",
+    "line": 9
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 09",
+    "line": 10
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 10",
+    "line": 11
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 11",
+    "line": 12
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 12",
+    "line": 13
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 13",
+    "line": 14
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 14",
+    "line": 15
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 15",
+    "line": 16
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 16",
+    "line": 17
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 17",
+    "line": 18
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 18",
+    "line": 19
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 19",
+    "line": 20
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 20",
+    "line": 21
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 21",
+    "line": 22
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 22",
+    "line": 23
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 23",
+    "line": 24
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 24",
+    "line": 25
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 25",
+    "line": 26
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 26",
+    "line": 27
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line"
+   ],
+   "value": {
+    "vector": "",
+    "rule": "coverage-note",
+    "severity": "low",
+    "path": "z/req.txt",
+    "message": "note 27",
+    "line": 28
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 00",
+    "line": 1,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 01",
+    "line": 2,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 02",
+    "line": 3,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 03",
+    "line": 4,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 04",
+    "line": 5,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 05",
+    "line": 6,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 06",
+    "line": 7,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 07",
+    "line": 8,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 08",
+    "line": 9,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 09",
+    "line": 10,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 10",
+    "line": 11,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 11",
+    "line": 12,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 12",
+    "line": 13,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 13",
+    "line": 14,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 14",
+    "line": 15,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 15",
+    "line": 16,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 16",
+    "line": 17,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 17",
+    "line": 18,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 18",
+    "line": 19,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 19",
+    "line": 20,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 20",
+    "line": 21,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 21",
+    "line": 22,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 22",
+    "line": 23,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 23",
+    "line": 24,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 24",
+    "line": 25,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "execution 25",
+    "line": 26,
+    "evidence": {
+     "understated_capability": "execution"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "network",
+    "line": 27,
+    "evidence": {
+     "understated_capability": "network"
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "no capability string",
+    "line": 28,
+    "evidence": {
+     "understated_capability": ""
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  },
+  {
+   "keys": [
+    "vector",
+    "rule",
+    "severity",
+    "path",
+    "message",
+    "line",
+    "evidence",
+    "title",
+    "cwe",
+    "tier"
+   ],
+   "value": {
+    "vector": "SXV-033",
+    "rule": "manifest-capability-understated",
+    "severity": "medium",
+    "path": "run.py",
+    "message": "capability not a string",
+    "line": 29,
+    "evidence": {
+     "understated_capability": 3
+    },
+    "title": "Permission understatement: manifest declares less than the code does",
+    "cwe": [
+     "CWE-280",
+     "CWE-863"
+    ],
+    "tier": "T3"
+   }
+  }
+ ],
+ "sorted": [
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "b.py",
+   "message": "same spot",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "validated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 6
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "other",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 6
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 0,
+      "col": 0,
+      "offset": 0
+     },
+     "end": null
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": [
+     1,
+     2
+    ]
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated"
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 0,
+      "col": 0,
+      "offset": 0
+     },
+     "end": {
+      "line": 0,
+      "col": 0,
+      "offset": 0
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": "3",
+      "offset": 3
+     },
+     "end": {
+      "line": true,
+      "col": 5,
+      "offset": 3.0
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 6
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 7
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 7
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-034",
+   "rule": "unsafe-yaml-tag",
+   "severity": "high",
+   "path": "SKILL.md",
+   "message": "nested evidence",
+   "line": 2,
+   "column": 1,
+   "offset": 10,
+   "length": 5,
+   "evidence": {
+    "tag": "!!python/object",
+    "flags": [
+     true,
+     false,
+     null,
+     1,
+     "s"
+    ],
+    "inner": {
+     "k": [],
+     "z": {}
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "high",
+   "path": "b.py",
+   "message": "same spot",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-999",
+   "rule": "unregistered",
+   "severity": "medium",
+   "path": "c.md",
+   "message": "no meta",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": 2,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 25",
+   "line": 26,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "network",
+   "line": 27,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "network"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "no capability string",
+   "line": 28,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": ""
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "capability not a string",
+   "line": 29,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": 3
+   }
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 25",
+   "line": 26,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "aZ",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a~",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\u00e9",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\uffff",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\ud83d\ude00",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "offset zero",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "x",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "y",
+   "line": -1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "offset zero",
+   "line": null,
+   "column": null,
+   "offset": 0,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "column",
+   "line": null,
+   "column": 7,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "column",
+   "line": 1,
+   "column": 2,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "c.md",
+   "message": "vectorless",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "phase": "static"
+   }
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 25",
+   "line": 26,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 26",
+   "line": 27,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 27",
+   "line": 28,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "bogus",
+   "path": "a.md",
+   "message": "unknown severity sorts last",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  }
+ ],
+ "deduped": [
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "b.py",
+   "message": "same spot",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "validated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 6
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 0,
+      "col": 0,
+      "offset": 0
+     },
+     "end": {
+      "line": 0,
+      "col": 0,
+      "offset": 0
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": "3",
+      "offset": 3
+     },
+     "end": {
+      "line": true,
+      "col": 5,
+      "offset": 3.0
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 6
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 7
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-034",
+   "rule": "unsafe-yaml-tag",
+   "severity": "high",
+   "path": "SKILL.md",
+   "message": "nested evidence",
+   "line": 2,
+   "column": 1,
+   "offset": 10,
+   "length": 5,
+   "evidence": {
+    "tag": "!!python/object",
+    "flags": [
+     true,
+     false,
+     null,
+     1,
+     "s"
+    ],
+    "inner": {
+     "k": [],
+     "z": {}
+    }
+   }
+  },
+  {
+   "vector": "SXV-999",
+   "rule": "unregistered",
+   "severity": "medium",
+   "path": "c.md",
+   "message": "no meta",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": 2,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 25",
+   "line": 26,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "network",
+   "line": 27,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "network"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "no capability string",
+   "line": 28,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": ""
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "capability not a string",
+   "line": 29,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": 3
+   }
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 25",
+   "line": 26,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "aZ",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a~",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\u00e9",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\uffff",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\ud83d\ude00",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "offset zero",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "x",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "y",
+   "line": -1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "offset zero",
+   "line": null,
+   "column": null,
+   "offset": 0,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "column",
+   "line": null,
+   "column": 7,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "column",
+   "line": 1,
+   "column": 2,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "c.md",
+   "message": "vectorless",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "phase": "static"
+   }
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 25",
+   "line": 26,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 26",
+   "line": 27,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 27",
+   "line": 28,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "bogus",
+   "path": "a.md",
+   "message": "unknown severity sorts last",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  }
+ ],
+ "capped": [
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "b.py",
+   "message": "same spot",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "validated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 6
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 0,
+      "col": 0,
+      "offset": 0
+     },
+     "end": {
+      "line": 0,
+      "col": 0,
+      "offset": 0
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": "3",
+      "offset": 3
+     },
+     "end": {
+      "line": true,
+      "col": 5,
+      "offset": 3.0
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 6
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "critical",
+   "path": "gen.py",
+   "message": "m",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "engine": "opengrep",
+    "location_mapping": "unvalidated",
+    "engine_location": {
+     "start": {
+      "line": 1,
+      "col": 2,
+      "offset": 3
+     },
+     "end": {
+      "line": 4,
+      "col": 5,
+      "offset": 7
+     }
+    }
+   }
+  },
+  {
+   "vector": "SXV-034",
+   "rule": "unsafe-yaml-tag",
+   "severity": "high",
+   "path": "SKILL.md",
+   "message": "nested evidence",
+   "line": 2,
+   "column": 1,
+   "offset": 10,
+   "length": 5,
+   "evidence": {
+    "tag": "!!python/object",
+    "flags": [
+     true,
+     false,
+     null,
+     1,
+     "s"
+    ],
+    "inner": {
+     "k": [],
+     "z": {}
+    }
+   }
+  },
+  {
+   "vector": "SXV-999",
+   "rule": "unregistered",
+   "severity": "medium",
+   "path": "c.md",
+   "message": "no meta",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": 2,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "execution 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "execution"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "network",
+   "line": 27,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": "network"
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "no capability string",
+   "line": 28,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": ""
+   }
+  },
+  {
+   "vector": "SXV-033",
+   "rule": "manifest-capability-understated",
+   "severity": "medium",
+   "path": "run.py",
+   "message": "capability not a string",
+   "line": 29,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "understated_capability": 3
+   }
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-016",
+   "rule": "unpinned",
+   "severity": "medium",
+   "path": "z/req.txt",
+   "message": "dep 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "aZ",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a~",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\u00e9",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\uffff",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "a\ud83d\ude00",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "offset zero",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "x",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "y",
+   "line": -1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "offset zero",
+   "line": null,
+   "column": null,
+   "offset": 0,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "column",
+   "line": null,
+   "column": 7,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-001",
+   "rule": "rule",
+   "severity": "low",
+   "path": "a.md",
+   "message": "column",
+   "line": 1,
+   "column": 2,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "c.md",
+   "message": "vectorless",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {
+    "phase": "static"
+   }
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 00",
+   "line": 1,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 01",
+   "line": 2,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 02",
+   "line": 3,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 03",
+   "line": 4,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 04",
+   "line": 5,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 05",
+   "line": 6,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 06",
+   "line": 7,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 07",
+   "line": 8,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 08",
+   "line": 9,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 09",
+   "line": 10,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 10",
+   "line": 11,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 11",
+   "line": 12,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 12",
+   "line": 13,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 13",
+   "line": 14,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 14",
+   "line": 15,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 15",
+   "line": 16,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 16",
+   "line": 17,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 17",
+   "line": 18,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 18",
+   "line": 19,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 19",
+   "line": 20,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 20",
+   "line": 21,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 21",
+   "line": 22,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 22",
+   "line": 23,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 23",
+   "line": 24,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "coverage-note",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "note 24",
+   "line": 25,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "SXV-008",
+   "rule": "taint",
+   "severity": "bogus",
+   "path": "a.md",
+   "message": "unknown severity sorts last",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "findings-capped",
+   "severity": "low",
+   "path": "run.py",
+   "message": "1 more SXV-033:execution findings in run.py were suppressed (cap 25 per file)",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "findings-capped",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "1 more SXV-016 findings in z/req.txt were suppressed (cap 25 per file)",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  },
+  {
+   "vector": "",
+   "rule": "findings-capped",
+   "severity": "low",
+   "path": "z/req.txt",
+   "message": "3 more coverage-note findings in z/req.txt were suppressed (cap 25 per file)",
+   "line": null,
+   "column": null,
+   "offset": null,
+   "length": null,
+   "evidence": {}
+  }
+ ]
+}

@@ -1,0 +1,38 @@
+[
+{
+"input": "",
+"output": ""
+},
+{
+"input": "/",
+"output": ""
+},
+{
+"input": "/a/",
+"output": ""
+},
+{
+"input": "/a/b",
+"output": "b"
+},
+{
+"input": "a",
+"output": "a"
+},
+{
+"input": "a/b/c.tar",
+"output": "c.tar"
+},
+{
+"input": "//",
+"output": ""
+},
+{
+"input": "x/",
+"output": ""
+},
+{
+"input": "/x",
+"output": "x"
+}
+]

@@ -1,0 +1,54 @@
+name: engine-integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Guards the code lane's behaviour against the real, pinned OpenGrep engine on every platform
+# the binary ships for: the rule file loads and is byte-identical to the Python scanner's, the
+# contract fixtures match, the JavaScript sinks report by vector, and the built binary scans a
+# package and a system root end to end.
+concurrency:
+  group: engine-integration-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  opengrep:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: go build -o bin/ ./cmd/skill-xray
+      - name: Install pinned OpenGrep
+        run: ./bin/skill-xray install-opengrep
+        shell: bash
+      - name: Rule file, runtime pins and live engine contracts
+        run: go test -count=1 -timeout 30m -v -run 'EmbeddedRules|BundledRules|PlatformAssets|RealOpengrep|Live' ./internal/opengrep/
+      - name: Scan a package and a system root with the built binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/skills"
+          mkdir -p "$root/demo/scripts" "$root/clean"
+          printf -- '---\nname: demo\n---\nRun the script.\n' > "$root/demo/SKILL.md"
+          printf 'const { execSync } = require("child_process");\nexecSync(process.argv[2]);\n' > "$root/demo/scripts/run.js"
+          printf -- '---\nname: clean\n---\nNothing to see.\n' > "$root/clean/SKILL.md"
+          ./bin/skill-xray scan "$root/demo" --analyze --json > "$RUNNER_TEMP/demo.json"
+          grep -q '"SXV-008"' "$RUNNER_TEMP/demo.json"
+          ./bin/skill-xray system-scan --root "$root" --sarif "$RUNNER_TEMP/system.sarif"
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert len(d['runs']) == 2, d.keys()" "$RUNNER_TEMP/system.sarif"

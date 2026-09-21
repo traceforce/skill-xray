@@ -1,0 +1,158 @@
+[
+{
+"input": "AKIA0123456789ABCDEF",
+"pattern": "AKIA[0-9A-Z]{16}",
+"spans": [
+[
+0,
+20
+]
+]
+},
+{
+"input": "\u00e9AKIA0123456789ABCDEF",
+"pattern": "AKIA[0-9A-Z]{16}",
+"spans": []
+},
+{
+"input": " AKIA0123456789ABCDEF_",
+"pattern": "AKIA[0-9A-Z]{16}",
+"spans": []
+},
+{
+"input": "xAKIA0123456789ABCDEF AKIA0123456789ABCDEF!",
+"pattern": "AKIA[0-9A-Z]{16}",
+"spans": [
+[
+22,
+42
+]
+]
+},
+{
+"input": "AKIA0123456789ABCDEFAKIA0123456789ABCDEF",
+"pattern": "AKIA[0-9A-Z]{16}",
+"spans": []
+},
+{
+"input": "\u0663AKIA0123456789ABCDEF",
+"pattern": "AKIA[0-9A-Z]{16}",
+"spans": []
+},
+{
+"input": "(AKIA0123456789ABCDEF)",
+"pattern": "AKIA[0-9A-Z]{16}",
+"spans": [
+[
+1,
+21
+]
+]
+},
+{
+"input": "AKIA0123456789ABCDE",
+"pattern": "AKIA[0-9A-Z]{16}",
+"spans": []
+},
+{
+"input": "abc def",
+"pattern": "[a-z]+",
+"spans": [
+[
+0,
+3
+],
+[
+4,
+7
+]
+]
+},
+{
+"input": "abc\u00e9 def",
+"pattern": "[a-z]+",
+"spans": [
+[
+5,
+8
+]
+]
+},
+{
+"input": "a-b",
+"pattern": "[a-z]+",
+"spans": [
+[
+0,
+1
+],
+[
+2,
+3
+]
+]
+},
+{
+"input": "\u00e9",
+"pattern": "[a-z]+",
+"spans": []
+},
+{
+"input": "x",
+"pattern": "[a-z]+",
+"spans": [
+[
+0,
+1
+]
+]
+},
+{
+"input": "ab_cd ef",
+"pattern": "[a-z]+",
+"spans": [
+[
+6,
+8
+]
+]
+},
+{
+"input": "a a a",
+"pattern": "a",
+"spans": [
+[
+0,
+1
+],
+[
+2,
+3
+],
+[
+4,
+5
+]
+]
+},
+{
+"input": "aa a",
+"pattern": "a",
+"spans": [
+[
+3,
+4
+]
+]
+},
+{
+"input": "aaa",
+"pattern": "a",
+"spans": []
+},
+{
+"input": "ba ab",
+"pattern": "a",
+"spans": []
+}
+]

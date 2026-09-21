@@ -18,3 +18,8 @@ venv/
 
 # Scanner output
 out/
+bin/
+*.exe
+corpus/
+corpus-cache/
+*.test

@@ -1,0 +1,92 @@
+[
+{
+"input": "~+/\u00e9",
+"output": "~%2B%2F%C3%A9",
+"safe": "-._"
+},
+{
+"input": "dir/a b#\u00e9.py",
+"output": "dir/a%20b%23%C3%A9.py",
+"safe": "/"
+},
+{
+"input": "a%20.py",
+"output": "a%2520.py",
+"safe": "/"
+},
+{
+"input": "C:run.py",
+"output": "C%3Arun.py",
+"safe": "/"
+},
+{
+"input": "",
+"output": "",
+"safe": "/"
+},
+{
+"input": "abc",
+"output": "abc",
+"safe": ""
+},
+{
+"input": "a b",
+"output": "a%20b",
+"safe": ""
+},
+{
+"input": "\u00e9",
+"output": "%C3%A9",
+"safe": "\u00e9"
+},
+{
+"input": "!$&'()*+,;=:@",
+"output": "%21%24%26%27%28%29%2A%2B%2C%3B%3D%3A%40",
+"safe": ""
+},
+{
+"input": "/a/b",
+"output": "/a/b",
+"safe": "/"
+},
+{
+"input": "check-error",
+"output": "check-error",
+"safe": "-._"
+},
+{
+"input": "unknown-rule",
+"output": "unknown-rule",
+"safe": "-._"
+},
+{
+"input": "\ud83d\ude00",
+"output": "%F0%9F%98%80",
+"safe": "/"
+},
+{
+"input": "a_b.c-d~e",
+"output": "a_b.c-d~e",
+"safe": ""
+},
+{
+"input": "\u0000\u007f",
+"output": "%00%7F",
+"safe": ""
+},
+{
+"input_hex": "7261772dff",
+"output": "raw-%FF",
+"safe": "/"
+},
+{
+"input_hex": "eda08078",
+"output": "%ED%A0%80x",
+"safe": "/"
+},
+{
+"input_hex": "61c3",
+"output": "a%C3",
+"safe": "/"
+}
+]

@@ -1,0 +1,142 @@
+[
+{
+"output": "https://host:8443/x",
+"parts": [
+"https",
+"host:8443",
+"/x",
+"",
+""
+]
+},
+{
+"output": "https://host",
+"parts": [
+"https",
+"host",
+"",
+"",
+""
+]
+},
+{
+"output": "https://host/x",
+"parts": [
+"https",
+"host",
+"x",
+"",
+""
+]
+},
+{
+"output": "git:////x",
+"parts": [
+"git",
+"",
+"//x",
+"",
+""
+]
+},
+{
+"output": "http://",
+"parts": [
+"http",
+"",
+"",
+"",
+""
+]
+},
+{
+"output": "http:///p",
+"parts": [
+"http",
+"",
+"/p",
+"",
+""
+]
+},
+{
+"output": "mailto:x@y",
+"parts": [
+"mailto",
+"",
+"x@y",
+"",
+""
+]
+},
+{
+"output": "////a",
+"parts": [
+"",
+"",
+"//a",
+"",
+""
+]
+},
+{
+"output": "s://h/p?q#f",
+"parts": [
+"s",
+"h",
+"/p",
+"q",
+"f"
+]
+},
+{
+"output": "unknown:/p",
+"parts": [
+"unknown",
+"",
+"/p",
+"",
+""
+]
+},
+{
+"output": "//h/p",
+"parts": [
+"",
+"h",
+"p",
+"",
+""
+]
+},
+{
+"output": "git+ssh:///p",
+"parts": [
+"git+ssh",
+"",
+"/p",
+"",
+""
+]
+},
+{
+"output": "?q#f",
+"parts": [
+"",
+"",
+"",
+"q",
+"f"
+]
+},
+{
+"output": "http://h/p#f",
+"parts": [
+"http",
+"h",
+"/p",
+"",
+"f"
+]
+}
+]

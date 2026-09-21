@@ -1,0 +1,132 @@
+[
+{
+"fields": [
+"a"
+],
+"input": " a ",
+"lstrip": "a ",
+"rstrip": " a",
+"strip": "a"
+},
+{
+"fields": [
+"a"
+],
+"input": "\u001c a \u001f",
+"lstrip": "a \u001f",
+"rstrip": "\u001c a",
+"strip": "a"
+},
+{
+"fields": [
+"a"
+],
+"input": "\u00a0a\u3000",
+"lstrip": "a\u3000",
+"rstrip": "\u00a0a",
+"strip": "a"
+},
+{
+"fields": [
+"\u200b",
+"a"
+],
+"input": "\u200b a",
+"lstrip": "\u200b a",
+"rstrip": "\u200b a",
+"strip": "\u200b a"
+},
+{
+"fields": [
+"\ufeffa"
+],
+"input": "\ufeffa",
+"lstrip": "\ufeffa",
+"rstrip": "\ufeffa",
+"strip": "\ufeffa"
+},
+{
+"fields": [
+"a"
+],
+"input": "\u2028a\u2029",
+"lstrip": "a\u2029",
+"rstrip": "\u2028a",
+"strip": "a"
+},
+{
+"fields": [],
+"input": "",
+"lstrip": "",
+"rstrip": "",
+"strip": ""
+},
+{
+"fields": [],
+"input": "   ",
+"lstrip": "",
+"rstrip": "",
+"strip": ""
+},
+{
+"fields": [
+"a",
+"b",
+"c",
+"d",
+"e",
+"f",
+"g",
+"h"
+],
+"input": "a b\tc\u000bd\fe\u001cf\u0085g\u00a0h",
+"lstrip": "a b\tc\u000bd\fe\u001cf\u0085g\u00a0h",
+"rstrip": "a b\tc\u000bd\fe\u001cf\u0085g\u00a0h",
+"strip": "a b\tc\u000bd\fe\u001cf\u0085g\u00a0h"
+},
+{
+"fields": [],
+"input": "\u001c\u001d\u001e\u001f",
+"lstrip": "",
+"rstrip": "",
+"strip": ""
+},
+{
+"fields": [
+"x",
+"y"
+],
+"input": "\u1680x\u2000y\u200a",
+"lstrip": "x\u2000y\u200a",
+"rstrip": "\u1680x\u2000y",
+"strip": "x\u2000y"
+},
+{
+"fields": [
+"z"
+],
+"input": "\u202f\u205f z",
+"lstrip": "z",
+"rstrip": "\u202f\u205f z",
+"strip": "z"
+},
+{
+"fields": [
+"a\u001bb"
+],
+"input": "a\u001bb",
+"lstrip": "a\u001bb",
+"rstrip": "a\u001bb",
+"strip": "a\u001bb"
+},
+{
+"fields": [
+"\u00e9",
+"\u00fc"
+],
+"input": "\u00e9 \u00fc",
+"lstrip": "\u00e9 \u00fc",
+"rstrip": "\u00e9 \u00fc",
+"strip": "\u00e9 \u00fc"
+}
+]

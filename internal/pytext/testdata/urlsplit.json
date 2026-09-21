@@ -1,0 +1,600 @@
+[
+{
+"error": null,
+"fragment": "f",
+"hostname": "host.example",
+"input": "https://u:p@Host.Example:8443/x?q=1#f",
+"netloc": "u:p@Host.Example:8443",
+"path": "/x",
+"port": 8443,
+"query": "q=1",
+"scheme": "https"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "y.com",
+"input": "https://x@@y.com/",
+"netloc": "x@@y.com",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "https"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": null,
+"input": "https://:80/x",
+"netloc": ":80",
+"path": "/x",
+"port": 80,
+"query": "",
+"scheme": "https"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "example.com",
+"input": "HTTP://EXAMPLE.com",
+"netloc": "EXAMPLE.com",
+"path": "",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "host",
+"input": "//host/path",
+"netloc": "host",
+"path": "/path",
+"port": null,
+"query": "",
+"scheme": ""
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "::1",
+"input": "http://[::1]:80/",
+"netloc": "[::1]:80",
+"path": "/",
+"port": 80,
+"query": "",
+"scheme": "http"
+},
+{
+"error": "Invalid IPv6 URL",
+"input": "http://[::1"
+},
+{
+"error": "Invalid IPv6 URL",
+"input": "http://::1]/"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "v1.fe",
+"input": "http://[v1.fe]/",
+"netloc": "[v1.fe]",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": "IPvFuture address is invalid",
+"input": "http://[vz]/"
+},
+{
+"error": "An IPv4 address cannot be in brackets",
+"input": "http://[1.2.3.4]/"
+},
+{
+"error": "Invalid IPv6 URL",
+"input": "http://a[::1]/"
+},
+{
+"error": "Invalid IPv6 URL",
+"input": "http://[::1]x/"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "fe80::1%25eth0",
+"input": "http://[fe80::1%25eth0]/",
+"netloc": "[fe80::1%25eth0]",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "fe80::1%eth0",
+"input": "http://[fe80::1%eth0]:1234/",
+"netloc": "[fe80::1%eth0]:1234",
+"path": "/",
+"port": 1234,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "fe80::822a:a8ff:fe49:470c%tESt",
+"input": "http://[FE80::822a:A8FF:fe49:470c%tESt]:1234/keys",
+"netloc": "[FE80::822a:A8FF:fe49:470c%tESt]:1234",
+"path": "/keys",
+"port": 1234,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "a.b",
+"input": "  \t http://a.b/c\n",
+"netloc": "a.b",
+"path": "/c",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "a",
+"input": "\u001fhttp://a/",
+"netloc": "a",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": null,
+"input": "mailto:x@y.z",
+"netloc": "",
+"path": "x@y.z",
+"port": null,
+"query": "",
+"scheme": "mailto"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "github.com",
+"input": "git+https://github.com/a/b.git",
+"netloc": "github.com",
+"path": "/a/b.git",
+"port": null,
+"query": "",
+"scheme": "git+https"
+},
+{
+"error": "netloc 'exam\u2100ple.com' contains invalid characters under NFKC normalization",
+"input": "http://exam\u2100ple.com/"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "ex\uff01ample.com",
+"input": "http://ex\uff01ample.com/",
+"netloc": "ex\uff01ample.com",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": "netloc 'ex\uff20ample.com' contains invalid characters under NFKC normalization",
+"input": "http://ex\uff20ample.com"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "ex\u2460.com",
+"input": "http://ex\u2460.com",
+"netloc": "ex\u2460.com",
+"path": "",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "host",
+"input": "http://host:abc/",
+"netloc": "host:abc",
+"path": "/",
+"port": "error",
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "host",
+"input": "http://host:99999/",
+"netloc": "host:99999",
+"path": "/",
+"port": "error",
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "host",
+"input": "http://host:/",
+"netloc": "host:",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "host",
+"input": "http://host:0/",
+"netloc": "host:0",
+"path": "/",
+"port": 0,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": null,
+"input": "x://",
+"netloc": "",
+"path": "",
+"port": null,
+"query": "",
+"scheme": "x"
+},
+{
+"error": null,
+"fragment": "f",
+"hostname": "a.b",
+"input": "http://a.b?q#f",
+"netloc": "a.b",
+"path": "",
+"port": null,
+"query": "q",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "f?q",
+"hostname": "a.b",
+"input": "http://a.b#f?q",
+"netloc": "a.b",
+"path": "",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": null,
+"input": "1http://a/",
+"netloc": "",
+"path": "1http://a/",
+"port": null,
+"query": "",
+"scheme": ""
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "a",
+"input": "http://a/b\rc\nd",
+"netloc": "a",
+"path": "/bcd",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": null,
+"input": "+http://a/",
+"netloc": "",
+"path": "+http://a/",
+"port": null,
+"query": "",
+"scheme": ""
+},
+{
+"error": null,
+"fragment": "",
+"hostname": null,
+"input": "http:/a",
+"netloc": "",
+"path": "/a",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": null,
+"input": "file:///etc/passwd",
+"netloc": "",
+"path": "/etc/passwd",
+"port": null,
+"query": "",
+"scheme": "file"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "i\u0307.com",
+"input": "http://\u0130.com/",
+"netloc": "\u0130.com",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "host",
+"input": "http://user@host",
+"netloc": "user@host",
+"path": "",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "e.f",
+"input": "http://a:b@c:d@e.f/",
+"netloc": "a:b@c:d@e.f",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "::1",
+"input": "http://[::1]:x/",
+"netloc": "[::1]:x",
+"path": "/",
+"port": "error",
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": null,
+"input": "a/b/c",
+"netloc": "",
+"path": "a/b/c",
+"port": null,
+"query": "",
+"scheme": ""
+},
+{
+"error": null,
+"fragment": "",
+"hostname": null,
+"input": "",
+"netloc": "",
+"path": "",
+"port": null,
+"query": "",
+"scheme": ""
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "host.com",
+"input": "http://user:pa@ss@host.com",
+"netloc": "user:pa@ss@host.com",
+"path": "",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "api.example.com",
+"input": "https://api.example.com:443",
+"netloc": "api.example.com:443",
+"path": "",
+"port": 443,
+"query": "",
+"scheme": "https"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "::ffff:1.2.3.4",
+"input": "http://[::ffff:1.2.3.4]/",
+"netloc": "[::ffff:1.2.3.4]",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": "'::1%' does not appear to be an IPv4 or IPv6 address",
+"input": "http://[::1%]/"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "host",
+"input": "http://host:65535/",
+"netloc": "host:65535",
+"path": "/",
+"port": 65535,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "host",
+"input": "http://host:65536/",
+"netloc": "host:65536",
+"path": "/",
+"port": "error",
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "host",
+"input": "http://host:\u0663/",
+"netloc": "host:\u0663",
+"path": "/",
+"port": "error",
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "{host}",
+"input": "http://{host}/x",
+"netloc": "{host}",
+"path": "/x",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "a b",
+"input": "http://a b/c",
+"netloc": "a b",
+"path": "/c",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "a.b",
+"input": "HTTPS://A.B:8443",
+"netloc": "A.B:8443",
+"path": "",
+"port": 8443,
+"query": "",
+"scheme": "https"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "a.b",
+"input": "http://a.b:8080?x",
+"netloc": "a.b:8080",
+"path": "",
+"port": 8080,
+"query": "x",
+"scheme": "http"
+},
+{
+"error": "netloc '\uff20@b.c' contains invalid characters under NFKC normalization",
+"input": "http://\uff20@b.c/"
+},
+{
+"error": "netloc 'x\u2100' contains invalid characters under NFKC normalization",
+"input": "http://x\u2100/@a/"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "%41.com",
+"input": "http://%41.com/",
+"netloc": "%41.com",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "h",
+"input": "ftp://h/p",
+"netloc": "h",
+"path": "/p",
+"port": null,
+"query": "",
+"scheme": "ftp"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "b",
+"input": "s3://b/k",
+"netloc": "b",
+"path": "/k",
+"port": null,
+"query": "",
+"scheme": "s3"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "::1",
+"input": "http://[::1]:/",
+"netloc": "[::1]:",
+"path": "/",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "v1.x",
+"input": "http://[v1.x]:80/",
+"netloc": "[v1.x]:80",
+"path": "/",
+"port": 80,
+"query": "",
+"scheme": "http"
+},
+{
+"error": null,
+"fragment": "",
+"hostname": "::1",
+"input": "http://[::1]",
+"netloc": "[::1]",
+"path": "",
+"port": null,
+"query": "",
+"scheme": "http"
+},
+{
+"error": "'1::2::3' does not appear to be an IPv4 or IPv6 address",
+"input": "http://[1::2::3]/"
+}
+]
