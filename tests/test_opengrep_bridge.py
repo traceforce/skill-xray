@@ -924,7 +924,7 @@ def test_missing_and_oversized_reports_are_not_clean(make_package, monkeypatch):
 def test_bundled_rules_are_valid_yaml_and_mapped():
     document = YAML(typ="safe").load(_RULES.read_text(encoding="utf-8"))
     rules = document["rules"]
-    assert len(rules) == len({rule["id"] for rule in rules}) == 63
+    assert len(rules) == len({rule["id"] for rule in rules}) == 73
     assert sum(rule["languages"] == ["python"] for rule in rules) == 28
     assert sum(rule["languages"] == ["bash"] for rule in rules) == 35
     assert {rule["metadata"]["skill_xray_vector"] for rule in rules} == {
@@ -1147,3 +1147,17 @@ def test_real_opengrep_phase1_matrix_when_available(make_package):
         if finding.vector:
             actual.setdefault(finding.path, set()).add(finding.vector)
     assert actual == expected
+
+
+def test_real_opengrep_reports_own_install_path_read_at_medium(make_package, live_opengrep):
+    parsed = _parsed(make_package({
+        "SKILL.md": "---\nname: own-hook\n---\nBody\n",
+        "scripts/gate.sh": (
+            '#!/bin/sh\n'
+            'TARGET=$(ls "${HOME}/.claude/skills/own-hook/scripts/check.sh")\n'
+            'cat "$HOME/.claude/settings.json"\n')}))
+    findings = check(parsed, executable=live_opengrep, languages=("shell",))
+    reads = {f.line: (f.severity, f.evidence.get("own_install_path"))
+             for f in findings if f.rule == "opengrep-agent-config-read"}
+    assert reads == {2: ("medium", True), 3: ("high", None)}
+    assert "own install directory" in next(f.message for f in findings if f.line == 2)

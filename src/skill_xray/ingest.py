@@ -41,7 +41,9 @@ __all__ = [
 SCRIPT_EXT = {".py": "python", ".pyw": "python", ".sh": "shell", ".bash": "shell",
               ".zsh": "shell", ".command": "shell", ".bat": "batch", ".cmd": "batch",
               ".ps1": "powershell", ".js": "javascript", ".mjs": "javascript",
-              ".cjs": "javascript", ".ts": "typescript", ".rb": "ruby", ".pl": "perl"}
+              ".cjs": "javascript", ".jsx": "javascript", ".ts": "typescript",
+              ".tsx": "typescript", ".mts": "typescript", ".cts": "typescript",
+              ".rb": "ruby", ".pl": "perl"}
 
 # Shipped compiled or native code a text scanner cannot read: Python bytecode,
 # native extensions, and platform binaries (incl. JVM .jar/.class and Node .node).

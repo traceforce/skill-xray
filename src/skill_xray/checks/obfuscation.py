@@ -353,6 +353,19 @@ def _bidi_reorders_readable(line):
     rendered = "".join(c for c in visual if not _is_bidi_ctrl(ord(c)))
     return _readable_order(logical) != _readable_order(rendered)
 
+# The zero-width characters inside a detection rule's own "regex": "..." value are the thing it
+# detects, not a hidden instruction: a data file only, with the value still open at the run, and
+# no more code points than the tables below track (a rule lists each once; a channel needs more).
+_PATTERN_DATA_FILE_RE = re.compile(r"\.(?:json|ya?ml|toml)$", re.I)
+_PATTERN_KEY_RE = re.compile(r"""["']?regexp?["']?\s*[:=]\s*(?P<q>["'])""", re.I)
+
+
+def _in_pattern_value(prefix):
+    """True when prefix ends inside a "regex": "..." value: the last key's quote is still open."""
+    keys = list(_PATTERN_KEY_RE.finditer(prefix))
+    return bool(keys) and keys[-1].group("q") not in prefix[keys[-1].end():]
+
+
 _ZERO_WIDTH = {
     0x200B: "ZWSP", 0x200C: "ZWNJ", 0x200D: "ZWJ", 0x2060: "WJ",
     0xFEFF: "BOM", 0x180E: "MVS",
@@ -716,9 +729,15 @@ def _scan_invisible(line, lineno, rel, out, is_code=False):
         run_of_two = len(zw_runs) >= 2                  # >=2 zero-widths => a hidden run, escalate
         classes = sorted({_ZERO_WIDTH.get(cp) or _INVISIBLE_EXTRA.get(cp) or "U+%04X" % cp
                           for _, cp in zw_runs})
-        _mk(out, rel, "SXV-014",
-            "zero_width_run" if run_of_two else "zero_width_isolated",
-            "critical" if run_of_two else "medium", lineno, zw_runs[0][0],
+        tracked = len(_ZERO_WIDTH) + len(_INVISIBLE_EXTRA)
+        if (_PATTERN_DATA_FILE_RE.search(rel) and len(zw_runs) <= tracked
+                and _in_pattern_value(line[:zw_runs[0][0]])):
+            rule, severity = "zero_width_pattern_data", "low"   # a detector's own regex value
+        elif run_of_two:
+            rule, severity = "zero_width_run", "critical"
+        else:
+            rule, severity = "zero_width_isolated", "medium"
+        _mk(out, rel, "SXV-014", rule, severity, lineno, zw_runs[0][0],
             "%d zero-width/invisible codepoint(s) (%s) %s. De-obfuscated line: %r"
             % (len(zw_runs), ", ".join(classes),
                "form a hidden zero-width run in the text, defeating substring matching"
@@ -1000,10 +1019,57 @@ def _cap_findings(findings):
                         % (n - _FINDING_CAP, sev, vector or "-", rule, path, _FINDING_CAP)))
     return kept
 
+# --- obfuscated shipped script (SXV-044) -------------------------------------------------------
+# A script whose source is one machine-generated line cannot be reviewed by the marketplace, the
+# operator or the code lane. A JavaScript obfuscator leaves hex identifiers (_0x3a2f) and escaped
+# string tables (\x57\x50); a minifier leaves only the one long line. Both are JavaScript tooling,
+# so only JavaScript and TypeScript are checked: a Python or shell script that embeds bytes on one
+# line is readable. Vendor and build directories never reach here (ingest excludes them).
+_OBFUSCATED_KINDS = {"script_javascript", "script_typescript"}
+_OBFUSCATED_MIN_CHARS = 32 * 1024
+_OBFUSCATED_IDENT_RE = re.compile(r"\b_0x[0-9a-f]{4,}\b")
+_HEX_ESCAPE_RE = re.compile(r"\\x[0-9a-fA-F]{2}")
+_MINIFIED_NAME_RE = re.compile(r"[.-]min\.(?:[cm]?[jt]s|[jt]sx)$", re.I)
+
+
+def _generated_line(text):
+    """The first line carrying an obfuscator's identifiers or string table, whatever the file
+    size, as a line number; 0 when there is none."""
+    return next((n for n, line in enumerate(text.split("\n"), 1)
+                 if len(set(_OBFUSCATED_IDENT_RE.findall(line))) >= 20
+                 or len(_HEX_ESCAPE_RE.findall(line)) >= 200), 0)
+
+
+def _check_obfuscated_script(p, out):
+    """SXV-044: a shipped script that is one machine-generated line cannot be reviewed."""
+    text = p.text
+    if p.kind not in _OBFUSCATED_KINDS or text is None:
+        return
+    lines = text.split("\n")
+    longest_at = max(range(len(lines)), key=lambda i: len(lines[i]))
+    longest = len(lines[longest_at])
+    idents = len(set(_OBFUSCATED_IDENT_RE.findall(text)))
+    escapes = len(_HEX_ESCAPE_RE.findall(text))
+    generated = _generated_line(text)
+    if not generated and (len(text) < _OBFUSCATED_MIN_CHARS or longest < _OBFUSCATED_MIN_CHARS // 2
+                          or _MINIFIED_NAME_RE.search(p.rel)):
+        return  # short, multi-line, or a declared minified build (x.min.js) that hides nothing
+    obfuscated = generated > 0
+    _mk(out, p.rel, "SXV-044", "obfuscated-script" if obfuscated else "minified-script",
+        "high" if obfuscated else "medium", generated or longest_at + 1, 0,
+        "Shipped script is %s: %d characters on %d line(s), longest line %d%s. Code that cannot "
+        "be read cannot be reviewed."
+        % ("obfuscated machine output" if obfuscated else "minified", len(text),
+           text.count("\n") + 1, longest,
+           ", %d hex identifiers, %d escaped bytes" % (idents, escapes) if obfuscated else ""),
+        {"chars": len(text), "longest_line": longest, "hex_identifiers": idents,
+         "escaped_bytes": escapes})
+
 
 def check(parsed) -> list:
-    """Run concealment (SXV-007) and unicode deception (SXV-014/015) over the IR. Per-artifact
-    isolated: a pathological artifact records a scoped error and the scan continues."""
+    """Run concealment (SXV-007), unicode deception (SXV-014/015) and obfuscated-script (SXV-044)
+    over the IR. Per-artifact isolated: a pathological artifact records a scoped error and the
+    scan continues."""
     out = []
     lifted = _lifted_targets(parsed)
     for p in parsed.artifacts:
@@ -1011,6 +1077,7 @@ def check(parsed) -> list:
             if p.kind in _CONCEAL_KINDS or p.rel in lifted:
                 _check_concealment(p, out)
             _check_unicode(p, out)
+            _check_obfuscated_script(p, out)
         except Exception as exc:                # a poisoned artifact must not abort the scan, but
             out.append(Finding(                 # skipped analysis is a coverage loss, not "clean"
                 vector="", rule="check-error", severity="high", path=p.rel,

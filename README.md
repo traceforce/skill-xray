@@ -12,10 +12,11 @@ It is the counterpart of `mcp-xray`, which does the same for MCP servers.
 ## Status
 
 Ingest builds an inventory and coverage ledger. Parsing produces the shared IR;
-`--analyze` runs deterministic checks, including the pinned OpenGrep code lane.
-Analysis gaps remain visible in the findings. The scanner does not execute the
-package. `--analyze --sarif <path>` writes a validated SARIF report outside the scanned
-package, including evidence, source locations and audited dispositions. See
+`--analyze` runs deterministic checks, including the pinned OpenGrep code lane over
+bundled Python, shell, JavaScript and TypeScript. Analysis gaps remain visible in the
+findings. The scanner does not execute the package. `--analyze --sarif <path>` writes a
+validated SARIF report outside the scanned package, including evidence, source locations and
+audited dispositions. See
 [reporting](docs/reporting.md) for policy and failure semantics.
 
 The walker reads a package it does not trust, so:
@@ -86,14 +87,16 @@ one SXV-028/029/030/031 result it covers to `low`, recorded as `corrected` with
 `llm-review-policy` provenance. It never suppresses, never raises and never touches a
 mechanically anchored or protected result; see `docs/reporting.md`.
 
-Four rules keep "risky" apart from "malicious" in the deterministic lanes:
+These rules keep "risky" apart from "malicious" in the deterministic lanes:
 
 | vector | reports | severity |
 |---|---|---|
 | SXV-009 / SXV-041 | an installer-shaped HTTPS fetch (`curl -fsSL https://cli.vendor.com/install.sh \| sh`: one URL, a named installer path or bare host, no `user@`, no TLS bypass, no IP, no paste/tunnel/shortener or placeholder host, no shell substitution in the fetch) as an unpinned remote install | medium |
+| SXV-032 | a read of the skill's own install directory under an agent's skills tree (`ls ~/.claude/skills/<its own name>/...`), which is its own files, not another agent's state | medium |
 | SXV-033 | permission understatement, a T3 capability-consistency signal | medium |
 | SXV-042 | a prose directive to run a script shipped with the skill, framed as hidden from the user (`covert-bundled-script-run`) or as an unconditional precondition of every task (`coerced-bundled-preflight`) | high; medium with a single coercion cue |
 | SXV-043 | a prose directive to obtain the user's data and send it to an e-mail address or URL hard-coded in the skill text | high |
+| SXV-044 | a shipped JavaScript or TypeScript script that is one machine-generated line: an obfuscator's hex identifiers and escaped string tables (`obfuscated-script`), or a minifier's output outside a declared `.min.js` (`minified-script`); vendor and build directories are excluded upstream | high; medium when only minified |
 
 `--llm` without either review flag keeps the existing additive SXV-038 behavior.
 Add `--llm-additive` to run it after candidate review. Both share 25 logical calls

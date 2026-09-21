@@ -84,7 +84,7 @@ _VECTORS = {
     "SXV-030": {"title": "Cross-session memory-persistence directive",
                 "tier": "T3", "cwe": ["CWE-1427"]},
     "SXV-031": {"title": "Covert behavior-manipulation directive",
-                "tier": "T3", "cwe": ["CWE-1427"]},
+                "tier": "T2", "cwe": ["CWE-1427"]},
     "SXV-032": {"title": "Cross-agent configuration snooping in a skill script",
                 "tier": "T2", "cwe": ["CWE-200", "CWE-497"]},
     # T3: a manifest that under-declares what its fenced commands use is a capability-consistency
@@ -120,6 +120,8 @@ _VECTORS = {
     "SXV-043": {"title": "Sensitive-data exfiltration directive (send the user's data to a "
                          "recipient hard-coded in the skill)",
                 "tier": "T1", "cwe": ["CWE-200", "CWE-359", "CWE-1427"]},
+    "SXV-044": {"title": "Obfuscated or minified shipped script",
+                "tier": "T2", "cwe": ["CWE-506", "CWE-912"]},
 }
 
 

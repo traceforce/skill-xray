@@ -127,6 +127,40 @@ def _is_placeholder(rule_id, token):
     return rule_id == "slack-token" and bool(_SLACK_ZERO_PLACEHOLDER.fullmatch(token))
 
 
+# A credential-shaped token that a test under the package's own test directory hands to an
+# assertion or a redaction call ("test/sanitize.test.js": assert.ok(redactString('ghp_...'))) is a
+# fixture the tests need, not a secret the skill uses: reported, but at medium, like a fenced
+# example. The path alone is not enough; a token a script under tests/ sends somewhere stays high.
+_TEST_PATH_RE = re.compile(r"(?:^|/)(?:tests?|__tests__|spec)/", re.I)
+_FIXTURE_CALLEE_RE = re.compile(
+    r"(?:^|\.)(?:assert(?:\.\w+)?|expect|redact\w*|sanitiz\w*|mask\w*|scrub\w*)$", re.I)
+# a closed string literal or a comment before the token is not code ('const s = "assert("; ...')
+_NOT_CODE_RE = re.compile(
+    r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|/\*.*?\*/|//.*|#.*")
+
+
+def _fixture_call(line, col):
+    """The innermost call still open at col is an assertion or redaction call."""
+    prefix = _NOT_CODE_RE.sub(lambda m: " " * len(m.group(0)), line[:col])
+    opens = []
+    for i, ch in enumerate(prefix):
+        if ch == "(":
+            opens.append(i)
+        elif ch == ")" and opens:
+            opens.pop()
+    callee = re.search(r"([\w.]+)\s*$", prefix[:opens[-1]]) if opens else None
+    return callee is not None and _FIXTURE_CALLEE_RE.search(callee.group(1)) is not None
+
+
+def _reported(hit, lines, fixture_path):
+    """The severity a hit is reported at: medium for a token inside an assertion or redaction call
+    in a file under the package's own tests."""
+    rule_id, lineno, col, matched, sev = hit
+    if sev != "high" or not fixture_path:
+        return sev
+    return _MEDIUM if _fixture_call(lines[lineno - 1], col) else sev
+
+
 def _scan_secrets(text, in_fence):
     """Yield credential shapes, retaining only one pending private-key boundary."""
     pending, saw_encoded = None, False
@@ -137,17 +171,18 @@ def _scan_secrets(text, in_fence):
                 if token in _KNOWN_EXAMPLE or _is_placeholder(rule_id, token):
                     continue                        # published example / placeholder token
                 if rule_id == "private-key":
-                    pending = (lineno, token, token.replace("-----BEGIN ", "-----END ", 1))
+                    pending = (lineno, m.start(), token,
+                               token.replace("-----BEGIN ", "-----END ", 1))
                     saw_encoded = False
                     continue
                 fenced = bool(in_fence and in_fence(lineno))
-                yield rule_id, lineno, token, (_MEDIUM if fenced else sev)
+                yield rule_id, lineno, m.start(), token, (_MEDIUM if fenced else sev)
         if pending and lineno > pending[0]:
-            if pending[2] in line:
+            if pending[3] in line:
                 if saw_encoded:
-                    start, token, _end = pending
+                    start, col, token, _end = pending
                     fenced = bool(in_fence and in_fence(start))
-                    yield "private-key", start, token, (_MEDIUM if fenced else _HIGH)
+                    yield "private-key", start, col, token, (_MEDIUM if fenced else _HIGH)
                 pending = None
             elif len(line.strip()) >= 16 and re.fullmatch(r"[A-Za-z0-9+/=]+", line.strip()):
                 saw_encoded = True
@@ -191,19 +226,26 @@ def _secret_findings(parsed):
         in_fence = None
         if p.kind in _MARKDOWN_LANE and p.markdown is not None:
             in_fence = _fence_predicate(p.markdown)
-        # Keep memory bounded without letting early fenced examples hide later credentials.
+        # Keep memory bounded without letting early fenced examples or test fixtures hide later
+        # credentials: the cap sorts by the severity each hit will be reported at.
+        lines = p.text.split("\n")
+        fixture_path = _TEST_PATH_RE.search(p.rel) is not None
         selected = nsmallest(FINDING_CAP + 1, _scan_secrets(p.text, in_fence),
-                             key=lambda hit: (SEVERITY_RANK[hit[3]], hit[1]))
-        for rule_id, lineno, matched, sev in selected[:FINDING_CAP]:
+                             key=lambda hit: (SEVERITY_RANK[_reported(hit, lines, fixture_path)],
+                                              hit[1]))
+        for hit in selected[:FINDING_CAP]:
+            rule_id, lineno, _col, matched, sev = hit
             redacted = _redact(matched)
+            evidence = {"rule": rule_id, "redacted": redacted, "fenced_example": sev == _MEDIUM}
+            if _reported(hit, lines, fixture_path) != sev:
+                sev, evidence["test_fixture"] = _MEDIUM, True
             out.append(Finding(
                 vector="SXV-017", rule="committed-credential", severity=sev,
                 path=p.rel,
                 message=("Credential matching `%s` is committed in the package (%s)."
                          % (rule_id, redacted)),
                 line=lineno, offset=None, length=None,
-                evidence={"rule": rule_id, "redacted": redacted,
-                          "fenced_example": sev == _MEDIUM}))
+                evidence=evidence))
         if len(selected) > FINDING_CAP:
             out.append(Finding(
                 vector="", rule="findings-capped", severity=_LOW, path=p.rel,

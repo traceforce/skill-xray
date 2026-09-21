@@ -1417,8 +1417,11 @@ def _parse_one(art, p):
             # a localized ERROR region (with total count) is a coverage gap, not clean
             shown = ",".join("%d-%d" % s for s in spans[:_MAX_ERROR_SPANS])
             p.diagnostics.append(("shell_error_region", "%d:%s" % (len(spans), shown)))
+    elif kind in ("script_javascript", "script_typescript"):
+        pass                                       # no IR here; the code lane runs OpenGrep on it
     elif kind.startswith("script_"):
-        # a script language with no parser (ps1/js/ts/bat/rb/pl) must not read clean (§7)
+        # a script language with neither a parser nor an engine (ps1/bat/rb/pl) must not read
+        # clean (§7)
         p.diagnostics.append(("unsupported_language", kind.split("_", 1)[1]))
     elif kind == "agent_config" or kind in _JSON_CONFIG_KINDS:
         p.config, cerr = _load_structured(text, p.rel)

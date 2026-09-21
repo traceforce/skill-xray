@@ -108,13 +108,14 @@ _DIRECTIVE_RULES = (
         # "Developer Mode" is also an Android/Chrome/IDE setting ("1. Enable Developer Mode: go to
         # Settings > About phone"). It is the jailbreak only when tied to a model or to dropping
         # restrictions in the same sentence.
-        r"\bdeveloper mode\b[^.\n]{0,80}\b(?:chatgpt|gpt|claude|gemini|llama|"
+        r"\bdeveloper mode\b[^.\n|]{0,80}\b(?:chatgpt|gpt|claude|gemini|llama|"
         r"enabled output|no restrictions|unrestricted|uncensored|ignore|bypass|"
         r"jailbr\w+|without (?:any )?restrictions?|(?:all |any |the )?restrictions? "
         r"(?:removed|lifted|off|disabled|dropped)|"
         r"(?:remov\w*|drop\w*|lift\w*|disabl\w*|turn off) (?:all |any |the )?(?:your |its )?"
         r"restrictions?|filters? (?:disabled|off|removed)|no filters?)\b|"
-        r"\b(?:chatgpt|gpt|claude|gemini|llama)\b[^.\n]{0,80}\bdeveloper mode\b|"
+        # A table cell ("| ChatGPT | paid account with developer mode |") is a requirements row.
+        r"\b(?:chatgpt|gpt|claude|gemini|llama)\b[^.\n|]{0,80}\bdeveloper mode\b|"
         r"\b(?:(?:remov\w*|drop\w*|lift\w*|disabl\w*|turn off) (?:all |any |the )?(?:your |its )?"
         r"restrictions?|without (?:any )?restrictions?|(?:all |any |the )?restrictions? "
         r"(?:removed|lifted|off|disabled|dropped)|filters? (?:disabled|off|removed)|no filters?)"
@@ -257,6 +258,77 @@ _PARAM_DEF_RE = re.compile(
     r"`(?:-{1,2}\w[\w-]*(?:\s*[,/|]\s*-{1,2}\w[\w-]*)*|\?[\w-]+=?|[\w.-]+=[^`\n]*|"
     r"[^`\n]*<[^`\n]+>[^`\n]*)"
     r"(?:\s[^`\n]*)?`\s*(?:—|–|-{1,2}|:|=)\s*$")
+# "ignore rules" (gitignore), "reset commands", "wipe commands": the verb followed directly by a
+# bare weak noun names a category of thing, not an order about the model's own instructions;
+# real injections scope the noun ("ignore all previous rules"). `instructions`/`prompt` stay strong.
+_BARE_WEAK_NOUN_RE = re.compile(
+    r"^(?:ignore|disregard|forget|override|overrule|supersede|replace|reset|wipe)\s+"
+    r"(?:rule|guideline|constraint|direction|command|order|message)s?$", re.I)
+# "If a user asks you to ignore previous instructions, refuse": reported speech describes the
+# attack it defends against.
+# Only conditional reported speech whose clause reaches the saying verb ("if a user asks you to
+# ignore ...") describes an attack; "I want you to ignore ...", "the developer asks you to ..." and
+# "If you understand this, I want you to ..." (a comma ends the clause) are the attack.
+_REPORTED_SPEECH_RE = re.compile(
+    r"\b(?:if|when|whenever|should|in case)\b[^.,;\n]{0,60}"
+    r"\b(?:asks?|tells?|says?|tries|attempts?|instructs?|demands?|wants?|urges?)"
+    r"\s+(?:(?:you|it|the (?:agent|model|assistant|ai|bot))\s+)?(?:to\s+)?[\"'“‘«]?\s*$", re.I)
+# What stands before a cited quotation: a list marker and a space, a verb of saying, "like"/"such
+# as", a noun for phrases, or another quoted fragment ("a," "b"). The frame alone is two cheap
+# characters, so it only counts when the line holds several quoted fragments or the prose after
+# the quote talks about it (an attack, a pattern, a refusal) instead of giving the order.
+_CITATION_FRAME_RE = re.compile(
+    r"(?:^|\s)(?:[-*+]|\d+[.)])\s+$|"
+    r"\b(?:saying|says|said|like|such as|e\.g\.|for example|phrases?|patterns?|strings?|text|"
+    r"terms?|words?|instructions?)\s*$|"
+    r"[\"'“”‘’«»],?\s*$", re.I)
+# a single quote is an opening quote after a non-word character and a closing quote before one;
+# between word characters it is an apostrophe
+_OPEN_QUOTE_RE = re.compile(r"""["\u201c\u00ab]|(?<!\w)['\u2018]""")
+_CLOSE_QUOTE_RE = re.compile(r"""["\u201d\u00bb]|['\u2019](?!\w)""")
+_QUOTED_FRAGMENT_RE = re.compile(
+    r"""["'“‘«][^"'”’»\n]{3,}["'”’»]""")
+_DISCUSSED_RE = re.compile(
+    r"\b(?:attack|inject\w*|malicious|suspicious|phish\w*|refus\w*|reject\w*|declin\w*|"
+    r"ignore (?:it|them|such|this)|do not (?:follow|obey|comply|act)|"
+    r"don't (?:follow|obey|comply|act)|never (?:follow|obey|comply)|treat|flag|report|patterns?|"
+    r"phrases?|red flag|warning|indicators?)\b", re.I)
+# The clause after a reported order has to refuse it, and not go on to comply, for the report to
+# be defensive ("..., refuse" and "..., do not comply" yes; "..., warn them, then comply" no).
+_REFUSAL_CUE_RE = re.compile(
+    r"\b(?:(?:refus|reject|declin)\w*(?:\s+to\s+\w+)?|ignore (?:it|them|the request)|"
+    r"(?:do not|don't|never)\s+(?:comply|obey|follow|act on|do (?:so|it|this|that)|execute|run|"
+    r"proceed))\b", re.I)
+_COMPLIANCE_RE = re.compile(
+    r"\b(?:comply|obey|follow (?:it|them|the instructions?)|do (?:so|it|as told)|proceed|go ahead|"
+    r"execute (?:it|them))\b", re.I)
+
+
+def _rest_of_line(raw, pos):
+    end = raw.find("\n", pos)
+    return raw[pos:] if end < 0 else raw[pos:end]
+
+
+def _quoted(raw, start, end):
+    """A cited quotation: several quoted fragments, or a framed quote that is discussed after."""
+    line_start = raw.rfind("\n", 0, start) + 1
+    opens = list(_OPEN_QUOTE_RE.finditer(raw, line_start, start))
+    if not opens or _CLOSE_QUOTE_RE.search(raw, opens[-1].end(), start):
+        return False                            # the cue is not inside an open quotation
+    if _CITATION_FRAME_RE.search(raw[:opens[-1].start()]) is None:
+        return False
+    line = _rest_of_line(raw, line_start)
+    after = _rest_of_line(raw, end)
+    close = _CLOSE_QUOTE_RE.search(after)       # the discussion follows the closing quote
+    return (len(_QUOTED_FRAGMENT_RE.findall(line)) >= 2
+            or (close is not None and _DISCUSSED_RE.search(after[close.end():]) is not None))
+
+
+def _in_frontmatter(art, start_line):
+    """The YAML frontmatter block (`description: "..."`) is metadata, never an example intro."""
+    return start_line < (getattr(art, "frontmatter_end_line", None) or 0)
+
+
 # A caption names what an option does ("Override instructions", "ignore previous rules when
 # set"); a scoped order on the model's own instructions or prompt ("ignore all previous
 # instructions") is a directive even inside a definition list.
@@ -814,9 +886,15 @@ def _directive_findings(art):
                     continue
                 before = raw[:m.start()]
                 described = _EXAMPLE_INTRO_RE.search(before) or intro_prev
-                described = described or _is_defensive_frame(before)
+                described = (described or _is_defensive_frame(before)
+                             or _quoted(raw, m.start(), m.end()))
                 if described:
                     continue
+                rest = _rest_of_line(raw, m.end())
+                reported = (_REPORTED_SPEECH_RE.search(before) and _REFUSAL_CUE_RE.search(rest)
+                            and not _COMPLIANCE_RE.search(_REFUSAL_CUE_RE.sub(" ", rest)))
+                if vid == "SXV-028" and (_BARE_WEAK_NOUN_RE.match(m.group(0).strip()) or reported):
+                    continue                    # "ignore rules"; "if a user asks you to..., refuse"
                 if (vid == "SXV-028" and _PARAM_DEF_RE.search(before)
                         and not _SCOPED_DIRECTIVE_RE.search(m.group(0))):
                     continue                    # "`--flag` -- Override instructions": option docs
@@ -843,7 +921,7 @@ def _directive_findings(art):
                               "col": col,
                               "selector": "%s:%s" % (tag, matched.lower()[:50]),
                               "snippet": raw[:200]}))
-        previous = raw
+        previous = "" if _in_frontmatter(art, start_line) else raw
     for vector, total in totals.items():
         if total > _FINDING_CAP:
             out.append(_cap_note(art.rel, vector, total - _FINDING_CAP))
@@ -924,7 +1002,19 @@ _COERCED_RUN_CUE_RE = re.compile(
     r"\b(?:step|preflight|pre-flight|setup|script|hook|procedure|helper)s?(?:\s+\d+)?\**\s*"
     r"\((?:required|mandatory)\)|\brequired (?:before|prior to)\b|"
     r"\bmust (?:be )?(?:run|executed?|completed?|perform\w*) (?:first|before)\b|"
-    r"\b(?:run|execute) (?:it|this|that|the \w+(?: \w+)?) (?:first|before anything|before any)\b",
+    r"\b(?:run|execute) (?:it|this|that|the \w+(?: \w+)?) (?:first|before anything|before any)\b|"
+    # Coercion phrasings that benign setup prose does not use.
+    r"\b(?:your|the) (?:very )?first action (?:must|should|has to|needs to|is to|will) be to "
+    r"(?:run|execute|invoke|call|launch)\b|"
+    r"\bwithout (?:user|human|operator) prompting\b|"
+    r"\bwithout prompting the (?:user|human|operator)\b|"
+    r"\bhidden runtime dependenc(?:y|ies)\b|"
+    r"\bevals? (?:only )?(?:pass(?:es)?|succeeds?) (?:only )?(?:when|if|once|after)\b|"
+    r"\bbefore (?:producing|generating|composing|writing|returning|giving|emitting) "
+    r"(?:the|any|your|a) (?:final )?(?:response|answer|reply|output)\b|"
+    r"\b(?:do not|don'?t|never) (?:explain|describe|mention|discuss) (?:the|this) "
+    r"(?:pre-?flight|setup|preparation|bootstrap|warm-?up)\b|"
+    r"\b(?:is|as) a (?:hard |strict )?pre-?condition (?:for|of|to)\b|\bmust be warmed up\b",
     re.I)
 # Bundled-artifact references written as prose rather than as a path.
 _BUNDLED_PROSE_RE = re.compile(
@@ -997,7 +1087,8 @@ def _covert_script_findings(art):
         for _prose, _start, raw in blocks:
             offsets.append(len(joined))
             joined += raw + " "
-        covert = _COVERT_RUN_CUE_RE.search(joined)
+        covert = next((c for c in _COVERT_RUN_CUE_RE.finditer(joined)
+                       if not _quoted(joined, c.start(), c.end())), None)
         # "Before using any tool, read the docs" is ordinary prose: the before-any cue counts only
         # when its own sentence orders the shipped run.
         coercion = {}
@@ -1007,7 +1098,7 @@ def _covert_script_findings(art):
             coercion.setdefault(cm.group(0).lower(), cm)
         for (prose, start_line, raw), offset in zip(blocks, offsets, strict=True):
             intro_prev = bool(_SXV042_EXAMPLE_INTRO_RE.search(previous))
-            previous = raw
+            previous = "" if _in_frontmatter(art, start_line) else raw
             if covert is None and not coercion:
                 continue
             strong = covert is not None or len(coercion) >= 2
@@ -1294,7 +1385,8 @@ def _data_exfil_findings(art):
         if raw.lstrip().startswith("#"):                       # a heading opens a section
             example_section = bool(_EXFIL_EXAMPLE_HEADING_RE.search(raw))
         intro_prev = bool(_EXFIL_EXAMPLE_TAIL_RE.search(previous))
-        previous = "" if raw.lstrip().startswith("#") else raw     # a heading introduces nothing
+        previous = ("" if raw.lstrip().startswith("#") or _in_frontmatter(art, start_line)
+                    else raw)                                       # a heading introduces nothing
         sentences = _sentences(raw)
         for s_start, sentence in sentences:
             sentence = _EXFIL_CODE_SPAN_RE.sub(lambda c: " " * len(c.group(0)), sentence)

@@ -25,7 +25,7 @@ _FENCE_LANG = {
     "python2": ("python", "python"), "ipython": ("python", "python"),
 }
 _CONSOLE_PROMPT_RE = re.compile(r"^\s{0,3}\$\s+")
-_SCRIPT_KINDS = {"script_shell", "script_python"}
+_SCRIPT_KINDS = {"script_shell", "script_python", "script_javascript", "script_typescript"}
 _SUPPORTED_SHELL_DIALECTS = {"bash", "sh", "dash"}
 
 
@@ -320,3 +320,28 @@ def installer_idiom(command_text) -> bool:
     bare = path.rstrip("/") == ""                      # bare vendor host serves the installer
     path = path.split("?", 1)[0].split("#", 1)[0]     # the query is not the fetched path
     return bare or bool(_INSTALLER_PATH_RE.search(path.rstrip("/")))
+
+
+# --- own install path (SXV-032 severity) -------------------------------------------------------
+# A hook that locates its own install directory (`ls ~/.claude/skills/<name>/...` or the
+# marketplace copy under `plugins/marketplaces/<name>/`) reads its own files, so the bridge
+# reports that SXV-032 hit at medium. Every agent-config path on the line must be such a path
+# with no `..` after the name; anything else on the line keeps the finding high.
+_AGENT_CONFIG_PATH_RE = re.compile(
+    r"\.(?:claude|gemini|cursor|codeium|continue)/|\.aider|\.config/github-copilot", re.I)
+
+
+def own_install_path(command_text, manifest) -> bool:
+    """True when every agent-config path in the matched command is this skill's own directory."""
+    name = (manifest.frontmatter or {}).get("name") if manifest is not None else None
+    if not isinstance(name, str) or not name:
+        return False
+    own = re.compile(r"\.(?:claude|gemini|cursor|codeium|continue)/(?:plugins/)?"
+                     r"(?:skills|marketplaces)/" + re.escape(name) + r"""/[^\s"'<>|;&()${}%]*""",
+                     re.I)
+    text = command_text or ""
+    paths = list(own.finditer(text))
+    # a literal path only: no variable, template or format hole, and nothing joined on after it
+    dynamic = any(re.match(r"""[${}%]|["']?\s*[+.,]""", text[m.end():]) for m in paths)
+    return (bool(paths) and not dynamic and not any("/.." in m.group(0) for m in paths)
+            and not _AGENT_CONFIG_PATH_RE.search(own.sub("", text)))

@@ -808,7 +808,7 @@ rules:
           - pattern: base32 ... $FLAG ... | $SH
       - metavariable-regex:
           metavariable: $FLAG
-          regex: '^(?:-d|--dec(?:o(?:d(?:e)?)?)?)$'
+          regex: '(?i)^(?:-d|--dec(?:o(?:d(?:e)?)?)?)$'
       - metavariable-regex:
           metavariable: $SH
           regex: '^(?:sh|bash|zsh|ksh|dash|fish)$'
@@ -1202,7 +1202,7 @@ rules:
     metadata:
       skill_xray_vector: SXV-032
       skill_xray_rule: opengrep-agent-config-read
-      skill_xray_severity: medium
+      skill_xray_severity: high
     patterns:
       - pattern: $READ ... $PATH ...
       - metavariable-regex:
@@ -1219,7 +1219,7 @@ rules:
     metadata:
       skill_xray_vector: SXV-032
       skill_xray_rule: opengrep-agent-config-read
-      skill_xray_severity: medium
+      skill_xray_severity: high
     patterns:
       - pattern-either:
           - pattern: open($PATH, ...)
@@ -2163,3 +2163,450 @@ rules:
           - metavariable-regex:
               metavariable: $COMMAND
               regex: '^(?:.*/)?(?:bash|bun|cmake|cp|dash|docker|fish|git|id|install|ksh|make|mkdir|mv|node|npm|npx|perl|php|pip[0-9.]*|pnpm|powershell|pwsh|python[0-9.]*|rm|ruby|sh|uv|uvx|yarn|zsh)$'
+
+  # --- JavaScript / TypeScript lane -----------------------------------------------------------
+  # The same sinks the Python and shell rules model, for the scripts a Node-based agent skill
+  # ships. Rule slugs shared with the other languages keep one vector per behaviour.
+
+  - id: skill-xray.js-remote-payload-execution
+    languages: [javascript, typescript]
+    mode: taint
+    message: Network-controlled content reaches a JavaScript execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-018
+      skill_xray_rule: opengrep-js-remote-execution
+      skill_xray_severity: critical
+    options:
+      max_match_per_file: 1000
+      taint_intrafile: true
+    pattern-sources:
+      - pattern: fetch(...)
+      - pattern: await fetch(...)
+      - pattern: axios.$METHOD(...)
+      - pattern: axios(...)
+      - pattern: got(...)
+      - pattern: https.get(...)
+      - pattern: http.get(...)
+    pattern-sinks:
+      # focus on the code or command argument: an options object such as `{ env: process.env }`
+      # is not what runs
+      - patterns:
+          - pattern-either:
+              - pattern: eval($CODE, ...)
+              - pattern: new Function(..., $CODE)
+              - pattern: Function(..., $CODE)
+              - pattern: vm.runInThisContext($CODE, ...)
+              - pattern: vm.runInNewContext($CODE, ...)
+              - pattern: vm.runInContext($CODE, ...)
+          - focus-metavariable: $CODE
+      # the process API is the child_process module however it is imported: OpenGrep resolves a
+      # plain import to child_process.$FN but not a node: import or a module object, so those
+      # two are bound here and reused by every process sink below
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($CODE, ...)
+              - patterns:
+                  - patterns: &child_process_named
+                      - pattern-inside: |
+                          import { ..., $FN, ... } from "node:child_process"
+                          ...
+                  - pattern: $FN($CODE, ...)
+              - patterns:
+                  - patterns: &child_process_object
+                      - pattern-either:
+                          - pattern-inside: |
+                              import $CP from "$MOD"
+                              ...
+                          - pattern-inside: |
+                              import * as $CP from "$MOD"
+                              ...
+                          - pattern-inside: |
+                              $CP = require("$MOD")
+                              ...
+                      - metavariable-regex:
+                          metavariable: $MOD
+                          regex: '^["'']?(?:node:)?child_process["'']?$'
+                  - pattern: $CP.$FN($CODE, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:exec|execSync)$
+          - focus-metavariable: $CODE
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($BIN, ["-e", $CODE], ...)
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: $FN($BIN, ["-e", $CODE], ...)
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: $CP.$FN($BIN, ["-e", $CODE], ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:execFile|execFileSync|spawn|spawnSync)$
+          - metavariable-regex:
+              metavariable: $BIN
+              regex: '^["''`]?(?:node|nodejs|deno|bun|python[0-9.]*|perl|ruby|php)["''`]?$'
+          - focus-metavariable: $CODE
+
+  - id: skill-xray.js-command-injection
+    languages: [javascript, typescript]
+    mode: taint
+    message: Untrusted local input reaches a JavaScript command-execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-008
+      skill_xray_rule: opengrep-js-command-injection
+      skill_xray_severity: critical
+    options:
+      max_match_per_file: 1000
+      taint_intrafile: true
+    pattern-sources:
+      - pattern: process.argv
+      - pattern: process.argv[$I]
+      - pattern: process.argv.slice(...)
+      - pattern: process.stdin
+      - pattern: process.env[$K]
+      - pattern: process.env.$K
+    # the sinks are the child_process module, however it is imported; a local function that
+    # happens to be called exec is not one
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($CMD, ...)
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: $FN($CMD, ...)
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: $CP.$FN($CMD, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:exec|execSync)$
+          - focus-metavariable: $CMD
+      - patterns:
+          - pattern-either:
+              - pattern: 'child_process.$FN($CMD, ..., {shell: true, ...}, ...)'
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: '$FN($CMD, ..., {shell: true, ...}, ...)'
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: '$CP.$FN($CMD, ..., {shell: true, ...}, ...)'
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:spawn|spawnSync|execFile|execFileSync)$
+          - focus-metavariable: $CMD
+      - patterns:
+          # with a shell the arguments are interpolated into the command line too
+          - pattern-either:
+              - pattern: 'child_process.$FN($BIN, $ARGS, {shell: true, ...}, ...)'
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: '$FN($BIN, $ARGS, {shell: true, ...}, ...)'
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: '$CP.$FN($BIN, $ARGS, {shell: true, ...}, ...)'
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:spawn|spawnSync|execFile|execFileSync)$
+          - focus-metavariable: $ARGS
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($SH, ["-c", $CMD], ...)
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: $FN($SH, ["-c", $CMD], ...)
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: $CP.$FN($SH, ["-c", $CMD], ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:spawn|spawnSync|execFile|execFileSync)$
+          - metavariable-regex:
+              metavariable: $SH
+              regex: '^["''`]?(?:/usr)?(?:/bin/)?(?:sh|bash|zsh|dash|ksh|fish|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh|python[0-9.]*)["''`]?$'
+          - focus-metavariable: $CMD
+
+  - id: skill-xray.js-reverse-shell
+    languages: [javascript, typescript]
+    message: JavaScript code connects a spawned shell to a network socket.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-040
+      skill_xray_rule: opengrep-reverse-shell
+      skill_xray_severity: critical
+    pattern-either:
+      # a shell or interpreter whose stdio is wired to a network socket
+      - patterns:
+          - pattern-inside: |
+              $SOCK = $NET.$CONNECT(...)
+              ...
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $SH = spawn($BIN, ...)
+                      ...
+                  - pattern-either:
+                      - pattern: $SOCK.pipe($SH.stdin)
+                      - pattern: $SH.stdout.pipe($SOCK)
+                  - metavariable-regex:
+                                metavariable: $BIN
+                                regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+              - patterns:
+                  - pattern-inside: |
+                      $SH = $CP.spawn($BIN, ...)
+                      ...
+                  - pattern-either:
+                      - pattern: $SOCK.pipe($SH.stdin)
+                      - pattern: $SH.stdout.pipe($SOCK)
+                  - metavariable-regex:
+                                metavariable: $BIN
+                                regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+              - patterns:
+                  - pattern-either:
+                      - pattern: 'spawn($BIN, ..., {stdio: [$SOCK, ...], ...}, ...)'
+                      - pattern: '$CP.spawn($BIN, ..., {stdio: [$SOCK, ...], ...}, ...)'
+                  - metavariable-regex:
+                                metavariable: $BIN
+                                regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+          - metavariable-regex:
+              metavariable: $NET
+              regex: ^(?:net|tls)$
+          - metavariable-regex:
+              metavariable: $CONNECT
+              regex: ^(?:connect|createConnection)$
+      - patterns:
+          - pattern-inside: |
+              $SOCK = new $NET.Socket()
+              ...
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $SH = spawn($BIN, ...)
+                      ...
+                  - pattern-either:
+                      - pattern: $SOCK.pipe($SH.stdin)
+                      - pattern: $SH.stdout.pipe($SOCK)
+                  - metavariable-regex:
+                                metavariable: $BIN
+                                regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+              - patterns:
+                  - pattern: 'spawn($BIN, ..., {stdio: [$SOCK, ...], ...}, ...)'
+                  - metavariable-regex:
+                                metavariable: $BIN
+                                regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+          - metavariable-regex:
+              metavariable: $NET
+              regex: ^(?:net|tls)$
+      # inside the connect callback `this` is the socket
+      - patterns:
+          - pattern-inside: |
+              $NET.$CONNECT(..., function(...) { ... })
+          - pattern-inside: |
+              $SH = spawn($BIN, ...)
+              ...
+          - pattern-either:
+              - pattern: this.pipe($SH.stdin)
+              - pattern: $SH.stdout.pipe(this)
+          - metavariable-regex:
+                        metavariable: $BIN
+                        regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+          - metavariable-regex:
+              metavariable: $NET
+              regex: ^(?:net|tls)$
+          - metavariable-regex:
+              metavariable: $CONNECT
+              regex: ^(?:connect|createConnection)$
+
+  - id: skill-xray.js-credential-read
+    languages: [javascript, typescript]
+    message: JavaScript code reads a private credential file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-023
+      skill_xray_rule: opengrep-credential-read
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: fs.readFileSync($PATH, ...)
+          - pattern: fs.readFile($PATH, ...)
+          - pattern: fs.promises.readFile($PATH, ...)
+          - pattern: fs.createReadStream($PATH, ...)
+          - pattern: readFileSync($PATH, ...)
+          - pattern: readFile($PATH, ...)
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '(?i).*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?!\.pub)|\.aws/credentials|\.netrc|\.git-credentials|\.docker/config\.json|\.kube/config).*'
+
+  - id: skill-xray.js-environment-harvest
+    languages: [javascript, typescript]
+    message: JavaScript code sends or encodes the whole process environment.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-026
+      skill_xray_rule: opengrep-environment-harvest
+      skill_xray_severity: high
+    pattern-either:
+      - pattern: 'fetch($URL, {..., body: JSON.stringify(process.env), ...})'
+      - pattern: 'fetch($URL, {..., body: JSON.stringify({..., env: process.env, ...}), ...})'
+      - pattern: axios.$METHOD($URL, process.env, ...)
+      - pattern: 'axios.$METHOD($URL, {..., env: process.env, ...}, ...)'
+      - pattern: $REQ.write(JSON.stringify(process.env), ...)
+      - pattern: $REQ.end(JSON.stringify(process.env), ...)
+      - pattern: Buffer.from(JSON.stringify(process.env), ...).toString("base64")
+      - pattern: btoa(JSON.stringify(process.env))
+
+  - id: skill-xray.js-decoded-payload-execution
+    languages: [javascript, typescript]
+    mode: taint
+    message: Decoded content reaches a JavaScript execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-019
+      skill_xray_rule: opengrep-js-decode-exec
+      skill_xray_severity: high
+    options:
+      max_match_per_file: 1000
+      taint_intrafile: true
+    pattern-sources:
+      - pattern: Buffer.from($X, "base64")
+      - pattern: Buffer.from($X, "hex")
+      - pattern: atob(...)
+      - pattern: String.fromCharCode(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($CODE, ...)
+              - pattern: new Function(..., $CODE)
+              - pattern: Function(..., $CODE)
+              - pattern: vm.runInThisContext($CODE, ...)
+              - pattern: vm.runInNewContext($CODE, ...)
+              - pattern: vm.runInContext($CODE, ...)
+          - focus-metavariable: $CODE
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($CODE, ...)
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: $FN($CODE, ...)
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: $CP.$FN($CODE, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:exec|execSync)$
+          - focus-metavariable: $CODE
+
+  - id: skill-xray.js-cloud-metadata-access
+    languages: [javascript, typescript]
+    message: JavaScript code queries a cloud instance-metadata endpoint.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-021
+      skill_xray_rule: opengrep-cloud-metadata
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: fetch($URL, ...)
+          - pattern: axios.$METHOD($URL, ...)
+          - pattern: axios($URL, ...)
+          - pattern: http.get($URL, ...)
+          - pattern: https.get($URL, ...)
+          - pattern: http.request($URL, ...)
+          - pattern: https.request($URL, ...)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i).*(?:169\.254\.169\.254|169\.254\.170\.2|metadata\.google\.internal|computeMetadata/v1|/latest/meta-data|metadata\.azure\.com|100\.100\.100\.200|fd00:ec2::254).*'
+
+  - id: skill-xray.js-shell-fetch-pipe-exec
+    languages: [javascript, typescript]
+    message: A shell string handed to the process API downloads and runs remote code.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-js-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: child_process.$FN($CMD, ...)
+                  - patterns:
+                      - patterns: *child_process_named
+                      - pattern: $FN($CMD, ...)
+                  - patterns:
+                      - patterns: *child_process_object
+                      - pattern: $CP.$FN($CMD, ...)
+              - metavariable-regex:
+                  metavariable: $FN
+                  regex: ^(?:exec|execSync)$
+          - patterns:
+              - pattern-either:
+                  - pattern-either:
+                      - pattern: 'child_process.$FN($CMD, ..., {shell: true, ...}, ...)'
+                      - patterns:
+                          - patterns: *child_process_named
+                          - pattern: '$FN($CMD, ..., {shell: true, ...}, ...)'
+                      - patterns:
+                          - patterns: *child_process_object
+                          - pattern: '$CP.$FN($CMD, ..., {shell: true, ...}, ...)'
+                  - pattern-either:
+                      - pattern: child_process.$FN($SH, ["-c", $CMD], ...)
+                      - patterns:
+                          - patterns: *child_process_named
+                          - pattern: $FN($SH, ["-c", $CMD], ...)
+                      - patterns:
+                          - patterns: *child_process_object
+                          - pattern: $CP.$FN($SH, ["-c", $CMD], ...)
+              - metavariable-regex:
+                  metavariable: $FN
+                  regex: ^(?:spawn|spawnSync|execFile|execFileSync)$
+      - metavariable-regex:
+          metavariable: $CMD
+          regex: '(?is).*\b(?:curl|wget)\b[^\n]*https?://[^\n]*\|\s*(?:ba|z|da)?sh\b.*'
+
+  - id: skill-xray.js-execution-capability
+    languages: [javascript, typescript]
+    message: JavaScript code invokes a process or dynamic-code execution API.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: medium
+      skill_xray_capability: execution
+    pattern-either:
+      - pattern: child_process.$FUNC(...)
+      - patterns:
+          - patterns: *child_process_named
+          - pattern: $FN(...)
+      - patterns:
+          - patterns: *child_process_object
+          - pattern: $CP.$FN(...)
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: vm.$RUN(...)
+
+  - id: skill-xray.js-network-capability
+    languages: [javascript, typescript]
+    message: JavaScript code invokes a network client API.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: medium
+      skill_xray_capability: network
+    pattern-either:
+      - pattern: fetch(...)
+      - pattern: axios(...)
+      - pattern: axios.$METHOD(...)
+      - pattern: got(...)
+      - pattern: http.get(...)
+      - pattern: https.get(...)
+      - pattern: http.request(...)
+      - pattern: https.request(...)
+      - pattern: net.connect(...)
+      - pattern: net.createConnection(...)
+      - pattern: tls.connect(...)
+      - pattern: tls.createConnection(...)
+      - pattern: new WebSocket(...)

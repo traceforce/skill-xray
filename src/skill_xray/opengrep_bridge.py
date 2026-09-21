@@ -21,6 +21,7 @@ from .checks.code_lane import (
     _manifest_index,
     build_code_lane,
     installer_idiom,
+    own_install_path,
 )
 from .checks.grants import declared_capabilities, denied_capabilities, effective_grants
 from .findings import Finding, cap_findings, dedupe_findings, vector_registry
@@ -60,7 +61,10 @@ class SelectedCode:
     suffix: str = ".py"
 
 
-_LANGUAGE_KIND = {"python": ("script_python", ".py"), "shell": ("script_shell", ".sh")}
+_KEEP_SUFFIX = {".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"}
+_LANGUAGE_KIND = {"python": ("script_python", ".py"), "shell": ("script_shell", ".sh"),
+                  "javascript": ("script_javascript", ".js"),
+                  "typescript": ("script_typescript", ".ts")}
 
 
 def select_executable_code(
@@ -79,9 +83,11 @@ def select_executable_code(
             continue
         if unit.kind == "script_shell" and unit.dialect not in _SUPPORTED_SHELL_DIALECTS:
             continue
-        selected.append(
-            SelectedCode(unit.rel, unit.text, unit.origin, selected_kinds[unit.kind])
-        )
+        suffix = selected_kinds[unit.kind]
+        ext = os.path.splitext(unit.rel)[1].lower()
+        if unit.origin == "file" and ext in _KEEP_SUFFIX:
+            suffix = ext                        # OpenGrep reads JSX and TSX from the extension
+        selected.append(SelectedCode(unit.rel, unit.text, unit.origin, suffix))
     return selected
 
 
@@ -1581,6 +1587,14 @@ def findings_from_report(
             if (isinstance(matched_lines, str) and matched_lines.strip()
                     and installer_idiom(matched_lines)):
                 severity, installer = "medium", True
+        # A script reading the skill's own install directory is not snooping on another agent:
+        # keep the finding, report it at medium.
+        own_path = False
+        if rule == "opengrep-agent-config-read" and severity == "high":
+            matched_lines = extra.get("lines")
+            governing = _governing_manifest(manifests, target.rel)
+            if isinstance(matched_lines, str) and own_install_path(matched_lines, governing):
+                severity, own_path = "medium", True
         mapped_location = _location(result, target)
         if mapped_location is None:
             findings.append(_coverage(
@@ -1771,6 +1785,8 @@ def findings_from_report(
         }
         if installer:
             evidence["installer_idiom"] = "https-named-installer"
+        if own_path:
+            evidence["own_install_path"] = True
         if capability is not None:
             evidence.update({
                 "understated_capability": capability,
@@ -1803,6 +1819,8 @@ def findings_from_report(
                 "governing manifest %s does not declare observed %s capability"
                 % (manifest.rel, capability)
                 if capability is not None else
+                "The script reads its own install directory under an agent's configuration root."
+                if own_path else
                 str(extra.get("message") or "OpenGrep detected a tainted flow.")[:800]
             ),
             evidence=evidence,
