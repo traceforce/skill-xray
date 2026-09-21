@@ -659,12 +659,17 @@ def test_refs_parent_escape_dropped(make_package):
 
 # --- coverage completeness: kinds + frontmatter-bearing instruction files ----
 def test_unsupported_script_language_is_flagged(make_package):
-    # a script language with no parser (.ps1/.js/...) must be ledgered, not silently clean (§7).
+    # a script language with no parser and no engine (.ps1/.rb/...) must be ledgered, not
+    # silently clean (§7); JavaScript and TypeScript are the code lane's, so they carry no gap.
     pp = _parsed(make_package, {"SKILL.md": _M, "scripts/x.ps1": "Write-Host hi\n",
-                                "scripts/y.js": "console.log(1)\n"})
-    for rel, lang in (("scripts/x.ps1", "powershell"), ("scripts/y.js", "javascript")):
+                                "scripts/z.rb": "puts 1\n", "scripts/y.js": "console.log(1)\n",
+                                "scripts/t.ts": "console.log(1 as number)\n"})
+    for rel, lang in (("scripts/x.ps1", "powershell"), ("scripts/z.rb", "ruby")):
         a = pp.by_rel[rel]
         assert a.text is not None and ("unsupported_language", lang) in a.diagnostics
+    for rel in ("scripts/y.js", "scripts/t.ts"):
+        a = pp.by_rel[rel]
+        assert a.text is not None and a.diagnostics == []
 
 
 def test_instruction_file_frontmatter_grants_parsed(make_package):

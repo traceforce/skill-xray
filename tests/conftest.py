@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
+
+from skill_xray.opengrep_runtime import OpenGrepRuntimeError, resolve_opengrep
 
 
 @pytest.fixture
@@ -29,3 +32,17 @@ def make_package(tmp_path: Path):
         return root
 
     return _make
+
+
+@pytest.fixture
+def live_opengrep():
+    """The pinned OpenGrep executable: required in CI, otherwise the test is skipped."""
+    try:
+        executable = resolve_opengrep(os.environ.get("SKILL_XRAY_OPENGREP_BIN"))
+    except OpenGrepRuntimeError as exc:
+        pytest.fail(str(exc))
+    if executable is None:
+        if os.environ.get("CI"):
+            pytest.fail("pinned OpenGrep is required in CI")
+        pytest.skip("pinned OpenGrep is not installed")
+    return executable
