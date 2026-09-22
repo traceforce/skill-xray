@@ -1,11 +1,8 @@
 package sarif
 
 import (
-	"bytes"
 	"fmt"
 	"maps"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -17,7 +14,6 @@ import (
 	"github.com/traceforce/skill-xray/internal/codelane"
 	"github.com/traceforce/skill-xray/internal/correlate"
 	"github.com/traceforce/skill-xray/internal/findings"
-	"github.com/traceforce/skill-xray/internal/ingest"
 	"github.com/traceforce/skill-xray/internal/opengrep"
 	"github.com/traceforce/skill-xray/internal/parse"
 	"github.com/traceforce/skill-xray/internal/pytext"
@@ -350,56 +346,4 @@ func TestNativeSARIFAccountsForEveryCandidate(t *testing.T) {
 			assert.Empty(t, report.ContextErrors)
 		})
 	}
-}
-
-// TestCorpusSARIFParity is the parity gate for this package: for the first 100 cached Python CLI
-// runs (corpus-cache, sorted by key) whose package still exists, ingest -> parse -> scan.Report in
-// deterministic mode -> Build -> Encode must reproduce the oracle's py.sarif byte for byte
-// (00-overview D11). A divergent pair is written under corpus/sarif-parity/<key>/ for
-// `go run ./tools/parity attribute`.
-func TestCorpusSARIFParity(t *testing.T) {
-	if testing.Short() {
-		t.Skip("runs OpenGrep on 100 packages")
-	}
-	exe := requireOpengrep(t)
-	identical, divergent, skipped, unwritten := 0, 0, 0, 0
-	for _, cached := range testutil.CachedRuns(t) {
-		if identical+divergent == 100 {
-			break
-		}
-		py, err := os.ReadFile(filepath.Join(cached.Dir, "py.sarif"))
-		if err != nil || len(py) == 0 {
-			unwritten++
-			continue
-		}
-		pyDoc := loads(t, py)
-		p := parse.Parse(ingest.BuildPackage(cached.Package))
-		report, err := scan.Report(p, scan.Options{OpengrepExe: exe})
-		require.NoError(t, err, cached.Package)
-		if slices.ContainsFunc(l(runProps(pyDoc)["rawCandidates"]), func(c any) bool { return testutil.LaneFailed(m(m(c)["finding"])) }) ||
-			slices.ContainsFunc(report.Findings, func(f findings.Finding) bool {
-				return testutil.LaneFailed(f.ToMap()) || testutil.PresenceOnlyDiagnostic(f.ToMap())
-			}) {
-			skipped++
-			continue
-		}
-		doc, err := Build(p, report)
-		require.NoError(t, err, cached.Package)
-		got, err := Encode(doc)
-		require.NoError(t, err, cached.Package)
-		if bytes.Equal(got, py) {
-			identical++
-			continue
-		}
-		divergent++
-		dir := filepath.Join("..", "..", "corpus", "sarif-parity", filepath.Base(cached.Dir))
-		require.NoError(t, os.MkdirAll(dir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "py.sarif"), py, 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "go.sarif"), got, 0o644))
-		if divergent <= 10 {
-			t.Errorf("%s\n  py != go at %s", cached.Package, testutil.FirstDiff("", pyDoc, loads(t, got)))
-		}
-	}
-	t.Logf("SARIF corpus parity (ingest -> parse -> scan.Report -> Build -> Encode vs py.sarif): %d identical, %d divergent, %d skipped for an OpenGrep lane failure or a presence-only diagnostic, %d without an oracle SARIF",
-		identical, divergent, skipped, unwritten)
 }

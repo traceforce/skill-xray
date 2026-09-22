@@ -21,7 +21,7 @@ import (
 
 // Ports of tests/test_opengrep_bridge.py, tests/test_fence_locations.py and
 // tests/test_capability.py at the findings_from_report boundary, plus the recorded OpenGrep
-// reports of the frozen contracts (testdata/record_contract.py).
+// reports of the frozen contracts (testdata/<name>.recorded.json).
 
 // taintFlow is _taint_result; sourceLine 0 leaves the trace alone.
 func taintFlow(line int, vector, command string, sourceLine int) map[string]any {
@@ -847,7 +847,7 @@ func TestDenialScopePreservesValidatedObservations(t *testing.T) {
 	}
 }
 
-// ---- recorded OpenGrep reports (testdata/record_contract.py) ------------------------------------
+// ---- recorded OpenGrep reports (testdata/<name>.recorded.json) -----------------------------------
 
 type recorded struct {
 	Files     map[string]string `json:"files"`
@@ -866,7 +866,7 @@ func record(t *testing.T, name string) recorded {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name+".recorded.json"))
 	if err != nil {
-		t.Skipf("%s not recorded (testdata/record_contract.py): %v", name, err)
+		t.Skipf("%s not recorded: %v", name, err)
 	}
 	var rec recorded
 	require.NoError(t, json.Unmarshal(data, &rec))

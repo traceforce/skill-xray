@@ -1,11 +1,7 @@
 package checks
 
 import (
-	"os"
-	"path/filepath"
-	"regexp"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,27 +23,14 @@ func run(t *testing.T, files map[string]string) []findings.Finding {
 	return Run(parsed(t, files), "", nil)
 }
 
-// The registry is the oracle's _CHECKS tuple (checks/__init__.py) in order, read from the
-// oracle tree when it is present.
+// The registry runs the checks in the Python scanner's _CHECKS order; the module names are
+// the ones a check-error message prints.
 func TestRegistryIsThePythonOrder(t *testing.T) {
-	oracle := os.Getenv("SKILLXRAY_ORACLE")
-	if oracle == "" {
-		oracle = "../../../_reference/skill-xray-oracle"
-	}
-	src, err := os.ReadFile(filepath.Join(oracle, "src", "skill_xray", "checks", "__init__.py"))
-	if err != nil {
-		t.Skip("oracle tree absent:", err)
-	}
-	tuple := regexp.MustCompile(`(?s)_CHECKS = \((.*?)\)`).FindSubmatch(src)
-	require.NotNil(t, tuple)
-	var want, got []string
-	for _, name := range regexp.MustCompile(`[\w.]+`).FindAllString(string(tuple[1]), -1) {
-		if name == "analyze_package" {
-			want = append(want, "skill_xray.analyze")
-		} else {
-			want = append(want, "skill_xray.checks."+strings.TrimSuffix(name, ".check"))
-		}
-	}
+	want := []string{"skill_xray.analyze", "skill_xray.checks.coverage", "skill_xray.checks.grants",
+		"skill_xray.checks.hooks", "skill_xray.checks.instruction_exfil", "skill_xray.checks.metadata",
+		"skill_xray.checks.obfuscation", "skill_xray.checks.persistence", "skill_xray.checks.preproc",
+		"skill_xray.checks.supply_chain", "skill_xray.checks.taint_engine"}
+	var got []string
 	for _, c := range registry {
 		got = append(got, c.module)
 	}

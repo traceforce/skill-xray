@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// testdata/requirements.json is written by testdata/gen_goldens.py from CPython
-// packaging 24.2 and the oracle's hooks._is_exact_pin. Each requirement row
+// testdata/requirements.json was recorded from CPython packaging 24.2 and the
+// Python scanner's hooks._is_exact_pin. Each requirement row
 // names the pytest that exercises the input (tests/test_parse.py
 // test_requirements_deps_pinned, test_requirements_prefix_range_not_pinned,
 // test_requirements_url_continuation_and_comment, test_requirements_vcs_and_local_surfaced,

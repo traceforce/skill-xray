@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 # Guards the code lane's behaviour against the real, pinned OpenGrep engine on every platform
-# the binary ships for: the rule file loads and is byte-identical to the Python scanner's, the
+# the binary ships for: the rule file loads and matches its pinned digest, the
 # contract fixtures match, the JavaScript sinks report by vector, and the built binary scans a
 # package and a system root end to end.
 concurrency:
@@ -51,4 +51,4 @@ jobs:
           ./bin/skill-xray scan "$root/demo" --analyze --json > "$RUNNER_TEMP/demo.json"
           grep -q '"SXV-008"' "$RUNNER_TEMP/demo.json"
           ./bin/skill-xray system-scan --root "$root" --sarif "$RUNNER_TEMP/system.sarif"
-          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert len(d['runs']) == 2, d.keys()" "$RUNNER_TEMP/system.sarif"
+          test "$(jq '.runs | length' "$RUNNER_TEMP/system.sarif")" = 2

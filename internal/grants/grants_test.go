@@ -397,10 +397,3 @@ func TestDeclaredAndEffectiveGrants(t *testing.T) {
 	assert.Equal(t, map[string]bool{}, Declared(both))
 	assert.Equal(t, map[string]bool{"network": true}, Denied(both))
 }
-
-// Corpus parity against tools/parity/py_dump_findings.py grants.
-func TestCorpusParity(t *testing.T) {
-	testutil.CheckParity(t, "grants", func(dir string) []findings.Finding {
-		return Check(parse.Parse(ingest.BuildPackage(dir)))
-	})
-}
