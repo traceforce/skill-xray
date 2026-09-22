@@ -1,0 +1,1014 @@
+[
+{
+"indent": null,
+"input": {
+"a": "\u00e9\u007f\u001f<>&/'\"\\\b\f\n\r\t",
+"b": [
+1,
+2,
+{
+"c": null,
+"d": true,
+"e": false
+}
+]
+},
+"output": "{\"a\": \"\\u00e9\\u007f\\u001f<>&/'\\\"\\\\\\b\\f\\n\\r\\t\", \"b\": [1, 2, {\"c\": null, \"d\": true, \"e\": false}]}",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": {
+"a": "\u00e9\u007f\u001f<>&/'\"\\\b\f\n\r\t",
+"b": [
+1,
+2,
+{
+"c": null,
+"d": true,
+"e": false
+}
+]
+},
+"output": "{\n  \"a\": \"\\u00e9\\u007f\\u001f<>&/'\\\"\\\\\\b\\f\\n\\r\\t\",\n  \"b\": [\n    1,\n    2,\n    {\n      \"c\": null,\n      \"d\": true,\n      \"e\": false\n    }\n  ]\n}",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": {
+"a": "\u00e9\u007f\u001f<>&/'\"\\\b\f\n\r\t",
+"b": [
+1,
+2,
+{
+"c": null,
+"d": true,
+"e": false
+}
+]
+},
+"output": "{\n    \"a\": \"\\u00e9\\u007f\\u001f<>&/'\\\"\\\\\\b\\f\\n\\r\\t\",\n    \"b\": [\n        1,\n        2,\n        {\n            \"c\": null,\n            \"d\": true,\n            \"e\": false\n        }\n    ]\n}",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": {
+"a": "\u00e9\u007f\u001f<>&/'\"\\\b\f\n\r\t",
+"b": [
+1,
+2,
+{
+"c": null,
+"d": true,
+"e": false
+}
+]
+},
+"output": "{\n \"a\": \"\\u00e9\\u007f\\u001f<>&/'\\\"\\\\\\b\\f\\n\\r\\t\",\n \"b\": [\n  1,\n  2,\n  {\n   \"c\": null,\n   \"d\": true,\n   \"e\": false\n  }\n ]\n}",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": "\ud83d\ude00",
+"output": "\"\\ud83d\\ude00\"",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": "\ud83d\ude00",
+"output": "\"\\ud83d\\ude00\"",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": "\ud83d\ude00",
+"output": "\"\\ud83d\\ude00\"",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": "\ud83d\ude00",
+"output": "\"\\ud83d\\ude00\"",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": {
+"": 7,
+"10": 8,
+"9": 9,
+"Z": 4,
+"a": 3,
+"z": 2,
+"~": 5,
+"\u00e9": 1,
+"\u00e9\u0301": 6
+},
+"output": "{\"\": 7, \"10\": 8, \"9\": 9, \"Z\": 4, \"a\": 3, \"z\": 2, \"~\": 5, \"\\u00e9\": 1, \"\\u00e9\\u0301\": 6}",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": {
+"": 7,
+"10": 8,
+"9": 9,
+"Z": 4,
+"a": 3,
+"z": 2,
+"~": 5,
+"\u00e9": 1,
+"\u00e9\u0301": 6
+},
+"output": "{\n  \"\": 7,\n  \"10\": 8,\n  \"9\": 9,\n  \"Z\": 4,\n  \"a\": 3,\n  \"z\": 2,\n  \"~\": 5,\n  \"\\u00e9\": 1,\n  \"\\u00e9\\u0301\": 6\n}",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": {
+"": 7,
+"10": 8,
+"9": 9,
+"Z": 4,
+"a": 3,
+"z": 2,
+"~": 5,
+"\u00e9": 1,
+"\u00e9\u0301": 6
+},
+"output": "{\n    \"\": 7,\n    \"10\": 8,\n    \"9\": 9,\n    \"Z\": 4,\n    \"a\": 3,\n    \"z\": 2,\n    \"~\": 5,\n    \"\\u00e9\": 1,\n    \"\\u00e9\\u0301\": 6\n}",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": {
+"": 7,
+"10": 8,
+"9": 9,
+"Z": 4,
+"a": 3,
+"z": 2,
+"~": 5,
+"\u00e9": 1,
+"\u00e9\u0301": 6
+},
+"output": "{\n \"\": 7,\n \"10\": 8,\n \"9\": 9,\n \"Z\": 4,\n \"a\": 3,\n \"z\": 2,\n \"~\": 5,\n \"\\u00e9\": 1,\n \"\\u00e9\\u0301\": 6\n}",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": [],
+"output": "[]",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": [],
+"output": "[]",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": [],
+"output": "[]",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": [],
+"output": "[]",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": {},
+"output": "{}",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": {},
+"output": "{}",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": {},
+"output": "{}",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": {},
+"output": "{}",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": [
+"",
+[],
+{},
+null
+],
+"output": "[\"\", [], {}, null]",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": [
+"",
+[],
+{},
+null
+],
+"output": "[\n  \"\",\n  [],\n  {},\n  null\n]",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": [
+"",
+[],
+{},
+null
+],
+"output": "[\n    \"\",\n    [],\n    {},\n    null\n]",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": [
+"",
+[],
+{},
+null
+],
+"output": "[\n \"\",\n [],\n {},\n null\n]",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": 0,
+"output": "0",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": 0,
+"output": "0",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": 0,
+"output": "0",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": 0,
+"output": "0",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": -5,
+"output": "-5",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": -5,
+"output": "-5",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": -5,
+"output": "-5",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": -5,
+"output": "-5",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": 123456789012,
+"output": "123456789012",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": 123456789012,
+"output": "123456789012",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": 123456789012,
+"output": "123456789012",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": 123456789012,
+"output": "123456789012",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": "\u2028\u2029",
+"output": "\"\\u2028\\u2029\"",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": "\u2028\u2029",
+"output": "\"\\u2028\\u2029\"",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": "\u2028\u2029",
+"output": "\"\\u2028\\u2029\"",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": "\u2028\u2029",
+"output": "\"\\u2028\\u2029\"",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": "\ud83d\ude00\udbff\udfff",
+"output": "\"\\ud83d\\ude00\\udbff\\udfff\"",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": "\ud83d\ude00\udbff\udfff",
+"output": "\"\\ud83d\\ude00\\udbff\\udfff\"",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": "\ud83d\ude00\udbff\udfff",
+"output": "\"\\ud83d\\ude00\\udbff\\udfff\"",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": "\ud83d\ude00\udbff\udfff",
+"output": "\"\\ud83d\\ude00\\udbff\\udfff\"",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": "a\u0000b",
+"output": "\"a\\u0000b\"",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": "a\u0000b",
+"output": "\"a\\u0000b\"",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": "a\u0000b",
+"output": "\"a\\u0000b\"",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": "a\u0000b",
+"output": "\"a\\u0000b\"",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": true,
+"output": "true",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": true,
+"output": "true",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": true,
+"output": "true",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": true,
+"output": "true",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": false,
+"output": "false",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": false,
+"output": "false",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": false,
+"output": "false",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": false,
+"output": "false",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": null,
+"output": "null",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": null,
+"output": "null",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": null,
+"output": "null",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": null,
+"output": "null",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": [
+1.5,
+100.0,
+66.67,
+1e+16,
+1000000000000000.0,
+1e-05,
+0.0001,
+-0.0,
+0.0,
+5e-324,
+1.2345678901234568e+17,
+1e+22,
+0.30000000000000004,
+2.5,
+-1.5e-07,
+1e+100,
+1.7976931348623157e+308,
+33.33,
+2.675,
+0.0001,
+9500000000000000.0,
+9999999999999998.0,
+12345.678,
+-1e+16,
+4.35,
+1.0,
+0.5
+],
+"output": "[1.5, 100.0, 66.67, 1e+16, 1000000000000000.0, 1e-05, 0.0001, -0.0, 0.0, 5e-324, 1.2345678901234568e+17, 1e+22, 0.30000000000000004, 2.5, -1.5e-07, 1e+100, 1.7976931348623157e+308, 33.33, 2.675, 0.0001, 9500000000000000.0, 9999999999999998.0, 12345.678, -1e+16, 4.35, 1.0, 0.5]",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": [
+1.5,
+100.0,
+66.67,
+1e+16,
+1000000000000000.0,
+1e-05,
+0.0001,
+-0.0,
+0.0,
+5e-324,
+1.2345678901234568e+17,
+1e+22,
+0.30000000000000004,
+2.5,
+-1.5e-07,
+1e+100,
+1.7976931348623157e+308,
+33.33,
+2.675,
+0.0001,
+9500000000000000.0,
+9999999999999998.0,
+12345.678,
+-1e+16,
+4.35,
+1.0,
+0.5
+],
+"output": "[\n  1.5,\n  100.0,\n  66.67,\n  1e+16,\n  1000000000000000.0,\n  1e-05,\n  0.0001,\n  -0.0,\n  0.0,\n  5e-324,\n  1.2345678901234568e+17,\n  1e+22,\n  0.30000000000000004,\n  2.5,\n  -1.5e-07,\n  1e+100,\n  1.7976931348623157e+308,\n  33.33,\n  2.675,\n  0.0001,\n  9500000000000000.0,\n  9999999999999998.0,\n  12345.678,\n  -1e+16,\n  4.35,\n  1.0,\n  0.5\n]",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": [
+1.5,
+100.0,
+66.67,
+1e+16,
+1000000000000000.0,
+1e-05,
+0.0001,
+-0.0,
+0.0,
+5e-324,
+1.2345678901234568e+17,
+1e+22,
+0.30000000000000004,
+2.5,
+-1.5e-07,
+1e+100,
+1.7976931348623157e+308,
+33.33,
+2.675,
+0.0001,
+9500000000000000.0,
+9999999999999998.0,
+12345.678,
+-1e+16,
+4.35,
+1.0,
+0.5
+],
+"output": "[\n    1.5,\n    100.0,\n    66.67,\n    1e+16,\n    1000000000000000.0,\n    1e-05,\n    0.0001,\n    -0.0,\n    0.0,\n    5e-324,\n    1.2345678901234568e+17,\n    1e+22,\n    0.30000000000000004,\n    2.5,\n    -1.5e-07,\n    1e+100,\n    1.7976931348623157e+308,\n    33.33,\n    2.675,\n    0.0001,\n    9500000000000000.0,\n    9999999999999998.0,\n    12345.678,\n    -1e+16,\n    4.35,\n    1.0,\n    0.5\n]",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": [
+1.5,
+100.0,
+66.67,
+1e+16,
+1000000000000000.0,
+1e-05,
+0.0001,
+-0.0,
+0.0,
+5e-324,
+1.2345678901234568e+17,
+1e+22,
+0.30000000000000004,
+2.5,
+-1.5e-07,
+1e+100,
+1.7976931348623157e+308,
+33.33,
+2.675,
+0.0001,
+9500000000000000.0,
+9999999999999998.0,
+12345.678,
+-1e+16,
+4.35,
+1.0,
+0.5
+],
+"output": "[\n 1.5,\n 100.0,\n 66.67,\n 1e+16,\n 1000000000000000.0,\n 1e-05,\n 0.0001,\n -0.0,\n 0.0,\n 5e-324,\n 1.2345678901234568e+17,\n 1e+22,\n 0.30000000000000004,\n 2.5,\n -1.5e-07,\n 1e+100,\n 1.7976931348623157e+308,\n 33.33,\n 2.675,\n 0.0001,\n 9500000000000000.0,\n 9999999999999998.0,\n 12345.678,\n -1e+16,\n 4.35,\n 1.0,\n 0.5\n]",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": [
+"SXV-001",
+null
+],
+"output": "[\"SXV-001\", null]",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": [
+"SXV-001",
+null
+],
+"output": "[\n  \"SXV-001\",\n  null\n]",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": [
+"SXV-001",
+null
+],
+"output": "[\n    \"SXV-001\",\n    null\n]",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": [
+"SXV-001",
+null
+],
+"output": "[\n \"SXV-001\",\n null\n]",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": [
+{
+"x": [
+{
+"y": [
+[
+[]
+]
+]
+}
+]
+}
+],
+"output": "[{\"x\": [{\"y\": [[[]]]}]}]",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": [
+{
+"x": [
+{
+"y": [
+[
+[]
+]
+]
+}
+]
+}
+],
+"output": "[\n  {\n    \"x\": [\n      {\n        \"y\": [\n          [\n            []\n          ]\n        ]\n      }\n    ]\n  }\n]",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": [
+{
+"x": [
+{
+"y": [
+[
+[]
+]
+]
+}
+]
+}
+],
+"output": "[\n    {\n        \"x\": [\n            {\n                \"y\": [\n                    [\n                        []\n                    ]\n                ]\n            }\n        ]\n    }\n]",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": [
+{
+"x": [
+{
+"y": [
+[
+[]
+]
+]
+}
+]
+}
+],
+"output": "[\n {\n  \"x\": [\n   {\n    \"y\": [\n     [\n      []\n     ]\n    ]\n   }\n  ]\n }\n]",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": {
+"k": "vvv"
+},
+"output": "{\"k\": \"vvv\"}",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": {
+"k": "vvv"
+},
+"output": "{\n  \"k\": \"vvv\"\n}",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": {
+"k": "vvv"
+},
+"output": "{\n    \"k\": \"vvv\"\n}",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": {
+"k": "vvv"
+},
+"output": "{\n \"k\": \"vvv\"\n}",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": "\u00e9\u00e8\u00ea",
+"output": "\"\\u00e9\\u00e8\\u00ea\"",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": "\u00e9\u00e8\u00ea",
+"output": "\"\\u00e9\\u00e8\\u00ea\"",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": "\u00e9\u00e8\u00ea",
+"output": "\"\\u00e9\\u00e8\\u00ea\"",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": "\u00e9\u00e8\u00ea",
+"output": "\"\\u00e9\\u00e8\\u00ea\"",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": {
+"column": 1,
+"length": 0,
+"line": 3,
+"offset": 0
+},
+"output": "{\"column\": 1, \"length\": 0, \"line\": 3, \"offset\": 0}",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": {
+"column": 1,
+"length": 0,
+"line": 3,
+"offset": 0
+},
+"output": "{\n  \"column\": 1,\n  \"length\": 0,\n  \"line\": 3,\n  \"offset\": 0\n}",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": {
+"column": 1,
+"length": 0,
+"line": 3,
+"offset": 0
+},
+"output": "{\n    \"column\": 1,\n    \"length\": 0,\n    \"line\": 3,\n    \"offset\": 0\n}",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": {
+"column": 1,
+"length": 0,
+"line": 3,
+"offset": 0
+},
+"output": "{\n \"column\": 1,\n \"length\": 0,\n \"line\": 3,\n \"offset\": 0\n}",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": -9223372036854775808,
+"output": "-9223372036854775808",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": -9223372036854775808,
+"output": "-9223372036854775808",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": -9223372036854775808,
+"output": "-9223372036854775808",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": -9223372036854775808,
+"output": "-9223372036854775808",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": 9223372036854775807,
+"output": "9223372036854775807",
+"sort_keys": true
+},
+{
+"indent": 2,
+"input": 9223372036854775807,
+"output": "9223372036854775807",
+"sort_keys": true
+},
+{
+"indent": 4,
+"input": 9223372036854775807,
+"output": "9223372036854775807",
+"sort_keys": true
+},
+{
+"indent": 1,
+"input": 9223372036854775807,
+"output": "9223372036854775807",
+"sort_keys": true
+},
+{
+"indent": null,
+"input": "\ud83d\ude00",
+"output": "\"\\ud83d\\ude00\"",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": [],
+"output": "[]",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": [
+"",
+[],
+{},
+null
+],
+"output": "[\"\", [], {}, null]",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": 0,
+"output": "0",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": -5,
+"output": "-5",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": 123456789012,
+"output": "123456789012",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": "\u2028\u2029",
+"output": "\"\\u2028\\u2029\"",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": "\ud83d\ude00\udbff\udfff",
+"output": "\"\\ud83d\\ude00\\udbff\\udfff\"",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": "a\u0000b",
+"output": "\"a\\u0000b\"",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": true,
+"output": "true",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": false,
+"output": "false",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": null,
+"output": "null",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": [
+1.5,
+100.0,
+66.67,
+1e+16,
+1000000000000000.0,
+1e-05,
+0.0001,
+-0.0,
+0.0,
+5e-324,
+1.2345678901234568e+17,
+1e+22,
+0.30000000000000004,
+2.5,
+-1.5e-07,
+1e+100,
+1.7976931348623157e+308,
+33.33,
+2.675,
+0.0001,
+9500000000000000.0,
+9999999999999998.0,
+12345.678,
+-1e+16,
+4.35,
+1.0,
+0.5
+],
+"output": "[1.5, 100.0, 66.67, 1e+16, 1000000000000000.0, 1e-05, 0.0001, -0.0, 0.0, 5e-324, 1.2345678901234568e+17, 1e+22, 0.30000000000000004, 2.5, -1.5e-07, 1e+100, 1.7976931348623157e+308, 33.33, 2.675, 0.0001, 9500000000000000.0, 9999999999999998.0, 12345.678, -1e+16, 4.35, 1.0, 0.5]",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": [
+"SXV-001",
+null
+],
+"output": "[\"SXV-001\", null]",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": [
+{
+"x": [
+{
+"y": [
+[
+[]
+]
+]
+}
+]
+}
+],
+"output": "[{\"x\": [{\"y\": [[[]]]}]}]",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": "\u00e9\u00e8\u00ea",
+"output": "\"\\u00e9\\u00e8\\u00ea\"",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": -9223372036854775808,
+"output": "-9223372036854775808",
+"sort_keys": false
+},
+{
+"indent": null,
+"input": 9223372036854775807,
+"output": "9223372036854775807",
+"sort_keys": false
+}
+]

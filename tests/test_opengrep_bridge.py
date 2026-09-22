@@ -829,7 +829,8 @@ def test_relative_rule_path_is_resolved_before_temporary_cwd(make_package, tmp_p
     seen = {}
 
     def runner(command, **_kwargs):
-        seen["config"] = command[command.index("--config") + 1]
+        seen["config"] = Path(command[command.index("--config") + 1])
+        seen["text"] = seen["config"].read_text(encoding="utf-8")
         _write_report(command, json.dumps({
             "results": [], "errors": [], "paths": {"scanned": ["0000.py"]},
         }))
@@ -838,7 +839,9 @@ def test_relative_rule_path_is_resolved_before_temporary_cwd(make_package, tmp_p
     assert check(
         parsed, executable="opengrep", rules="rules.yml", runner=runner
     ) == []
-    assert Path(seen["config"]).is_absolute()
+    # the engine reads a copy at the engine root, never the file at its own path
+    assert seen["config"].is_absolute() and seen["config"].name == "rules.yml"
+    assert seen["config"].parent != tmp_path.resolve() and seen["text"] == "rules: []\n"
 
 
 def test_skipped_selected_target_is_not_clean(make_package):

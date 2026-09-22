@@ -1,0 +1,130 @@
+[
+{
+"input": "abc%20def",
+"output": "abc def"
+},
+{
+"input": "%E2%82",
+"output": "\ufffd"
+},
+{
+"input": "%E2%82A",
+"output": "\ufffdA"
+},
+{
+"input": "%E2",
+"output": "\ufffd"
+},
+{
+"input": "%F0%90%80",
+"output": "\ufffd"
+},
+{
+"input": "%F0%90A",
+"output": "\ufffdA"
+},
+{
+"input": "%ED%A0%80",
+"output": "\ufffd\ufffd\ufffd"
+},
+{
+"input": "%C0%AF",
+"output": "\ufffd\ufffd"
+},
+{
+"input": "%FF",
+"output": "\ufffd"
+},
+{
+"input": "%80",
+"output": "\ufffd"
+},
+{
+"input": "%zz",
+"output": "%zz"
+},
+{
+"input": "%",
+"output": "%"
+},
+{
+"input": "%2",
+"output": "%2"
+},
+{
+"input": "%C3%A9",
+"output": "\u00e9"
+},
+{
+"input": "a%2",
+"output": "a%2"
+},
+{
+"input": "%E2\u00e9",
+"output": "\ufffd\u00e9"
+},
+{
+"input": "%E2%82%C3%A9",
+"output": "\ufffd\u00e9"
+},
+{
+"input": "no percent",
+"output": "no percent"
+},
+{
+"input": "",
+"output": ""
+},
+{
+"input": "%41%42",
+"output": "AB"
+},
+{
+"input": "%4a%4B",
+"output": "JK"
+},
+{
+"input": "%%41",
+"output": "%A"
+},
+{
+"input": "\u00e9%20",
+"output": "\u00e9 "
+},
+{
+"input": "%e2%80%a8",
+"output": "\u2028"
+},
+{
+"input": "%F4%90%80%80",
+"output": "\ufffd\ufffd\ufffd\ufffd"
+},
+{
+"input": "%E0%80%80",
+"output": "\ufffd\ufffd\ufffd"
+},
+{
+"input": "%C2",
+"output": "\ufffd"
+},
+{
+"input": "%F0%9F%98%80",
+"output": "\ud83d\ude00"
+},
+{
+"input": "%2F..%2F",
+"output": "/../"
+},
+{
+"input": "%+1",
+"output": "%+1"
+},
+{
+"input": "%1g",
+"output": "%1g"
+},
+{
+"input": "%F0%90%80\u00e9",
+"output": "\ufffd\u00e9"
+}
+]

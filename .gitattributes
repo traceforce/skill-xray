@@ -1,2 +1,13 @@
 /src/skill_xray/schemas/sarif-schema-2.1.0.json -text
 /src/skill_xray/rules/opengrep-phase1.yml -text
+/internal/opengrep/rules/opengrep-phase1.yml -text
+# The Go sources, module files and Makefile are LF on every platform so gofmt and make agree
+# with the committed bytes; the Go test fixtures and lookup tables are read byte for byte.
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+Makefile text eol=lf
+/internal/*/testdata/** -text
+/internal/*/*/testdata/** -text
+/internal/obfuscation/*.tsv -text
+/internal/sarif/schemas/*.json -text

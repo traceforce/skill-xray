@@ -1953,6 +1953,11 @@ def check(
         source_root.mkdir()
         report_path = root / "opengrep-report.json"
         stderr_path = root / "opengrep-stderr.txt"
+        # the engine prefixes rule ids with the config file's dotted directory path, so a rule
+        # file run from its install path names that path in every engine error; a copy at the
+        # engine root keeps the ids bare
+        engine_rules = root / "rules.yml"
+        engine_rules.write_bytes(rule_path.read_bytes())
         targets = {}
         for index, item in enumerate(selected):
             name = "%04d%s" % (index, item.suffix)
@@ -1966,7 +1971,7 @@ def check(
             "--jobs=1", "--max-memory=512", "--max-target-bytes=%d" % _MAX_TARGET_BYTES,
             "--max-match-per-file=1000", "--timeout=5", "--timeout-threshold=1",
             "--output", str(report_path),
-            "--config", str(rule_path), str(source_root),
+            "--config", str(engine_rules), str(source_root),
         ]
         try:
             with stderr_path.open("w+", encoding="utf-8", errors="replace") as stderr_handle:

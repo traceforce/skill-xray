@@ -4,6 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# A newer commit on a PR cancels the older in-progress run; main is left alone so every merged
+# commit still gets a completed status.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -38,3 +48,61 @@ jobs:
         run: python dev/deadcode.py src
       - name: Test
         run: python -m pytest tests
+
+  go:
+    # The Go scanner runs on the same three platforms as the Python one: the walker has
+    # Windows-only and Unix-only code paths, and the live OpenGrep tests need the pinned binary.
+    # ubuntu and macos run `make ci`, the target mcp-xray's CI runs; Windows runs its three
+    # commands directly because the runner image has no GNU make.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      # The parity tests shell out to the Python scanner in this repository as the oracle, so
+      # its runtime dependencies are installed; the scanner itself is imported from src/.
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12.4"
+      - name: Install the Python scanner's dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+        shell: bash
+      - name: Build
+        run: go build -o bin/ ./cmd/skill-xray
+      - name: Smoke
+        run: ./bin/skill-xray version
+        shell: bash
+      - name: Install pinned OpenGrep
+        run: ./bin/skill-xray install-opengrep
+        shell: bash
+      - name: Format
+        run: test -z "$(gofmt -l ./cmd ./internal ./tools)"
+        shell: bash
+      - name: Lint
+        if: runner.os == 'Linux'
+        run: make lint
+      - name: Dependencies against the Go vulnerability database
+        if: runner.os == 'Linux'
+        run: make vuln
+      - name: Cross-compile for every platform the pinned OpenGrep runtime covers
+        if: runner.os == 'Linux'
+        run: |
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/skill-xray
+          done
+      - name: Build, vet and test
+        if: runner.os != 'Windows'
+        run: make ci
+      - name: Build, vet and test
+        if: runner.os == 'Windows'
+        run: |
+          go build ./...
+          go vet ./...
+          go test -timeout 30m ./...

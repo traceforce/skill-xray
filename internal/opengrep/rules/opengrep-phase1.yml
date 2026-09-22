@@ -1,0 +1,2612 @@
+rules:
+  - id: skill-xray.python-local-command-injection
+    languages: [python]
+    mode: taint
+    message: Untrusted local input reaches a Python command-execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-008
+      skill_xray_rule: opengrep-python-command-injection
+      skill_xray_severity: critical
+    options:
+      max_match_per_file: 1000
+      taint_intrafile: true
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - pattern-either:
+          - pattern: input(...)
+          - pattern: raw_input(...)
+          - pattern: sys.argv[$INDEX]
+          - pattern: os.environ[$KEY]
+          - pattern: os.environ.get(...)
+          - pattern: os.getenv(...)
+          - pattern: sys.stdin.read(...)
+          - pattern: sys.stdin.readline(...)
+          - pattern: sys.stdin.readlines(...)
+          - pattern: sys.stdin.buffer.read(...)
+          - pattern: sys.stdin.buffer.readline(...)
+          - pattern: sys.stdin.buffer.readlines(...)
+      - exact: true
+        pattern: sys.stdin
+      - exact: true
+        pattern: sys.argv
+      - exact: true
+        pattern-either:
+          - pattern: sys.argv[$START:]
+          - pattern: sys.argv[$START:$END]
+      - exact: true
+        pattern: subprocess.list2cmdline(sys.argv)
+      - exact: true
+        pattern: yaml.safe_load(sys.stdin.read(...))
+      - exact: true
+        pattern: '" ".join($ITEM for $ITEM in sys.argv)'
+      - patterns:
+          - pattern: $ITEM
+          - pattern-inside: |
+              for $ITEM in sys.argv[$SLICE]:
+                ...
+      - patterns:
+          - pattern: shlex.quote($VALUE)
+          - pattern-inside: |
+              $VALUE = sys.argv[$INDEX]
+              ...
+      - patterns:
+          - pattern: $PARSER.parse_args(...)
+          - pattern-inside: |
+              $PARSER = argparse.ArgumentParser(...)
+              ...
+      - patterns:
+          - pattern: $PARSER.parse_known_args(...)
+          - pattern-inside: |
+              $PARSER = argparse.ArgumentParser(...)
+              ...
+    pattern-propagators:
+      - pattern: $OUT = shlex.quote($IN)
+        from: $IN
+        to: $OUT
+    pattern-sinks:
+      - patterns:
+          - pattern: shlex.quote($COMMAND)
+          - pattern-inside: os.system(...)
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern-either:
+              - pattern: os.system($COMMAND)
+              - pattern: os.popen($COMMAND, ...)
+              - pattern: eval($COMMAND, ...)
+              - pattern: exec($COMMAND, ...)
+              - pattern: builtins.eval($COMMAND, ...)
+              - pattern: builtins.exec($COMMAND, ...)
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - pattern-inside: |
+              from subprocess import *
+              ...
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getoutput|getstatusoutput)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD([$SHELL, "-c", $COMMAND, ...], ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern-either:
+              - pattern: os.execl($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execlp($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execle($SHELL, $ARGV0, "-c", $COMMAND, ..., $ENV)
+              - pattern: os.execv($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execvp($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execve($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.execvpe($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.posix_spawn($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+              - pattern: os.posix_spawnp($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $ALIAS($COMMAND)
+          - pattern-inside: |
+              $ALIAS = os.system
+              ...
+          - focus-metavariable: $COMMAND
+
+  - id: skill-xray.python-local-helper-command-injection
+    languages: [python]
+    message: Untrusted local input reaches a Python command-execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-008
+      skill_xray_rule: opengrep-python-command-injection
+      skill_xray_severity: critical
+    patterns:
+      - pattern-either:
+          - pattern: |
+              def $FUNC(...):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              if $CONDITION:
+                ...
+                $FUNC = $OTHER
+                ...
+              ...
+              $FUNC(..., $SOURCE, ...)
+          - pattern: |
+              def $FUNC(...):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              try:
+                ...
+              except $EXCEPTION:
+                ...
+                $FUNC = $OTHER
+                ...
+              ...
+              $FUNC(..., $SOURCE, ...)
+          - pattern: |
+              def $FUNC(...):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              $FUNC(..., $SOURCE, ...)
+              ...
+              def $FUNC(...):
+                ...
+          - pattern: |
+              def $FUNC(...):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              $FUNC(..., **{$KEY: $SOURCE}, ...)
+          - pattern: |
+              class $CLASS:
+                ...
+                def $METHOD(...):
+                  ...
+                  os.system($COMMAND)
+                  ...
+              ...
+              $CLASS().$METHOD(..., $SOURCE, ...)
+          - pattern: |
+              def $FUNC(..., **$KWARGS):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              $FUNC(..., cmd=$SOURCE, ...)
+          - pattern: |
+              def $FUNC(*, $PARAM, ...):
+                ...
+                os.system($COMMAND)
+                ...
+              ...
+              $FUNC(..., $PARAM=$SOURCE, ...)
+          - pattern: |
+              class $CLASS:
+                ...
+                def $METHOD($RECEIVER, *, $PARAM, ...):
+                  ...
+                  os.system($COMMAND)
+                  ...
+              ...
+              $CLASS().$METHOD(..., $PARAM=$SOURCE, ...)
+      - metavariable-pattern:
+          metavariable: $SOURCE
+          patterns:
+            - pattern-either:
+                - pattern: input(...)
+                - pattern: raw_input(...)
+                - pattern: sys.argv[$INDEX]
+                - pattern: os.environ[$KEY]
+                - pattern: os.environ.get(...)
+                - pattern: os.getenv(...)
+                - pattern: sys.stdin.read(...)
+                - pattern: sys.stdin.readline(...)
+      - focus-metavariable: $COMMAND
+
+  - id: skill-xray.python-remote-payload-execution
+    languages: [python]
+    mode: taint
+    message: Network-controlled content reaches a Python execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-018
+      skill_xray_rule: opengrep-python-remote-execution
+      skill_xray_severity: critical
+    options:
+      max_match_per_file: 1000
+      taint_intrafile: true
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - exact: true
+        patterns:
+          - pattern: requests.$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(get|post|put|head|request)$
+      - exact: true
+        patterns:
+          - pattern: httpx.$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(get|post|put|head|request)$
+      - exact: true
+        pattern: urllib.request.urlopen(...)
+      - exact: true
+        patterns:
+          - pattern-either:
+              - pattern: urlopen(...)
+              - pattern: urlopen(...).read(...)
+          - pattern-inside: |
+              from urllib.request import urlopen
+              ...
+      - exact: true
+        patterns:
+          - pattern-either:
+              - pattern: $OPEN(...)
+              - pattern: $OPEN(...).read(...)
+          - pattern-inside: |
+              from urllib.request import urlopen as $OPEN
+              ...
+      - exact: true
+        pattern: urllib3.PoolManager(...).request(...)
+      - exact: true
+        patterns:
+          - pattern: requests.$METHOD(...).json(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(get|post|put|head|request)$
+      - exact: true
+        patterns:
+          - pattern: httpx.$METHOD(...).json(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(get|post|put|head|request)$
+      - exact: true
+        pattern: json.load(urllib.request.urlopen(...))
+      - exact: true
+        pattern: base64.b64decode(requests.$METHOD(...).text)
+      - exact: true
+        patterns:
+          - pattern: $RESPONSE.read(...).decode(...)
+          - pattern-inside: |
+              $RESPONSE = urllib.request.urlopen(...)
+              ...
+      - exact: true
+        patterns:
+          - pattern-either:
+              - pattern: $RESPONSE.content.decode(...)
+              - pattern: $RESPONSE.json(...)
+              - pattern: next($RESPONSE.iter_content(...)).decode(...)
+              - pattern: $RESPONSE.raw.read(...).decode(...)
+          - pattern-inside: |
+              $RESPONSE = $CLIENT.$METHOD(...)
+              ...
+          - metavariable-regex:
+              metavariable: $CLIENT
+              regex: ^(?:requests|httpx)$
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(?:get|post|put|head|request)$
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: $RESPONSE.status_code
+          - pattern: $RESPONSE.ok
+          - pattern: $RESPONSE.elapsed
+          - pattern: $RESPONSE.is_redirect
+          - pattern: $RESPONSE.is_permanent_redirect
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: os.system($COMMAND)
+              - pattern: os.popen($COMMAND, ...)
+              - pattern: eval($COMMAND, ...)
+              - pattern: exec($COMMAND, ...)
+              - pattern: builtins.eval($COMMAND, ...)
+              - pattern: builtins.exec($COMMAND, ...)
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - pattern-inside: |
+              from subprocess import *
+              ...
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getoutput|getstatusoutput)$
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD([$SHELL, "-c", $COMMAND, ...], ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(run|call|check_call|check_output|Popen)$
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern-either:
+              - pattern: os.execl($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execlp($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execle($SHELL, $ARGV0, "-c", $COMMAND, ..., $ENV)
+              - pattern: os.execv($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execvp($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execve($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.execvpe($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.posix_spawn($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+              - pattern: os.posix_spawnp($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $ALIAS($COMMAND)
+          - pattern-inside: |
+              $ALIAS = os.system
+              ...
+          - focus-metavariable: $COMMAND
+
+  - id: skill-xray.shell-fetch-pipe-exec
+    languages: [bash]
+    message: Remote fetch is piped directly into a shell interpreter.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: $FETCH ... $URL ... | $SH
+          - pattern: $FETCH ... $URL ... | $SH -s
+          - pattern: $FETCH ... $URL ... | $SH -s ...
+          - pattern: $FETCH ... $URL ... | $SH -e
+          - pattern: $FETCH ... $URL ... | $SH /dev/stdin
+          - pattern: $FETCH ... $URL ... | sudo $SH
+          - pattern: $FETCH ... $URL ... | sudo -i $SH
+          - pattern: $FETCH ... $URL ... | sudo -u $USER $SH
+          - pattern: sudo $FETCH ... $URL ... | $SH
+          - pattern: $FETCH ... $URL ... | busybox $SH
+          - pattern: $FETCH ... $URL ... | chroot $ROOT $SH
+          - pattern: $FETCH ... $URL ... | stdbuf $OPTION $VALUE $SH
+          - pattern: $FETCH ... $URL ... | tee ... | $SH
+          - pattern: $SH <($FETCH ... $URL ...)
+      - pattern-not: $FETCH ... -o $URL ... | ...
+      - pattern-not: $FETCH ... --output $URL ... | ...
+      - pattern-not: $FETCH ... -O $URL ... | ...
+      - pattern-not: $FETCH ... --output-document $URL ... | ...
+      - pattern-not-regex: '(?i)(?:^|[ \t])(?:-o|--output(?:-document)?|-O)(?:=)?[ \t]*(?!-(?:[ \t]|$)|/dev/stdout(?:[ \t]|$))\S+'
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
+      - metavariable-regex:
+          metavariable: $SH
+          regex: '^(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash|fish)$'
+
+  - id: skill-xray.shell-fetch-pipe-env-exec
+    languages: [bash]
+    message: Remote fetch is piped through env into a shell interpreter.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: $FETCH ... $URL ... | $ENV $ASSIGN ... $SH
+          - pattern: $FETCH ... $URL ... | $ENV $ASSIGN ... $SH -s ...
+      - pattern-not: $FETCH ... -o $URL ... | ...
+      - pattern-not: $FETCH ... --output $URL ... | ...
+      - pattern-not: $FETCH ... -O $URL ... | ...
+      - pattern-not: $FETCH ... --output-document $URL ... | ...
+      - pattern-not-regex: '(?i)(?:^|[ \t])(?:-o|--output(?:-document)?|-O)(?:=)?[ \t]*(?!-(?:[ \t]|$)|/dev/stdout(?:[ \t]|$))\S+'
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
+      - metavariable-regex:
+          metavariable: $ASSIGN
+          regex: '^[A-Za-z_][A-Za-z0-9_]*=.*$'
+      - metavariable-regex:
+          metavariable: $ENV
+          regex: '^(?:/usr/bin/)?env$'
+      - metavariable-regex:
+          metavariable: $SH
+          regex: '^(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash|fish)$'
+
+  - id: skill-xray.shell-fetch-pipe-env-no-assignment-exec
+    languages: [bash]
+    message: Remote fetch is piped through env into a shell interpreter.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: $FETCH ... $URL ... | $ENV $SH
+          - pattern: $FETCH ... $URL ... | $ENV $SH -s ...
+      - pattern-not-regex: '(?i)(?:^|[ \t])(?:-o|--output(?:-document)?|-O)(?:=)?[ \t]*(?!-(?:[ \t]|$)|/dev/stdout(?:[ \t]|$))\S+'
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
+      - metavariable-regex:
+          metavariable: $ENV
+          regex: '^(?:/usr/bin/)?env$'
+      - metavariable-regex:
+          metavariable: $SH
+          regex: '^(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash|fish)$'
+
+  - id: skill-xray.shell-fetch-pipe-timeout-exec
+    languages: [bash]
+    message: Remote fetch is piped through timeout into a shell interpreter.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: $FETCH ... $URL ... | timeout $DURATION $SH
+          - pattern: $FETCH ... $URL ... | timeout -k $KILL $DURATION $SH
+      - pattern-not: $FETCH ... -o $URL ... | ...
+      - pattern-not: $FETCH ... --output $URL ... | ...
+      - pattern-not: $FETCH ... -O $URL ... | ...
+      - pattern-not: $FETCH ... --output-document $URL ... | ...
+      - pattern-not-regex: '(?i)(?:^|[ \t])(?:-o|--output(?:-document)?|-O)(?:=)?[ \t]*(?!-(?:[ \t]|$)|/dev/stdout(?:[ \t]|$))\S+'
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
+      - metavariable-regex:
+          metavariable: $DURATION
+          regex: '^[0-9]+(?:\.[0-9]+)?[smhd]?$'
+      - metavariable-regex:
+          metavariable: $SH
+          regex: '^(?:sh|bash|zsh|ksh|dash|fish)$'
+
+  - id: skill-xray.shell-fetch-special-stdin-exec
+    languages: [bash]
+    message: Remote input is executed through a shell stdin construct.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern: $FETCH ... $URL ...
+      - pattern-regex: '(?m)^[ \t]*(?:(?:curl|wget|aria2c|http|httpie)[^\n|]*(?:https?|ftp)://[^\n|]+\|[ \t]*(?:(?:/usr/bin/)?env(?:[ \t]+[A-Za-z_][A-Za-z0-9_]*=[^ \t]+)*[ \t]+)?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash|fish)(?:(?:[ \t]+-[abefhkmptuvxsBCHP]+)+|[ \t]+-[abefhkmptuvxsBCHP]*o[ \t]+(?:allexport|errexit|errtrace|functrace|hashall|ignoreeof|keyword|monitor|noclobber|noexec|noglob|nolog|notify|nounset|onecmd|physical|pipefail|posix|privileged|verbose|vi|xtrace))[ \t]*|(?:source|\.)[ \t]+<\((?:curl|wget|aria2c|http|httpie)[^\n)]*(?:https?|ftp)://[^\n)]+\))[ \t]*(?:[#;]|$)'
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:https?|ftp)://'
+
+  - id: skill-xray.shell-fetch-alias-pipe-exec
+    languages: [bash]
+    message: A literal remote-fetch alias is piped into a shell interpreter.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern: $COMMAND ... | $SH ...
+      - pattern-regex: '(?m)^[ \t]*(?P<ALIAS>[A-Za-z_][A-Za-z0-9_]*)=(?:curl|wget)[ \t]*\n(?:(?![ \t]*(?P=ALIAS)=)[^\n]*\n){0,8}[ \t]*\$(?P=ALIAS)[^\n|]*(?:https?|ftp)://\S+[^\n|]*\|[ \t]*(?:sh|bash|zsh|ksh|dash|fish)(?:[ \t;]|$)'
+
+  - id: skill-xray.shell-command-substitution-taint
+    languages: [bash]
+    mode: taint
+    message: A remote fetch result reaches eval or a shell command string.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-command-substitution-taint
+      skill_xray_severity: high
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: curl ... $URL ...
+              - pattern: wget ... $URL ...
+          - pattern-not: curl ... -o $URL ...
+          - pattern-not: curl ... --output $URL ...
+          - pattern-not: wget ... -O $URL ...
+          - pattern-not: wget ... --output-document $URL ...
+          - metavariable-regex:
+              metavariable: $URL
+              regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
+    pattern-sinks:
+      - patterns:
+          - pattern: eval $CMD
+          - focus-metavariable: $CMD
+      - patterns:
+          - pattern: $SH -c $CMD
+          - metavariable-regex:
+              metavariable: $SH
+              regex: '^(?:sh|bash|zsh|ksh|dash)$'
+          - focus-metavariable: $CMD
+
+  - id: skill-xray.shell-direct-url-install
+    languages: [bash]
+    message: A package manager installs directly from a remote URL.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-remote-install
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: pip install ... $URL ...
+          - pattern: pip3 install ... $URL ...
+          - pattern: pipx install ... $URL ...
+          - pattern: uv pip install ... $URL ...
+          - pattern: npm install ... $URL ...
+          - pattern: yarn add ... $URL ...
+          - pattern: gem install ... $URL ...
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:https?|ftp)://'
+      - pattern-not: pip install ... -f $URL ...
+      - pattern-not: pip install ... --find-links $URL ...
+      - pattern-not: pip install ... --index-url $URL ...
+      - pattern-not: pip install ... --extra-index-url $URL ...
+      - pattern-not: pip3 install ... -f $URL ...
+      - pattern-not: pip3 install ... --find-links $URL ...
+      - pattern-not: pip3 install ... --index-url $URL ...
+      - pattern-not: pip3 install ... --extra-index-url $URL ...
+      - pattern-not: uv pip install ... --index-url $URL ...
+      - pattern-not: uv pip install ... --extra-index-url $URL ...
+      - pattern-not: npm install ... --registry $URL ...
+
+  - id: skill-xray.shell-staged-curl-exec
+    languages: [bash]
+    message: A remote curl output file is later executed by a shell interpreter.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-010
+      skill_xray_rule: opengrep-shell-staged-curl-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              curl ... $URL ... -o $PATH ...
+              ...
+              $SH $PATH
+          - pattern-inside: |
+              curl ... -o $PATH ... $URL ...
+              ...
+              $SH $PATH
+          - pattern-inside: |
+              curl ... $URL ... -o $PATH ...
+              ...
+              sudo $SH $PATH
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '^[^-].*$'
+      - metavariable-regex:
+          metavariable: $SH
+          regex: '^(?:sh|bash|zsh|ksh|dash|fish)$'
+
+  - id: skill-xray.shell-staged-redirection-exec
+    languages: [bash]
+    message: A remote fetch redirected to a file is later executed.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-010
+      skill_xray_rule: opengrep-shell-staged-curl-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern: curl ...
+      - pattern-regex: '(?m)^\s*curl[^\n]*(?:https?|ftp)://\S+[^\n]*(?:&>>|&>|1?>\||1?>>|1?>)\s*(?P<PATH>/[^\s;|&]+)[^\n]*\n\s*(?:sh|bash|zsh|ksh|dash|fish)\s+(?P=PATH)(?:\s|$)'
+
+  - id: skill-xray.shell-fetch-python-inline-exec
+    languages: [bash]
+    message: Remote input is executed by an inline Python command.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern: $FETCH ... $URL ... | $PY -c $BODY
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
+      - metavariable-regex:
+          metavariable: $PY
+          regex: '^(?:python|python3)$'
+      - metavariable-regex:
+          metavariable: $BODY
+          regex: '(?is)^\s*(?:["'']|\$["''])?\s*(?:(?:import\s+sys|from\s+sys\s+import\s+stdin)\s*(?:;|\\n|\n)\s*)?(?:(?:exec|eval)\s*\(\s*(?:(?:sys\.)?stdin\.read\s*\(\s*\)|open\s*\(\s*(?:0|["'']/dev/stdin["''])\s*\)\.read\s*\(\s*\)|input\s*\(\s*\)|os\.read\s*\(\s*0\s*,[^)]*\))\s*\)|(?P<STDIN_VAR>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:(?:sys\.)?stdin\.read\s*\(\s*\)|open\s*\(\s*(?:0|["'']/dev/stdin["''])\s*\)\.read\s*\(\s*\)|input\s*\(\s*\)|os\.read\s*\(\s*0\s*,[^)]*\))\s*(?:;|\\n|\n)\s*(?:(?!(?P=STDIN_VAR)\s*=).)*(?:exec|eval)\s*\(\s*(?P=STDIN_VAR)\s*\))\s*["'']?\s*$'
+
+  - id: skill-xray.shell-fetch-python-stdin-exec
+    languages: [bash]
+    message: Remote input is executed as a Python program from standard input.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-shell-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: $FETCH ... $URL ... | $PY
+          - pattern: $FETCH ... $URL ... | $PY -
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
+      - metavariable-regex:
+          metavariable: $PY
+          regex: '^(?:(?:/usr)?/bin/)?(?:python|python3)$'
+
+  - id: skill-xray.shell-staged-curl-direct-exec
+    languages: [bash]
+    message: A remote curl output file is later executed directly.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-010
+      skill_xray_rule: opengrep-shell-staged-curl-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              curl ... $URL ... -o $PATH ...
+              ...
+              $PATH
+          - pattern-inside: |
+              curl ... -o $PATH ... $URL ...
+              ...
+              $PATH
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i)^(?:(?:https?|ftp)://|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)'
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '^/(?!dev/(?:null|stdout)$).+'
+
+  - id: skill-xray.shell-staged-curl-relative-direct-exec
+    languages: [bash]
+    message: A remote curl output file is later executed directly.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-010
+      skill_xray_rule: opengrep-shell-staged-curl-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern: curl ...
+      - pattern-regex: '(?m)^[ \t]*curl[^\n]*(?:-o[ \t]*|--output(?:=|[ \t]+))(?P<PATH>[A-Za-z0-9_.-]+)[^\n]*(?:https?|ftp)://\S+[^\n]*\n(?:[^\n]*\n){0,8}[ \t]*\./(?P=PATH)(?:[ \t;&|]|$)'
+
+  - id: skill-xray.shell-staged-wget-exec
+    languages: [bash]
+    message: A remote wget output file is later executed.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-010
+      skill_xray_rule: opengrep-shell-staged-curl-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern: wget ...
+      - pattern-regex: '(?m)^[ \t]*wget(?=[^\n]*(?:https?|ftp)://)(?=[^\n]*(?:-O[ \t]*|--output-document(?:=|[ \t]+))(?P<PATH>/[^\s;|&]+))[^\n]*\n(?:[^\n]*\n){0,8}[ \t]*(?:(?:sudo[ \t]+)?(?:sh|bash|zsh|ksh|dash|fish)[ \t]+)?(?P=PATH)(?:[ \t;&|]|$)'
+
+  - id: skill-xray.shell-staged-remote-name-exec
+    languages: [bash]
+    message: A remote-name download is later executed.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-010
+      skill_xray_rule: opengrep-shell-staged-curl-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: curl ...
+          - pattern: wget ...
+      - pattern-either:
+          - pattern-regex: '(?m)^[ \t]*curl(?=[^\n]*(?:^|[ \t])-O(?:[ \t]|$))[^\n]*(?:https?|ftp)://[^\s?#]*/(?P<NAME>[A-Za-z0-9_.-]+)(?:[?#]\S*)?[^\n]*\n(?:[^\n]*\n){0,8}[ \t]*(?:(?:sh|bash|zsh|ksh|dash|fish)[ \t]+|\./)(?P=NAME)(?:[ \t;&|]|$)'
+          - pattern-regex: '(?m)^[ \t]*wget(?![^\n]*(?:-O(?:[ \t/]|$)|--output-document(?:=|[ \t])))[^\n]*(?:https?|ftp)://[^\s?#]*/(?P<NAME>[A-Za-z0-9_.-]+)(?:[?#]\S*)?[^\n]*\n(?:[^\n]*\n){0,8}[ \t]*(?:(?:sh|bash|zsh|ksh|dash|fish)[ \t]+|\./)(?P=NAME)(?:[ \t;&|]|$)'
+
+  - id: skill-xray.shell-base-decode-pipe-exec
+    languages: [bash]
+    message: Decoder output is piped directly into a shell interpreter.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-019
+      skill_xray_rule: opengrep-shell-decode-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: base64 ... $FLAG ... | $SH
+          - pattern: base32 ... $FLAG ... | $SH
+      - metavariable-regex:
+          metavariable: $FLAG
+          regex: '(?i)^(?:-d|--dec(?:o(?:d(?:e)?)?)?)$'
+      - metavariable-regex:
+          metavariable: $SH
+          regex: '^(?:sh|bash|zsh|ksh|dash|fish)$'
+
+  - id: skill-xray.shell-xxd-decode-pipe-exec
+    languages: [bash]
+    message: Decoder output is piped directly into a shell interpreter.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-019
+      skill_xray_rule: opengrep-shell-decode-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern: xxd ... -r ... | $SH
+      - metavariable-regex:
+          metavariable: $SH
+          regex: '^(?:sh|bash|zsh|ksh|dash|fish)$'
+
+  - id: skill-xray.python-decoded-payload-execution
+    languages: [python]
+    mode: taint
+    message: Decoded content reaches a Python execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-019
+      skill_xray_rule: opengrep-python-decode-exec
+      skill_xray_severity: high
+    options:
+      taint_intrafile: true
+    pattern-sources:
+      - exact: true
+        patterns:
+          - pattern: base64.$DECODER(...)
+          - metavariable-regex:
+              metavariable: $DECODER
+              regex: '^(?:b64decode|standard_b64decode|urlsafe_b64decode|b32decode|b16decode|b85decode|a85decode|decodebytes)$'
+      - exact: true
+        patterns:
+          - pattern: binascii.$DECODER(...)
+          - metavariable-regex:
+              metavariable: $DECODER
+              regex: '^(?:a2b_base64|unhexlify|a2b_hex|a2b_qp|a2b_uu)$'
+      - exact: true
+        pattern-either:
+          - pattern: bytes.fromhex(...)
+          - pattern: bytearray.fromhex(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: exec($COMMAND, ...)
+              - pattern: eval($COMMAND, ...)
+              - pattern: os.system($COMMAND)
+              - pattern: os.popen($COMMAND, ...)
+              - pattern: builtins.exec($COMMAND, ...)
+              - pattern: builtins.eval($COMMAND, ...)
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., shell=$SHELL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD(..., args=$COMMAND, ..., **$KWARGS)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD($COMMAND, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:getoutput|getstatusoutput)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $METHOD($COMMAND, ..., shell=$SHELL, ...)
+          - pattern-inside: |
+              from subprocess import *
+              ...
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: subprocess.$METHOD([$SHELL, "-c", $COMMAND, ...], ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|check_call|check_output|Popen)$'
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern-either:
+              - pattern: os.execl($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execlp($SHELL, $ARGV0, "-c", $COMMAND, ...)
+              - pattern: os.execle($SHELL, $ARGV0, "-c", $COMMAND, ..., $ENV)
+              - pattern: os.execv($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execvp($SHELL, [$ARGV0, "-c", $COMMAND, ...])
+              - pattern: os.execve($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.execvpe($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV)
+              - pattern: os.posix_spawn($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+              - pattern: os.posix_spawnp($SHELL, [$ARGV0, "-c", $COMMAND, ...], $ENV, ...)
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^["'']?(?:(?:/usr)?/bin/)?(?:sh|bash|zsh|ksh|dash)["'']?$'
+          - focus-metavariable: $COMMAND
+      - patterns:
+          - pattern: $ALIAS($COMMAND)
+          - pattern-inside: |
+              $ALIAS = os.system
+              ...
+          - focus-metavariable: $COMMAND
+
+  - id: skill-xray.python-remote-file-execution
+    languages: [python]
+    message: A remotely fetched file is written and then executed.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-018
+      skill_xray_rule: opengrep-python-remote-execution
+      skill_xray_severity: critical
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-inside: |
+                  $RESPONSE = $CLIENT.$METHOD(...)
+                  ...
+                  open($PATH, ...).write($RESPONSE.content)
+                  ...
+              - metavariable-regex:
+                  metavariable: $CLIENT
+                  regex: '^(?:requests|httpx)$'
+              - metavariable-regex:
+                  metavariable: $METHOD
+                  regex: '^(?:get|post|put|request)$'
+          - pattern-inside: |
+              $RESPONSE = urllib.request.urlopen(...)
+              ...
+              open($PATH, ...).write($RESPONSE.read())
+              ...
+      - pattern-either:
+          - patterns:
+              - pattern: subprocess.$EXEC([$INTERPRETER, ..., $PATH, ...], ...)
+              - metavariable-regex:
+                  metavariable: $EXEC
+                  regex: '^(?:run|call|check_call|check_output|Popen)$'
+              - metavariable-regex:
+                  metavariable: $INTERPRETER
+                  regex: '^["'']?(?:python(?:3)?|sh|bash|zsh|ksh|dash)["'']?$'
+          - pattern: runpy.run_path($PATH, ...)
+          - pattern: exec(open($PATH, ...).read(), ...)
+
+  - id: skill-xray.shell-staging-host
+    languages: [bash]
+    message: Executable shell code fetches from an anonymous or replaceable file host.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-020
+      skill_xray_rule: opengrep-staging-host
+      skill_xray_severity: high
+    patterns:
+      - pattern: $FETCH ... $URL ...
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i).*https?://(?:[^/@]+@)?(?:[^./]+\.)*(?:pastebin\.com|rentry\.co|glot\.io|cdn\.discordapp\.com|transfer\.sh|0x0\.st|termbin\.com|ix\.io|sprunge\.us|file\.io|gofile\.io|bashupload\.com|temp\.sh|paste\.ee|hastebin\.com|dpaste\.org|dpaste\.com|ngrok\.(?:io|app|dev)|ngrok-free\.(?:app|dev)|trycloudflare\.com|webhook\.site|requestbin\.net|oast\.fun|interact\.sh|tmpfiles\.org|catbox\.moe|uguu\.se|envs\.sh|oshi\.at|paste\.rs|controlc\.com|justpaste\.it|srv\.us|loca\.lt|serveo\.net|bore\.pub|pastes\.io|filebin\.net)\.?(?![A-Za-z0-9.-])(?::\d+)?(?:[/?#].*)?'
+
+  - id: skill-xray.python-staging-host
+    languages: [python]
+    message: Executable Python code communicates with an anonymous or replaceable staging host.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-020
+      skill_xray_rule: opengrep-staging-host
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern: $CLIENT.$METHOD($URL, ...)
+              - metavariable-regex:
+                  metavariable: $METHOD
+                  regex: '^(?:get|post|put|request|urlretrieve)$'
+          - pattern: urllib.request.urlopen($URL, ...)
+          - pattern: urlopen($URL, ...)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i).*https?://(?:[^/@]+@)?(?:[^./]+\.)*(?:pastebin\.com|rentry\.co|glot\.io|cdn\.discordapp\.com|transfer\.sh|0x0\.st|termbin\.com|ix\.io|sprunge\.us|file\.io|gofile\.io|bashupload\.com|temp\.sh|paste\.ee|hastebin\.com|dpaste\.org|dpaste\.com|ngrok\.(?:io|app|dev)|ngrok-free\.(?:app|dev)|trycloudflare\.com|webhook\.site|requestbin\.net|oast\.fun|interact\.sh|tmpfiles\.org|catbox\.moe|uguu\.se|envs\.sh|oshi\.at|paste\.rs|controlc\.com|justpaste\.it|srv\.us|loca\.lt|serveo\.net|bore\.pub|pastes\.io|filebin\.net)\.?(?![A-Za-z0-9.-])(?::\d+)?(?:[/?#].*)?'
+
+  - id: skill-xray.shell-cloud-metadata
+    languages: [bash]
+    message: Shell code accesses a cloud instance-metadata endpoint.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-021
+      skill_xray_rule: opengrep-cloud-metadata
+      skill_xray_severity: high
+    patterns:
+      - pattern: $FETCH ... $URL ...
+      - metavariable-regex:
+          metavariable: $FETCH
+          regex: '^(?:curl|wget|aria2c|http|httpie)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i).*(?:169\.254\.169\.254|169\.254\.170\.2|metadata\.google\.internal|computeMetadata/v1|/latest/meta-data|metadata\.azure\.com).*'
+
+  - id: skill-xray.python-cloud-metadata
+    languages: [python]
+    message: Python code accesses a cloud instance-metadata endpoint.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-021
+      skill_xray_rule: opengrep-cloud-metadata
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: $CLIENT.$METHOD($URL, ...)
+          - pattern: urlopen($URL, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: '^(?:get|post|put|request|open)$'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i).*(?:169\.254\.169\.254|169\.254\.170\.2|metadata\.google\.internal|computeMetadata/v1|/latest/meta-data|metadata\.azure\.com).*'
+
+  - id: skill-xray.shell-container-escape
+    languages: [bash]
+    message: Shell code invokes a container or host-escape primitive.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-022
+      skill_xray_rule: opengrep-container-escape
+      skill_xray_severity: high
+    pattern-either:
+      - pattern: docker ... --privileged ...
+      - pattern: podman ... --privileged ...
+      - pattern: docker ... --cap-add ...
+      - pattern: podman ... --cap-add ...
+      - pattern: nsenter ...
+      - pattern: pkexec ...
+      - pattern: $CLIENT ... /var/run/docker.sock ...
+
+  - id: skill-xray.shell-container-root-access
+    languages: [bash]
+    message: Shell code reads through a container root filesystem view.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-022
+      skill_xray_rule: opengrep-container-escape
+      skill_xray_severity: high
+    patterns:
+      - pattern: $READ ... $PATH ...
+      - metavariable-regex:
+          metavariable: $READ
+          regex: '^(?:cat|head|tail|less|more|ls|find)$'
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '.*/proc/(?:1|self|[0-9]+)/root(?:/.*)?'
+
+  - id: skill-xray.shell-credential-read
+    languages: [bash]
+    message: Shell code reads a private credential file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-023
+      skill_xray_rule: opengrep-credential-read
+      skill_xray_severity: high
+    patterns:
+      - pattern: $READ ... $PATH ...
+      - metavariable-regex:
+          metavariable: $READ
+          regex: '^(?:cat|head|tail|less|more)$'
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '(?i).*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?!\.pub)|\.aws/credentials|authorized_keys|\.netrc|\.git-credentials|\.docker/config\.json|\.kube/config).*'
+
+  - id: skill-xray.python-credential-read
+    languages: [python]
+    message: Python code reads a private credential file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-023
+      skill_xray_rule: opengrep-credential-read
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: open($PATH)
+          - patterns:
+              - pattern-either:
+                  - pattern: open($PATH, $MODE, ...)
+                  - pattern: open($PATH, mode=$MODE, ...)
+              - metavariable-regex:
+                  metavariable: $MODE
+                  regex: '(?i)^["'']?r[bt+]*["'']?$'
+          - pattern: Path($PATH).read_text(...)
+          - pattern: Path($PATH).read_bytes(...)
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '(?i).*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?!\.pub)|\.aws/credentials|\.netrc|\.git-credentials|\.docker/config\.json|\.kube/config).*'
+
+  - id: skill-xray.python-cloud-upload
+    languages: [python]
+    message: Python code invokes a cloud storage upload sink.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-024
+      skill_xray_rule: opengrep-cloud-upload
+      skill_xray_severity: medium
+    pattern-either:
+      - pattern: $CLIENT.put_object(...)
+      - pattern: $CLIENT.upload_file(...)
+      - pattern: $CLIENT.upload_fileobj(...)
+      - pattern: $CLIENT.upload_blob(...)
+      - pattern: $CLIENT.blob(...).upload(...)
+
+  - id: skill-xray.python-home-enumeration
+    languages: [python]
+    message: Python code recursively enumerates a home or credential directory.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-025
+      skill_xray_rule: opengrep-home-enumeration
+      skill_xray_severity: high
+    pattern-either:
+      - pattern: os.walk(os.path.expanduser("~"), ...)
+      - pattern: os.walk(os.path.expanduser('~'), ...)
+      - pattern: os.walk(Path.home(), ...)
+      - pattern: Path.home().glob(...)
+      - pattern: Path.home().rglob(...)
+      - patterns:
+          - pattern: glob.$METHOD($PATH, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:glob|iglob)$'
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:~|\.ssh|\.aws).*'
+
+  - id: skill-xray.shell-environment-harvest
+    languages: [bash]
+    message: Shell code dumps or forwards the whole process environment.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-026
+      skill_xray_rule: opengrep-environment-harvest
+      skill_xray_severity: high
+    pattern-either:
+      - patterns:
+          - pattern: printenv ...
+          - pattern-regex: '(?m)^[ \t]*printenv[ \t]*(?:[;|&]|$)'
+      - pattern: env | $SINK ...
+
+  - id: skill-xray.python-environment-harvest
+    languages: [python]
+    message: Python code sends or encodes the whole process environment.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-026
+      skill_xray_rule: opengrep-environment-harvest
+      skill_xray_severity: high
+    pattern-either:
+      - pattern: requests.$METHOD(..., data=dict(os.environ), ...)
+      - pattern: requests.$METHOD(..., json=dict(os.environ), ...)
+      - pattern: httpx.$METHOD(..., data=dict(os.environ), ...)
+      - pattern: httpx.$METHOD(..., json=dict(os.environ), ...)
+      - pattern: $SOCKET.send(dict(os.environ), ...)
+      - patterns:
+          - pattern: base64.$METHOD(json.dumps(dict(os.environ)).encode(...), ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:b64encode|standard_b64encode|urlsafe_b64encode|b32encode|b16encode|b85encode|a85encode|encodebytes)$'
+
+  - id: skill-xray.shell-agent-config-read
+    languages: [bash]
+    message: Shell code reads another agent's configuration directory.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-032
+      skill_xray_rule: opengrep-agent-config-read
+      skill_xray_severity: high
+    patterns:
+      - pattern: $READ ... $PATH ...
+      - metavariable-regex:
+          metavariable: $READ
+          regex: '^(?:cat|head|tail|less|more|ls|find)$'
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '(?i).*(?:\.claude/|\.gemini/|\.cursor/|\.codeium/|\.aider|\.continue/|\.config/github-copilot).*'
+
+  - id: skill-xray.python-agent-config-read
+    languages: [python]
+    message: Python code reads another agent's configuration directory.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-032
+      skill_xray_rule: opengrep-agent-config-read
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: open($PATH, ...)
+          - pattern: glob.$METHOD($PATH, ...)
+          - pattern: os.walk($PATH, ...)
+          - pattern: os.listdir($PATH, ...)
+          - pattern: Path($PATH).glob(...)
+          - pattern: Path($PATH).rglob(...)
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '(?i).*(?:\.claude/|\.gemini/|\.cursor/|\.codeium/|\.aider|\.continue/|\.config/github-copilot).*'
+
+  - id: skill-xray.shell-reverse-shell
+    languages: [bash]
+    message: Shell code opens a socket-backed interactive shell.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-040
+      skill_xray_rule: opengrep-reverse-shell
+      skill_xray_severity: critical
+    pattern-either:
+      - patterns:
+          - pattern: $NC ... $FLAG $SH ...
+          - metavariable-regex:
+              metavariable: $NC
+              regex: '^(?:nc|ncat)$'
+          - metavariable-regex:
+              metavariable: $FLAG
+              regex: '^(?:-e|-c|--exec|--sh-exec)$'
+          - metavariable-regex:
+              metavariable: $SH
+              regex: '^/?(?:usr/)?(?:bin/)?(?:sh|bash|zsh|dash)$'
+      - patterns:
+          - pattern-either:
+              - pattern: $SH -i >& /dev/tcp/$HOST/$PORT 0>&1
+              - pattern: $SH -i >& /dev/udp/$HOST/$PORT 0>&1
+          - metavariable-regex:
+              metavariable: $SH
+              regex: '^(?:sh|bash|zsh|ksh|dash)$'
+      - patterns:
+          - pattern: mkfifo ...
+          - pattern-regex: '(?m)^[ \t]*mkfifo[^\n;]+;[^\n]*(?:/bin/)?(?:sh|bash)[ \t]+-i[^\n]*\|[ \t]*(?:nc|ncat|netcat)(?:[ \t]|$)'
+
+  - id: skill-xray.python-reverse-shell
+    languages: [python]
+    message: Python code connects a socket to process standard I/O.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-040
+      skill_xray_rule: opengrep-reverse-shell
+      skill_xray_severity: critical
+    pattern-either:
+      - patterns:
+          - pattern-inside: |
+              $SOCKET = socket.socket(...)
+              ...
+              $SOCKET.connect(...)
+              ...
+          - pattern: os.dup2($SOCKET.fileno(), $FD)
+          - metavariable-regex:
+              metavariable: $FD
+              regex: '^(?:0|1|2)$'
+      - patterns:
+          - pattern-inside: |
+              $SOCKET = socket.create_connection(...)
+              ...
+          - pattern: os.dup2($SOCKET.fileno(), $FD)
+          - metavariable-regex:
+              metavariable: $FD
+              regex: '^(?:0|1|2)$'
+      - patterns:
+          - pattern-inside: |
+              $SOCKET = socket.socket(...)
+              ...
+              $SOCKET.connect(...)
+              ...
+          - pattern: pty.spawn(...)
+      - patterns:
+          - pattern-inside: |
+              $SOCKET = socket.socket(...)
+              ...
+              $SOCKET.connect(...)
+              ...
+          - pattern: subprocess.$METHOD([$SHELL, "-i"], ..., stdin=$SOCKET.fileno(), stdout=$SOCKET.fileno(), stderr=$SOCKET.fileno(), ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:run|call|Popen)$'
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '^["'']?(?:/usr)?/bin/(?:sh|bash|zsh|ksh|dash)["'']?$'
+
+  - id: skill-xray.python-agent-identity-persistence
+    mode: taint
+    languages: [python]
+    message: Concealed or priority instructions are written to an agent identity file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-005
+      skill_xray_rule: opengrep-agent-identity-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH)
+              - pattern: Path($PATH).expanduser()
+              - pattern: os.path.expanduser($PATH)
+              - pattern: $BASE / $PATH
+              - pattern: Path.home().joinpath($PATH)
+              - pattern: $BASE.joinpath($PATH)
+              - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:^["'']?|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?\)?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)).*'
+
+  - id: skill-xray.python-agent-identity-persistence-assigned-content
+    mode: taint
+    languages: [python]
+    message: Concealed or priority instructions are written to an agent identity file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-005
+      skill_xray_rule: opengrep-agent-identity-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern: $VAR = $VALUE
+          - focus-metavariable: $VALUE
+          - metavariable-regex:
+              metavariable: $VALUE
+              regex: '(?is).*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)).*'
+    pattern-sinks:
+      - patterns:
+          - pattern: Path($PATH).write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^["'']?(?:[^"'']*[/\\])?(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?$'
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home().joinpath($PATH).write_text($CONTENT, ...)
+              - pattern: ($BASE / $PATH).write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?$'
+      - patterns:
+          - pattern: open($PATH, $MODE, ...)
+          - pattern-inside: |
+              with open($PATH, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^["'']?(?:[^"'']*[/\\])?(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?$'
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
+      - patterns:
+          - pattern-inside: |
+              $TARGET = $PATH
+              ...
+          - pattern-not-inside: |
+              $TARGET = $PATH
+              ...
+              $TARGET = $OTHER
+              ...
+              $TARGET.write_text(...)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:^|[/\\]\s*["'']?|["''])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?\)?$'
+          - pattern: $TARGET.write_text($CONTENT, ...)
+      - patterns:
+          - pattern-inside: |
+              $TARGET = $PATH
+              ...
+          - pattern-not-inside: |
+              $TARGET = $PATH
+              ...
+              $TARGET = $OTHER
+              ...
+              with open($TARGET, ...) as $HANDLE:
+                ...
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:^|[/\\]\s*["'']?|["''])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?\)?$'
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?[awx](?:[bt]\+?|\+[bt]?)?["'']?$'
+
+  - id: skill-xray.shell-agent-identity-persistence
+    languages: [bash]
+    message: Concealed or priority instructions are written to an agent identity file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-005
+      skill_xray_rule: opengrep-agent-identity-persistence
+      skill_xray_severity: critical
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-inside: |
+                  $TARGET=$PATH
+                  ...
+              - pattern-not-inside: |
+                  $TARGET=$PATH
+                  ...
+                  $TARGET=$OTHER
+                  ...
+                  echo ... > $TARGET
+              - metavariable-regex:
+                  metavariable: $PATH
+                  regex: '(?i).*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?$'
+              - pattern-either:
+                  - pattern: echo $CONTENT >> $TARGET
+                  - pattern: echo $CONTENT > $TARGET
+                  - pattern: printf $FORMAT $CONTENT >> $TARGET
+                  - pattern: printf $FORMAT $CONTENT > $TARGET
+              - metavariable-regex:
+                  metavariable: $CONTENT
+                  regex: '(?is).*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)).*'
+          - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^#;&|>\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|secretly|higher\s+priority)[^#;&|>\n]*>>?\s*["'']?(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?(?:[\s;#]|$).*$'
+          - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^>#\n]*(?:''[^''\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session))[^''\n]*''|"[^"\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session))[^"\n]*")[^>#\n]*>>?\s*[^\n]*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?(?:[\s;#]|$).*$'
+          - pattern-regex: '(?im)^\s*(?:echo|printf)\b(?=[^#;&|>\n]*(?:always\s+(?:obey|follow|prioriti[sz]e)|never\s+(?:reveal|disclose|remove)|do\s+not\s+(?:reveal|disclose|mention|remove)|(?:hidden|concealed)\s+(?:rule|instruction|directive|content)|(?:hide|conceal)\s+(?:this|the)\s+(?:rule|instruction|directive|content)|secretly|without\s+(?:telling|notifying)|higher\s+priority|(?:ignore|override)\s+(?:other|prior|previous)\s+instructions?|(?:load|follow)\s+(?:this|it)\s+(?:on|every)\s+(?:startup|session)))[^#;&|>\n]*>>?\s*[^\n]*(?:^|[/\\])(?:CLAUDE\.md|AGENTS\.md|agent\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|IDENTITY\.md|\.cursorrules|\.windsurfrules|\.clinerules|\.roorules|copilot-instructions\.md)["'']?(?:[\s;#]|$).*$'
+      - pattern-not-regex: '(?m)^\s*(?:echo|printf)\b(?:''[^''\n]*''|"[^"\n]*"|[^;''"\n])*;[^\n]*>>?[^\n]*$'
+  - id: skill-xray.python-remote-shell-rc-persistence
+    languages: [python]
+    message: A downloaded executable is installed into a shell startup file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-remote-shell-rc-persistence
+      skill_xray_severity: critical
+    patterns:
+      - pattern: os.chmod($PAYLOAD_PATH, $MODE)
+      - metavariable-regex:
+          metavariable: $WRITE_MODE
+          regex: '^["'']?(?:[wax](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+      - metavariable-regex:
+          metavariable: $APPEND_MODE
+          regex: '^["'']?a(?:[bt]\+?|\+[bt]?)?["'']?$'
+      - metavariable-regex:
+          metavariable: $STARTUP_NAME
+          regex: '^["'']?\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)["'']?$'
+      - metavariable-pattern:
+          metavariable: $STARTUP_CONTENT
+          patterns:
+            - pattern-either:
+                - pattern: $PAYLOAD_PATH
+                - pattern: |
+                    f"...{$PAYLOAD_PATH}..."
+                - pattern: |
+                    "..." + $PAYLOAD_PATH + "..."
+      - pattern-either:
+          - pattern-inside: |
+              def $FUNC(...):
+                ...
+                $PAYLOAD = urllib.request.urlopen(...).read(...)
+                ...
+                with open($PAYLOAD_PATH, $WRITE_MODE) as $PAYLOAD_FILE:
+                  ...
+                  $PAYLOAD_FILE.write($PAYLOAD)
+                  ...
+                ...
+                os.chmod($PAYLOAD_PATH, $MODE)
+                ...
+                $STARTUP_PATH = os.path.join(os.path.expanduser("~"), $STARTUP_NAME)
+                ...
+                with open($STARTUP_PATH, $APPEND_MODE) as $STARTUP_FILE:
+                  ...
+                  $STARTUP_FILE.write($STARTUP_CONTENT)
+                  ...
+          - patterns:
+              - pattern-inside: |
+                  def $FUNC(...):
+                    ...
+                    $RESPONSE = requests.$HTTP_METHOD(...)
+                    ...
+                    $PAYLOAD = $RESPONSE.content
+                    ...
+                    with open($PAYLOAD_PATH, $WRITE_MODE) as $PAYLOAD_FILE:
+                      ...
+                      $PAYLOAD_FILE.write($PAYLOAD)
+                      ...
+                    ...
+                    os.chmod($PAYLOAD_PATH, $MODE)
+                    ...
+                    $STARTUP_PATH = os.path.join(os.path.expanduser("~"), $STARTUP_NAME)
+                    ...
+                    with open($STARTUP_PATH, $APPEND_MODE) as $STARTUP_FILE:
+                      ...
+                      $STARTUP_FILE.write($STARTUP_CONTENT)
+                      ...
+              - metavariable-regex:
+                  metavariable: $HTTP_METHOD
+                  regex: '^(?:get|post|put|request)$'
+
+  - id: skill-xray.python-windows-startup-write
+    languages: [python]
+    message: Python code writes executable content into the Windows per-user Startup directory.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-windows-startup-write
+      skill_xray_severity: critical
+    patterns:
+      - pattern-inside: |
+          $STARTUP = ... / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+          ...
+          $TARGET = $STARTUP / $NAME
+          ...
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: '(?i).+\.(?:bat|cmd|exe|js|jse|lnk|ps1|py|vbs|wsf)["'']?$'
+      - pattern-inside: |
+          with open($TARGET, $MODE, ...) as $FILE:
+            ...
+            $FILE.write($CONTENT)
+            ...
+      - pattern: open($TARGET, $MODE, ...)
+      - metavariable-regex:
+          metavariable: $MODE
+          regex: '^[''"]?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))[''"]?$'
+      - metavariable-regex:
+          metavariable: $CONTENT
+          regex: '(?is).*(?:exec\s*\(\s*base64\.b64decode|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-(?:enc(?:odedcommand)?|file)\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+
+  - id: skill-xray.python-shell-startup-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is written to a shell startup file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-shell-startup-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern-either:
+                      - pattern: Path.home() / $PATH
+                      - pattern: Path($PATH).expanduser()
+                      - pattern: os.path.expanduser($PATH)
+                  - metavariable-regex:
+                      metavariable: $PATH
+                      regex: '(?i).*(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config[/\\]fish[/\\]config\.fish|Documents[/\\](?:WindowsPowerShell|PowerShell)[/\\](?:Microsoft\.)?PowerShell_profile\.ps1)["'']?$'
+              - patterns:
+                  - pattern: Path($PATH)
+                  - metavariable-regex:
+                      metavariable: $PATH
+                      regex: '(?i)^[rRuUbfF]*["''](?:/(?:root|home/[^/]+|Users/[^/]+)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish)|[A-Za-z]:[/\\]Users[/\\][^/\\]+[/\\]Documents[/\\](?:WindowsPowerShell|PowerShell)[/\\](?:Microsoft\.)?PowerShell_profile\.ps1)["'']$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  $CONTENT = 'curl ' + $URL + ' | sh'
+                  ...
+              - pattern-inside: |
+                  $CONTENT = "curl " + $URL + " | sh"
+                  ...
+              - patterns:
+                  - pattern-inside: |
+                      $CONTENT = requests.$HTTP_METHOD(...).text
+                      ...
+                  - metavariable-regex:
+                      metavariable: $HTTP_METHOD
+                      regex: '^(?:get|post|put|request)$'
+              - pattern-inside: |
+                  $CONTENT = urllib.request.urlopen(...).read()
+                  ...
+      - patterns:
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - pattern: open($TARGET, $MODE, ...)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.python-systemd-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is written to a systemd unit.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-systemd-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH)
+              - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:\.config/systemd/user|/etc/systemd/system)/.*\.service["'']?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.python-git-hook-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is installed as a Git hook.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-git-hook-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern: Path($PATH)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*\.git[/\\]hooks[/\\](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?$'
+      - pattern-regex: 'Path\([^\n)]*\)\s*/\s*["'']\.git["'']\s*/\s*["'']hooks["'']\s*/\s*["''](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']'
+      - patterns:
+          - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^["''].*\.git[/\\]hooks[/\\](?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.python-component-path-persistence
+    languages: [python]
+    message: Executable remote content is written to a component-built persistence path.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-component-path-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - patterns:
+          - pattern-inside: |
+              $TARGET = Path.home() / ".config" / "systemd" / "user" / $NAME
+              ...
+              $TARGET.write_text($CONTENT, ...)
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.service["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*ExecStart=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern-inside: |
+              $TARGET = Path.home() / ".config" / "autostart" / $NAME
+              ...
+              $TARGET.write_text($CONTENT, ...)
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.desktop["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: Path($PATH).write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^[rRuUbfF]*["''][A-Za-z]:[/\\]Users[/\\][^/\\]+[/\\]AppData[/\\]Roaming[/\\]Microsoft[/\\]Windows[/\\]Start Menu[/\\]Programs[/\\]Startup[/\\][^/\\]+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+
+  - id: skill-xray.bash-shell-startup-persistence
+    languages: [bash]
+    message: Executable remote content is appended to a shell startup file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-shell-startup-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/(?:root|home/[^/]+|Users/[^/]+))/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/(?:\.(?:bashrc|zshrc|zshenv|zprofile|profile|bash_profile|bash_login)|\.config/fish/config\.fish|Documents/(?:WindowsPowerShell|PowerShell)/(?:Microsoft\.)?PowerShell_profile\.ps1)["'']?[ \t]*<<["'']?(?P<RC_END>[A-Za-z0-9_.-]+)["'']?\n(?:(?!^[ \t]*(?P=RC_END)[ \t]*$)[^\n]*\n){0,20}?[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n[ \t]*(?P=RC_END)[ \t]*(?:\n|$)'
+
+  - id: skill-xray.bash-cron-persistence
+    languages: [bash]
+    message: Executable remote content is installed into crontab.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-cron-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?:https?://|(?<![A-Za-z0-9_.-])powershell[ \t]+-enc)[^;\n]*(?:\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])powershell|exec)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
+      - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
+      - pattern-regex: '(?im)^\s*\(\s*crontab[ \t]+-l\s*;\s*(?:echo|printf)\b[^;\n]*(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)[^;\n]*\)\s*\|[ \t]*crontab[ \t]+-\s*$'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])powershell[ \t]+-enc)[^;\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;\n]*(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)[^;\n]*\|[ \t]*crontab[ \t]+-[^\n]*$'
+      - pattern-regex: '(?im)^\s*(?:echo|printf)\b[^;\n]*(?:(?:curl|wget)[^;\n]*https?://[^;\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;\n]*(?:>>?|tee[ \t]+-a)[^;\n]*/etc/cron(?:tab|\.d/[A-Za-z0-9_-]+)["'']?\s*$'
+
+  - id: skill-xray.python-launchd-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is installed as a LaunchAgent.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-launchd-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH)
+              - pattern: Path($PATH).expanduser()
+              - pattern: os.path.expanduser($PATH)
+              - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*(?:Library/LaunchAgents|/Library/LaunchDaemons)/[^/\\]+\.plist["'']?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*<key>Program(?:Arguments)?</key>.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*<key>Program(?:Arguments)?</key>.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.bash-launchd-persistence
+    languages: [bash]
+    message: Executable remote content is installed as a LaunchAgent.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-launchd-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*<key>Program(?:Arguments)?</key>[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&\n]*(?:>>?|tee)[^;&\n]*(?:(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/Users/[^/]+)/Library/LaunchAgents|/Library/Launch(?:Agents|Daemons))/[^ /"'']+\.plist"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee)[^\n]*Library/LaunchAgents/[^ /]+\.plist["'']?[^\n]*<<["'']?(?P<LAUNCHD_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*<key>Program(?:Arguments)?</key>(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=LAUNCHD_END)(?:\n|$)'
+
+  - id: skill-xray.bash-systemd-persistence
+    languages: [bash]
+    message: Executable remote content is written to a systemd unit.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-systemd-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Service\][^;&|\n]*\\nExecStart=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&|\n]*>>?[^;&|\n]*(?:/etc/systemd/system|(?:(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)|(?<![/A-Za-z0-9_.-])/(?:root|home/[^/]+))/\.config/systemd/user)/[^ /"'']+\.service"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee)[^\n]*(?:/etc/systemd/system|(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/systemd/user)/[^ /"'']+\.service["'']?[ \t]*<<["'']?(?P<SYSTEMD_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*ExecStart=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=SYSTEMD_END)(?:\n|$)'
+
+  - id: skill-xray.bash-git-hook-persistence
+    languages: [bash]
+    message: Executable remote content is installed as a Git hook.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-git-hook-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&\n]*(?:(?:curl|wget)[^;&\n]*https?://[^;&\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&\n]*(?:>>?|tee[ \t]+-a)[^;&\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*\.git/hooks/(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite|sendemail-validate|fsmonitor-watchman|p4-changelist|p4-prepare-changelist|p4-post-changelist|p4-pre-submit|post-index-change)["'']?[ \t]*<<["'']?(?P<HOOK_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=HOOK_END)(?:\n|$)'
+
+  - id: skill-xray.python-windows-run-persistence
+    mode: taint
+    languages: [python]
+    message: An executable command is installed in a Windows Run key.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-windows-run-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: winreg.OpenKey($HIVE, $PATH, ...)
+              - pattern: winreg.OpenKeyEx($HIVE, $PATH, ...)
+              - pattern: winreg.CreateKey($HIVE, $PATH, ...)
+              - pattern: winreg.CreateKeyEx($HIVE, $PATH, ...)
+          - metavariable-regex:
+              metavariable: $HIVE
+              regex: '^(?:winreg\.)?HKEY_(?:CURRENT_USER|LOCAL_MACHINE)$'
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i)^[rRuUbfF]*["'']Software\\Microsoft\\Windows\\CurrentVersion\\Run(?:Once)?["'']$'
+    pattern-sinks:
+      - patterns:
+          - pattern: winreg.SetValueEx($KEY, ..., $VALUE)
+          - metavariable-regex:
+              metavariable: $VALUE
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-(?:enc(?:odedcommand)?|file)\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:[A-Za-z]:\\|\\\\|%[A-Za-z_][A-Za-z0-9_]*%[/\\])[^\n"'']+\.(?:exe|com|bat|cmd|ps1|vbs|js|py)(?:\s|["'']|$)).*'
+
+  - id: skill-xray.python-windows-startup-persistence
+    mode: taint
+    languages: [python]
+    message: Executable content is written into the Windows Startup directory.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-windows-startup-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH)
+              - pattern: Path($PATH).expanduser()
+              - pattern: os.path.expanduser($PATH)
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*AppData[/\\]Roaming[/\\]Microsoft[/\\]Windows[/\\]Start Menu[/\\]Programs[/\\]Startup["'']?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: ($STARTUP / $NAME).write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+      - patterns:
+          - pattern-inside: |
+              $TARGET = $STARTUP / $NAME
+              ...
+              $TARGET.write_text($CONTENT, ...)
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+      - patterns:
+          - pattern: open($STARTUP / $NAME, $MODE, ...)
+          - pattern-inside: |
+              with open($STARTUP / $NAME, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              $TARGET = $STARTUP / $NAME
+              ...
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: '(?i).+\.(?:cmd|bat|exe|lnk|ps1|py|vbs|js|jse|wsf)["'']?$'
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)|cmd(?:\.exe)?\s+/[ck]|(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)).*'
+
+  - id: skill-xray.python-cron-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is installed into a cron file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-cron-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - pattern-regex: '["'']/etc/cron(?:tab|\.d/[A-Za-z0-9_-]+)["'']'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - pattern: open($TARGET, $MODE, ...)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.python-xdg-autostart-persistence
+    mode: taint
+    languages: [python]
+    message: Executable remote content is written to an XDG autostart entry.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-xdg-autostart-persistence
+      skill_xray_severity: critical
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.home() / $PATH
+              - pattern: Path($PATH).expanduser()
+              - pattern: os.path.expanduser($PATH)
+              - pattern: $PATH
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: '(?i).*\.config[/\\]autostart[/\\][^/\\]+\.desktop["'']?$'
+    pattern-sinks:
+      - patterns:
+          - pattern: $TARGET.write_text($CONTENT, ...)
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+      - patterns:
+          - pattern: open($TARGET, $MODE, ...)
+          - pattern-inside: |
+              with open($TARGET, $MODE, ...) as $HANDLE:
+                ...
+                $HANDLE.write($CONTENT)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: '^["'']?(?:[awx](?:[bt]\+?|\+[bt]?)?|r(?:\+[bt]?|[bt]\+))["'']?$'
+          - metavariable-regex:
+              metavariable: $CONTENT
+              regex: '(?is).*Exec=.*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|\s*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh\s+-c)\s+["'']?\$\(\s*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+)).*'
+
+  - id: skill-xray.bash-xdg-autostart-persistence
+    languages: [bash]
+    message: Executable remote content is written to an XDG autostart entry.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-039
+      skill_xray_rule: opengrep-xdg-autostart-persistence
+      skill_xray_severity: critical
+    pattern-either:
+      - pattern-regex: '(?im)^(?![ \t]*#)[^;&|\n]*(?:printf[ \t]+[^\n]*%b|echo(?:[ \t]+-e)?)[^;&|\n]*\[Desktop Entry\][^;&|\n]*\\nExec=[^;&|\n]*(?:(?:curl|wget)[^;&|\n]*https?://[^;&|\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^;&|\n]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^;&|\n]*>>?[^;&|\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop"?(?:[ \t]|$)'
+      - pattern-regex: '(?ims)^[ \t]*cat[^\n]*(?:>>?|tee[ \t]+-a)[^\n]*(?:"\$(?:HOME|\{HOME\})|\$(?:HOME|\{HOME\})|~)/\.config/autostart/[^ /"'']+\.desktop["'']?[ \t]*<<["'']?(?P<XDG_END>[A-Za-z0-9_.-]+)["'']?\n(?:[^\n]*\n){0,20}[^\n]*Exec=[^\n]*(?:(?:curl|wget)[^\n]*https?://[^\n]*\|[ \t]*(?:ba)?sh|(?<![A-Za-z0-9_.-])(?:eval|(?:ba)?sh[ \t]+-c)[ \t]+["'']?\$\([ \t]*(?:curl|wget)\b[^)\n]*https?://[^)\n]+\)|(?<![A-Za-z0-9_.-])powershell(?:\.exe)?\b[^\n;&|]*[ \t]-enc(?:odedcommand)?\b[ \t]+(?:"[^"\n]+"|''[^''\n]+''|[^\s"'';&|]+))[^\n]*\n(?P=XDG_END)(?:\n|$)'
+
+  - id: skill-xray.python-execution-capability
+    languages: [python]
+    message: Python code invokes a process or dynamic-code execution API.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: medium
+      skill_xray_capability: execution
+    pattern-either:
+      - patterns:
+          - pattern: subprocess.$FUNC(...)
+          - metavariable-regex:
+              metavariable: $FUNC
+              regex: '^(?:run|call|check_call|check_output|Popen|getoutput|getstatusoutput)$'
+      - patterns:
+          - pattern: os.$FUNC(...)
+          - metavariable-regex:
+              metavariable: $FUNC
+              regex: '^(?:system|popen|spawnl|spawnle|spawnlp|spawnlpe|spawnv|spawnve|spawnvp|spawnvpe|execl|execle|execlp|execlpe|execv|execve|execvp|execvpe|posix_spawn|posix_spawnp)$'
+      - pattern: eval(...)
+      - pattern: exec(...)
+      - pattern: builtins.eval(...)
+      - pattern: builtins.exec(...)
+
+  - id: skill-xray.python-network-capability
+    languages: [python]
+    message: Python code invokes a network client API.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: medium
+      skill_xray_capability: network
+    pattern-either:
+      - patterns:
+          - pattern: requests.$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request)$'
+      - patterns:
+          - pattern: httpx.$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request|stream)$'
+      - pattern: urllib.request.urlopen(...)
+      - pattern: urllib.request.urlretrieve(...)
+      - pattern: socket.create_connection(...)
+      - patterns:
+          - pattern: requests.Session(...).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request)$'
+      - patterns:
+          - pattern: httpx.$CLIENT(...).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $CLIENT
+              regex: '^(?:AsyncClient|Client)$'
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request|stream)$'
+      - patterns:
+          - pattern: $SESSION.$METHOD(...)
+          - pattern-inside: |
+              $SESSION = $LIB.$CLIENT(...)
+              ...
+          - metavariable-regex:
+              metavariable: $LIB
+              regex: '^(?:httpx|requests)$'
+          - metavariable-regex:
+              metavariable: $CLIENT
+              regex: '^(?:AsyncClient|Client|Session)$'
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request|stream)$'
+      - patterns:
+          - pattern: $OWNER.$SESSION.$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: '^(?:delete|get|head|options|patch|post|put|request|stream)$'
+
+  - id: skill-xray.shell-network-capability
+    languages: [bash]
+    message: Shell code invokes a network client command.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: medium
+      skill_xray_capability: network
+    pattern-either:
+      - patterns:
+          - pattern: $COMMAND ...
+          - metavariable-regex:
+              metavariable: $COMMAND
+              regex: '^(?:.*/)?(?:(?:aria2c|curl|ftp|http|httpie|nc|ncat|scp|sftp|socat|ssh|telnet|wget)[0-9.]*|(?:curl|wget)\$(?:IFS|\{IFS\}).*)$'
+      - patterns:
+          - pattern: $WRAPPER $COMMAND ...
+          - metavariable-regex:
+              metavariable: $WRAPPER
+              regex: '^(?:.*/)?(?:command|env|sudo)$'
+          - metavariable-regex:
+              metavariable: $COMMAND
+              regex: '^(?:.*/)?(?:aria2c|curl|ftp|http|httpie|nc|ncat|scp|sftp|socat|ssh|telnet|wget)[0-9.]*$'
+
+  - id: skill-xray.shell-execution-capability
+    languages: [bash]
+    message: Shell code invokes a dynamic command execution primitive.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: medium
+      skill_xray_capability: execution
+    pattern-either:
+      - patterns:
+          - pattern: $COMMAND ...
+          - metavariable-regex:
+              metavariable: $COMMAND
+              regex: '^(?:.*/)?(?:bash|bun|cmake|cp|dash|docker|fish|git|id|install|ksh|make|mkdir|mv|node|npm|npx|perl|php|pip[0-9.]*|pnpm|powershell|pwsh|python[0-9.]*|rm|ruby|sh|uv|uvx|yarn|zsh)$'
+      - patterns:
+          - pattern: $WRAPPER $COMMAND ...
+          - metavariable-regex:
+              metavariable: $WRAPPER
+              regex: '^(?:.*/)?(?:command|env|sudo)$'
+          - metavariable-regex:
+              metavariable: $COMMAND
+              regex: '^(?:.*/)?(?:bash|bun|cmake|cp|dash|docker|fish|git|id|install|ksh|make|mkdir|mv|node|npm|npx|perl|php|pip[0-9.]*|pnpm|powershell|pwsh|python[0-9.]*|rm|ruby|sh|uv|uvx|yarn|zsh)$'
+
+  # --- JavaScript / TypeScript lane -----------------------------------------------------------
+  # The same sinks the Python and shell rules model, for the scripts a Node-based agent skill
+  # ships. Rule slugs shared with the other languages keep one vector per behaviour.
+
+  - id: skill-xray.js-remote-payload-execution
+    languages: [javascript, typescript]
+    mode: taint
+    message: Network-controlled content reaches a JavaScript execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-018
+      skill_xray_rule: opengrep-js-remote-execution
+      skill_xray_severity: critical
+    options:
+      max_match_per_file: 1000
+      taint_intrafile: true
+    pattern-sources:
+      - pattern: fetch(...)
+      - pattern: await fetch(...)
+      - pattern: axios.$METHOD(...)
+      - pattern: axios(...)
+      - pattern: got(...)
+      - pattern: https.get(...)
+      - pattern: http.get(...)
+    pattern-sinks:
+      # focus on the code or command argument: an options object such as `{ env: process.env }`
+      # is not what runs
+      - patterns:
+          - pattern-either:
+              - pattern: eval($CODE, ...)
+              - pattern: new Function(..., $CODE)
+              - pattern: Function(..., $CODE)
+              - pattern: vm.runInThisContext($CODE, ...)
+              - pattern: vm.runInNewContext($CODE, ...)
+              - pattern: vm.runInContext($CODE, ...)
+          - focus-metavariable: $CODE
+      # the process API is the child_process module however it is imported: OpenGrep resolves a
+      # plain import to child_process.$FN but not a node: import or a module object, so those
+      # two are bound here and reused by every process sink below
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($CODE, ...)
+              - patterns:
+                  - patterns: &child_process_named
+                      - pattern-inside: |
+                          import { ..., $FN, ... } from "node:child_process"
+                          ...
+                  - pattern: $FN($CODE, ...)
+              - patterns:
+                  - patterns: &child_process_object
+                      - pattern-either:
+                          - pattern-inside: |
+                              import $CP from "$MOD"
+                              ...
+                          - pattern-inside: |
+                              import * as $CP from "$MOD"
+                              ...
+                          - pattern-inside: |
+                              $CP = require("$MOD")
+                              ...
+                      - metavariable-regex:
+                          metavariable: $MOD
+                          regex: '^["'']?(?:node:)?child_process["'']?$'
+                  - pattern: $CP.$FN($CODE, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:exec|execSync)$
+          - focus-metavariable: $CODE
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($BIN, ["-e", $CODE], ...)
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: $FN($BIN, ["-e", $CODE], ...)
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: $CP.$FN($BIN, ["-e", $CODE], ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:execFile|execFileSync|spawn|spawnSync)$
+          - metavariable-regex:
+              metavariable: $BIN
+              regex: '^["''`]?(?:node|nodejs|deno|bun|python[0-9.]*|perl|ruby|php)["''`]?$'
+          - focus-metavariable: $CODE
+
+  - id: skill-xray.js-command-injection
+    languages: [javascript, typescript]
+    mode: taint
+    message: Untrusted local input reaches a JavaScript command-execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-008
+      skill_xray_rule: opengrep-js-command-injection
+      skill_xray_severity: critical
+    options:
+      max_match_per_file: 1000
+      taint_intrafile: true
+    pattern-sources:
+      - pattern: process.argv
+      - pattern: process.argv[$I]
+      - pattern: process.argv.slice(...)
+      - pattern: process.stdin
+      - pattern: process.env[$K]
+      - pattern: process.env.$K
+    # the sinks are the child_process module, however it is imported; a local function that
+    # happens to be called exec is not one
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($CMD, ...)
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: $FN($CMD, ...)
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: $CP.$FN($CMD, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:exec|execSync)$
+          - focus-metavariable: $CMD
+      - patterns:
+          - pattern-either:
+              - pattern: 'child_process.$FN($CMD, ..., {shell: true, ...}, ...)'
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: '$FN($CMD, ..., {shell: true, ...}, ...)'
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: '$CP.$FN($CMD, ..., {shell: true, ...}, ...)'
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:spawn|spawnSync|execFile|execFileSync)$
+          - focus-metavariable: $CMD
+      - patterns:
+          # with a shell the arguments are interpolated into the command line too
+          - pattern-either:
+              - pattern: 'child_process.$FN($BIN, $ARGS, {shell: true, ...}, ...)'
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: '$FN($BIN, $ARGS, {shell: true, ...}, ...)'
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: '$CP.$FN($BIN, $ARGS, {shell: true, ...}, ...)'
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:spawn|spawnSync|execFile|execFileSync)$
+          - focus-metavariable: $ARGS
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($SH, ["-c", $CMD], ...)
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: $FN($SH, ["-c", $CMD], ...)
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: $CP.$FN($SH, ["-c", $CMD], ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:spawn|spawnSync|execFile|execFileSync)$
+          - metavariable-regex:
+              metavariable: $SH
+              regex: '^["''`]?(?:/usr)?(?:/bin/)?(?:sh|bash|zsh|dash|ksh|fish|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh|python[0-9.]*)["''`]?$'
+          - focus-metavariable: $CMD
+
+  - id: skill-xray.js-reverse-shell
+    languages: [javascript, typescript]
+    message: JavaScript code connects a spawned shell to a network socket.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-040
+      skill_xray_rule: opengrep-reverse-shell
+      skill_xray_severity: critical
+    pattern-either:
+      # a shell or interpreter whose stdio is wired to a network socket
+      - patterns:
+          - pattern-inside: |
+              $SOCK = $NET.$CONNECT(...)
+              ...
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $SH = spawn($BIN, ...)
+                      ...
+                  - pattern-either:
+                      - pattern: $SOCK.pipe($SH.stdin)
+                      - pattern: $SH.stdout.pipe($SOCK)
+                  - metavariable-regex:
+                                metavariable: $BIN
+                                regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+              - patterns:
+                  - pattern-inside: |
+                      $SH = $CP.spawn($BIN, ...)
+                      ...
+                  - pattern-either:
+                      - pattern: $SOCK.pipe($SH.stdin)
+                      - pattern: $SH.stdout.pipe($SOCK)
+                  - metavariable-regex:
+                                metavariable: $BIN
+                                regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+              - patterns:
+                  - pattern-either:
+                      - pattern: 'spawn($BIN, ..., {stdio: [$SOCK, ...], ...}, ...)'
+                      - pattern: '$CP.spawn($BIN, ..., {stdio: [$SOCK, ...], ...}, ...)'
+                  - metavariable-regex:
+                                metavariable: $BIN
+                                regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+          - metavariable-regex:
+              metavariable: $NET
+              regex: ^(?:net|tls)$
+          - metavariable-regex:
+              metavariable: $CONNECT
+              regex: ^(?:connect|createConnection)$
+      - patterns:
+          - pattern-inside: |
+              $SOCK = new $NET.Socket()
+              ...
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $SH = spawn($BIN, ...)
+                      ...
+                  - pattern-either:
+                      - pattern: $SOCK.pipe($SH.stdin)
+                      - pattern: $SH.stdout.pipe($SOCK)
+                  - metavariable-regex:
+                                metavariable: $BIN
+                                regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+              - patterns:
+                  - pattern: 'spawn($BIN, ..., {stdio: [$SOCK, ...], ...}, ...)'
+                  - metavariable-regex:
+                                metavariable: $BIN
+                                regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+          - metavariable-regex:
+              metavariable: $NET
+              regex: ^(?:net|tls)$
+      # inside the connect callback `this` is the socket
+      - patterns:
+          - pattern-inside: |
+              $NET.$CONNECT(..., function(...) { ... })
+          - pattern-inside: |
+              $SH = spawn($BIN, ...)
+              ...
+          - pattern-either:
+              - pattern: this.pipe($SH.stdin)
+              - pattern: $SH.stdout.pipe(this)
+          - metavariable-regex:
+                        metavariable: $BIN
+                        regex: '(?i).*(?:\b(?:sh|bash|zsh|dash|ksh|fish|cmd|powershell|pwsh|python[0-9.]*|node|perl|ruby)\b|shell|comspec).*'
+          - metavariable-regex:
+              metavariable: $NET
+              regex: ^(?:net|tls)$
+          - metavariable-regex:
+              metavariable: $CONNECT
+              regex: ^(?:connect|createConnection)$
+
+  - id: skill-xray.js-credential-read
+    languages: [javascript, typescript]
+    message: JavaScript code reads a private credential file.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-023
+      skill_xray_rule: opengrep-credential-read
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: fs.readFileSync($PATH, ...)
+          - pattern: fs.readFile($PATH, ...)
+          - pattern: fs.promises.readFile($PATH, ...)
+          - pattern: fs.createReadStream($PATH, ...)
+          - pattern: readFileSync($PATH, ...)
+          - pattern: readFile($PATH, ...)
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '(?i).*(?:\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?!\.pub)|\.aws/credentials|\.netrc|\.git-credentials|\.docker/config\.json|\.kube/config).*'
+
+  - id: skill-xray.js-environment-harvest
+    languages: [javascript, typescript]
+    message: JavaScript code sends or encodes the whole process environment.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-026
+      skill_xray_rule: opengrep-environment-harvest
+      skill_xray_severity: high
+    pattern-either:
+      - pattern: 'fetch($URL, {..., body: JSON.stringify(process.env), ...})'
+      - pattern: 'fetch($URL, {..., body: JSON.stringify({..., env: process.env, ...}), ...})'
+      - pattern: axios.$METHOD($URL, process.env, ...)
+      - pattern: 'axios.$METHOD($URL, {..., env: process.env, ...}, ...)'
+      - pattern: $REQ.write(JSON.stringify(process.env), ...)
+      - pattern: $REQ.end(JSON.stringify(process.env), ...)
+      - pattern: Buffer.from(JSON.stringify(process.env), ...).toString("base64")
+      - pattern: btoa(JSON.stringify(process.env))
+
+  - id: skill-xray.js-decoded-payload-execution
+    languages: [javascript, typescript]
+    mode: taint
+    message: Decoded content reaches a JavaScript execution sink.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-019
+      skill_xray_rule: opengrep-js-decode-exec
+      skill_xray_severity: high
+    options:
+      max_match_per_file: 1000
+      taint_intrafile: true
+    pattern-sources:
+      - pattern: Buffer.from($X, "base64")
+      - pattern: Buffer.from($X, "hex")
+      - pattern: atob(...)
+      - pattern: String.fromCharCode(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($CODE, ...)
+              - pattern: new Function(..., $CODE)
+              - pattern: Function(..., $CODE)
+              - pattern: vm.runInThisContext($CODE, ...)
+              - pattern: vm.runInNewContext($CODE, ...)
+              - pattern: vm.runInContext($CODE, ...)
+          - focus-metavariable: $CODE
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($CODE, ...)
+              - patterns:
+                  - patterns: *child_process_named
+                  - pattern: $FN($CODE, ...)
+              - patterns:
+                  - patterns: *child_process_object
+                  - pattern: $CP.$FN($CODE, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(?:exec|execSync)$
+          - focus-metavariable: $CODE
+
+  - id: skill-xray.js-cloud-metadata-access
+    languages: [javascript, typescript]
+    message: JavaScript code queries a cloud instance-metadata endpoint.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-021
+      skill_xray_rule: opengrep-cloud-metadata
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - pattern: fetch($URL, ...)
+          - pattern: axios.$METHOD($URL, ...)
+          - pattern: axios($URL, ...)
+          - pattern: http.get($URL, ...)
+          - pattern: https.get($URL, ...)
+          - pattern: http.request($URL, ...)
+          - pattern: https.request($URL, ...)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '(?i).*(?:169\.254\.169\.254|169\.254\.170\.2|metadata\.google\.internal|computeMetadata/v1|/latest/meta-data|metadata\.azure\.com|100\.100\.100\.200|fd00:ec2::254).*'
+
+  - id: skill-xray.js-shell-fetch-pipe-exec
+    languages: [javascript, typescript]
+    message: A shell string handed to the process API downloads and runs remote code.
+    severity: ERROR
+    metadata:
+      skill_xray_vector: SXV-009
+      skill_xray_rule: opengrep-js-fetch-pipe-exec
+      skill_xray_severity: high
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: child_process.$FN($CMD, ...)
+                  - patterns:
+                      - patterns: *child_process_named
+                      - pattern: $FN($CMD, ...)
+                  - patterns:
+                      - patterns: *child_process_object
+                      - pattern: $CP.$FN($CMD, ...)
+              - metavariable-regex:
+                  metavariable: $FN
+                  regex: ^(?:exec|execSync)$
+          - patterns:
+              - pattern-either:
+                  - pattern-either:
+                      - pattern: 'child_process.$FN($CMD, ..., {shell: true, ...}, ...)'
+                      - patterns:
+                          - patterns: *child_process_named
+                          - pattern: '$FN($CMD, ..., {shell: true, ...}, ...)'
+                      - patterns:
+                          - patterns: *child_process_object
+                          - pattern: '$CP.$FN($CMD, ..., {shell: true, ...}, ...)'
+                  - pattern-either:
+                      - pattern: child_process.$FN($SH, ["-c", $CMD], ...)
+                      - patterns:
+                          - patterns: *child_process_named
+                          - pattern: $FN($SH, ["-c", $CMD], ...)
+                      - patterns:
+                          - patterns: *child_process_object
+                          - pattern: $CP.$FN($SH, ["-c", $CMD], ...)
+              - metavariable-regex:
+                  metavariable: $FN
+                  regex: ^(?:spawn|spawnSync|execFile|execFileSync)$
+      - metavariable-regex:
+          metavariable: $CMD
+          regex: '(?is).*\b(?:curl|wget)\b[^\n]*https?://[^\n]*\|\s*(?:ba|z|da)?sh\b.*'
+
+  - id: skill-xray.js-execution-capability
+    languages: [javascript, typescript]
+    message: JavaScript code invokes a process or dynamic-code execution API.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: medium
+      skill_xray_capability: execution
+    pattern-either:
+      - pattern: child_process.$FUNC(...)
+      - patterns:
+          - patterns: *child_process_named
+          - pattern: $FN(...)
+      - patterns:
+          - patterns: *child_process_object
+          - pattern: $CP.$FN(...)
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: vm.$RUN(...)
+
+  - id: skill-xray.js-network-capability
+    languages: [javascript, typescript]
+    message: JavaScript code invokes a network client API.
+    severity: WARNING
+    metadata:
+      skill_xray_vector: SXV-033
+      skill_xray_rule: permission-understatement
+      skill_xray_severity: medium
+      skill_xray_capability: network
+    pattern-either:
+      - pattern: fetch(...)
+      - pattern: axios(...)
+      - pattern: axios.$METHOD(...)
+      - pattern: got(...)
+      - pattern: http.get(...)
+      - pattern: https.get(...)
+      - pattern: http.request(...)
+      - pattern: https.request(...)
+      - pattern: net.connect(...)
+      - pattern: net.createConnection(...)
+      - pattern: tls.connect(...)
+      - pattern: tls.createConnection(...)
+      - pattern: new WebSocket(...)
