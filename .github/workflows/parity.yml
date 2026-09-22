@@ -3,9 +3,14 @@ name: parity
 # The Go scanner must produce the same findings, JSON and SARIF bytes as the Python scanner in
 # this repository. The fixtures are materialised from the Python test suite, every module's
 # corpus gate compares the two as decoded JSON, and the harness compares the two CLIs byte for
-# byte. Runs when either scanner or the harness changes; two to three hours on a hosted runner.
+# byte. The run takes over an hour on a hosted runner, so it is not tied to every push: it runs
+# on main, weekly, on demand, and on a pull request only while the request carries the `parity`
+# label (adding the label starts it, every later push to the labelled request reruns it,
+# any other label leaves it alone).
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * 1'
   push:
     branches: [main]
     paths:
@@ -18,25 +23,23 @@ on:
       - 'go.sum'
       - '.github/workflows/parity.yml'
   pull_request:
-    paths:
-      - 'cmd/**'
-      - 'internal/**'
-      - 'tools/parity/**'
-      - 'src/**'
-      - 'tests/**'
-      - 'go.mod'
-      - 'go.sum'
-      - '.github/workflows/parity.yml'
-
-concurrency:
-  group: parity-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    types: [labeled, opened, synchronize, reopened]
 
 permissions:
   contents: read
 
 jobs:
   go-against-python:
+    # on a pull request: the `parity` label being added, or any other event while the request
+    # carries it; adding an unrelated label does not start or restart the run
+    if: >-
+      github.event_name != 'pull_request'
+      || (github.event.action == 'labeled' && github.event.label.name == 'parity')
+      || (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'parity'))
+    # job-level, so a run whose job is skipped never cancels an active one
+    concurrency:
+      group: parity-${{ github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
