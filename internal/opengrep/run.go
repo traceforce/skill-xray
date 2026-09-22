@@ -158,7 +158,7 @@ func run(p *parse.Package, o Options) []findings.Finding {
 	if err != nil {
 		return couldNotStart(err)
 	}
-	stderr, err := os.Create(filepath.Join(root, "opengrep-stderr.txt")) // #nosec G304 -- a constant name under the engine's temp root
+	stderr, err := os.OpenFile(filepath.Join(root, "opengrep-stderr.txt"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304 -- a constant name under the engine's temp root
 	if err != nil {
 		return couldNotStart(err)
 	}
