@@ -113,31 +113,26 @@ func openRO(t *testing.T, p string) *os.File {
 	return f
 }
 
-// A target replaced between the check and the open is refused: the descriptor must be the
-// regular file that was checked. A directory in its place is caught everywhere; another regular
-// file is caught where file identity comes from the handle, which Windows resolves by path.
+// A target swapped between the check and the open is refused: the handle itself is checked, so a
+// directory or a link put in the file's place is never read.
 func TestSingleFileSwappedAfterCheckIsRefused(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "skill.md")
 	require.NoError(t, os.WriteFile(p, []byte("# a\n"), 0o644))
-	st, err := os.Stat(p)
-	require.NoError(t, err)
-	f, err := openTarget(p, st)
+	f, err := openTarget(p)
 	require.NoError(t, err)
 	f.Close()
-	if runtime.GOOS != "windows" {
-		other := filepath.Join(dir, "other.md")
-		require.NoError(t, os.WriteFile(other, []byte("# b\n"), 0o644))
-		require.NoError(t, os.Rename(other, p))
-		_, err = openTarget(p, st)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "changed while it was being checked")
-	}
 	require.NoError(t, os.Remove(p))
 	require.NoError(t, os.Mkdir(p, 0o755))
-	_, err = openTarget(p, st)
+	_, err = openTarget(p)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "changed while it was being checked")
+	assert.Contains(t, err.Error(), "not a regular file")
+	target := filepath.Join(dir, "target.md")
+	require.NoError(t, os.WriteFile(target, []byte("# b\n"), 0o644))
+	link := filepath.Join(dir, "link.md")
+	testutil.SymlinkOrSkip(t, target, link)
+	_, err = openTarget(link)
+	require.Error(t, err)
 }
 
 func TestSingleFileSymlinkIsRefused(t *testing.T) {

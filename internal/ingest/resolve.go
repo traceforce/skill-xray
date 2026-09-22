@@ -136,7 +136,7 @@ func Resolve(target string) (Resolved, func(), error) {
 			// extracted, pulling the target's contents in.
 			return Resolved{}, noop, refuse("single-file input is a symlink; refused: %s", target)
 		}
-		f, err := openTarget(target, st)
+		f, err := openTarget(target)
 		if err != nil {
 			return Resolved{}, noop, err
 		}
@@ -202,19 +202,18 @@ func isUnsupportedArchive(f *os.File, name string) bool {
 	return isTar(f) || slices.ContainsFunc(archiveExts, func(e string) bool { return strings.HasSuffix(low, e) })
 }
 
-// openTarget opens a single-file target once and checks that the descriptor is the regular file
-// the caller stat'ed; every later read of the target goes through it, so a file swapped after
-// the check is never read. Unix opens without following a symlink; Windows has no such flag,
-// so the symlink refusal before this call is the guard there.
-func openTarget(target string, expected os.FileInfo) (*os.File, error) {
-	f, err := openFile(target, os.O_RDONLY|openFlags, 0)
+// openTarget opens a single-file target once, without following a symlink or a junction, and
+// checks on the handle that it is a regular file; every later read of the target goes through
+// that handle, so nothing swapped in after the check is read.
+func openTarget(target string) (*os.File, error) {
+	f, err := openNoFollow(target)
 	if err != nil {
 		return nil, failClosed(err, "cannot read file %s: %s", target)
 	}
 	st, err := f.Stat()
-	if err != nil || !st.Mode().IsRegular() || !os.SameFile(expected, st) {
+	if err != nil || !st.Mode().IsRegular() {
 		f.Close()
-		return nil, refuse("single-file input changed while it was being checked; refused: %s", target)
+		return nil, refuse("single-file input is not a regular file; refused: %s", target)
 	}
 	return f, nil
 }
