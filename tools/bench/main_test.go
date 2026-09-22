@@ -106,6 +106,22 @@ func TestScanOneRunsConcurrently(t *testing.T) {
 	assert.Empty(t, entries)
 }
 
+func TestRunRefusesBadWorkerCountsAndTrailingInput(t *testing.T) {
+	dir := t.TempDir()
+	data := filepath.Join(dir, "in.jsonl")
+	require.NoError(t, os.WriteFile(data, []byte(`{"benchmark_id":"a","text":"x"}`+"\n"), 0o644))
+	err := cmdRun([]string{"--data", data, "--out", filepath.Join(dir, "out.jsonl"), "--workers", "0"})
+	assert.ErrorContains(t, err, "at least one worker")
+
+	bad := filepath.Join(dir, "bad.jsonl")
+	require.NoError(t, os.WriteFile(bad, []byte(`{"benchmark_id":"a","text":"x"}`+"\n]\n"), 0o644))
+	_, err = loadRecords(bad)
+	assert.ErrorContains(t, err, "record 2")
+	records, err := loadRecords(data)
+	require.NoError(t, err)
+	assert.Len(t, records, 1)
+}
+
 func note(rule string) finding { return finding{Rule: rule, Severity: "low"} }
 
 func hit(vector, tier, severity string) finding {
@@ -147,7 +163,8 @@ func TestVerdictsMetricsAndReport(t *testing.T) {
 	rows := []row{
 		{BenchmarkID: "tp", Label: 1, SourceName: "bad", Findings: []finding{hit("SXV-011", "T1", "high")}},
 		{BenchmarkID: "fn", Label: 1, SourceName: "bad", AttackCategories: []string{"Exfil"}, Findings: []finding{hit("SXV-033", "T3", "high")}},
-		{BenchmarkID: "fp", Label: 0, SourceName: "good", Findings: []finding{hit("SXV-008", "T2", "critical")}},
+		{BenchmarkID: "fp", Label: 0, SourceName: "good", Findings: []finding{hit("SXV-008", "T2", "critical"),
+			{Vector: "SXV-008", Rule: "r2", Severity: "high", Tier: ptr("T2")}}},
 		{BenchmarkID: "tn-medium", Label: 0, SourceName: "good", Findings: []finding{hit("SXV-020", "T1", "medium")}},
 		{BenchmarkID: "tn-t3", Label: 0, SourceName: "good", Findings: []finding{hit("SXV-033", "T3", "high")}},
 		{BenchmarkID: "tn", Label: 0, SourceName: "good"},
@@ -173,6 +190,7 @@ func TestVerdictsMetricsAndReport(t *testing.T) {
 		"benign packages with ONLY T3 capability findings (correctly not counted): 1",
 		"| SXV-008 | 1 |",
 		"| SXV-008 / r | 1 |",
+		"| SXV-008 / r2 | 1 |",
 		"| good | 1 |",
 		"| (unmapped) | 1 / 1 | 100.0% |",
 		"| Exfil | 0 / 1 | 0.0% |",
@@ -211,6 +229,14 @@ func TestCompareCarriesUnpairedBaseRowsAndRejectsUnknownIDs(t *testing.T) {
 	} {
 		assert.Contains(t, text, want)
 	}
+	// an exclusion applies to both runs of a comparison
+	drop := map[string]bool{"SXV-008": true}
+	excludeVectors(base, drop)
+	assert.Empty(t, base[1].Findings)
+	text, err = compare(after, base, false)
+	require.NoError(t, err)
+	assert.NotContains(t, text, "SXV-008")
+
 	_, err = compare([]row{{BenchmarkID: "zz"}}, base, false)
 	assert.ErrorContains(t, err, "not in the base run")
 	_, err = compare(nil, base, false)

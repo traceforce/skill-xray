@@ -20,6 +20,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -118,6 +119,9 @@ func cmdRun(args []string) error {
 	if *data == "" || *out == "" {
 		return errors.New("run needs --data and --out")
 	}
+	if *workers < 1 {
+		return errors.New("run needs at least one worker")
+	}
 	records, err := loadRecords(*data)
 	if err != nil {
 		return err
@@ -185,9 +189,11 @@ func loadRecords(path string) ([]record, error) {
 	var out []record
 	err := decodeLines(path, func(dec *json.Decoder) error {
 		var rec record
-		err := dec.Decode(&rec)
+		if err := dec.Decode(&rec); err != nil {
+			return err
+		}
 		out = append(out, rec)
-		return err
+		return nil
 	})
 	return out, err
 }
@@ -196,14 +202,17 @@ func loadRows(path string) ([]row, error) {
 	var out []row
 	err := decodeLines(path, func(dec *json.Decoder) error {
 		var r row
-		err := dec.Decode(&r)
+		if err := dec.Decode(&r); err != nil {
+			return err
+		}
 		out = append(out, r)
-		return err
+		return nil
 	})
 	return out, err
 }
 
-// decodeLines calls decode once per JSON value in the file.
+// decodeLines calls decode once per JSON value in the file, up to a clean end of input; any
+// trailing content that is not a value is an error.
 func decodeLines(path string, decode func(*json.Decoder) error) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -211,12 +220,14 @@ func decodeLines(path string, decode func(*json.Decoder) error) error {
 	}
 	defer f.Close()
 	dec := json.NewDecoder(f)
-	for n := 1; dec.More(); n++ {
-		if err := decode(dec); err != nil {
+	for n := 1; ; n++ {
+		switch err := decode(dec); {
+		case errors.Is(err, io.EOF):
+			return nil
+		case err != nil:
 			return fmt.Errorf("%s: record %d: %w", path, n, err)
 		}
 	}
-	return nil
 }
 
 // pinnedSplit names the pinned split whose id list the records are, exactly.

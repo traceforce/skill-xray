@@ -149,12 +149,18 @@ func analyze(rows []row, blocking func([]finding) bool, effective bool) analysis
 		switch {
 		case blocking(r.Findings):
 			a.fpSources.add(r.SourceName)
-			seen := map[string]bool{}
+			seenVector, seenRule := map[string]bool{}, map[string]bool{}
 			for _, f := range fs {
-				if f.attack() && highOrCritical[f.Severity] && !seen[f.Vector] {
-					seen[f.Vector] = true
+				if !f.attack() || !highOrCritical[f.Severity] {
+					continue
+				}
+				if !seenVector[f.Vector] {
+					seenVector[f.Vector] = true
 					a.fpVectors.add(f.Vector)
-					a.fpRules.add(f.Vector + " / " + f.Rule)
+				}
+				if rule := f.Vector + " / " + f.Rule; !seenRule[rule] {
+					seenRule[rule] = true
+					a.fpRules.add(rule)
 				}
 			}
 		case len(fs) > 0 && !slices.ContainsFunc(fs, finding.attack):
@@ -435,6 +441,14 @@ func compare(rows, base []row, effective bool) (string, error) {
 	return b.String(), nil
 }
 
+// excludeVectors drops the findings of the named vectors from every row, so a comparison sees
+// both runs without them.
+func excludeVectors(rows []row, drop map[string]bool) {
+	for i := range rows {
+		rows[i].Findings = slices.DeleteFunc(rows[i].Findings, func(f finding) bool { return drop[f.Vector] })
+	}
+}
+
 func cmdScore(args []string) error {
 	fs := flag.NewFlagSet("score", flag.ExitOnError)
 	md := fs.String("md", "", "also write the report to this file")
@@ -456,9 +470,7 @@ func cmdScore(args []string) error {
 			drop[v] = true
 		}
 	}
-	for i := range rows {
-		rows[i].Findings = slices.DeleteFunc(rows[i].Findings, func(f finding) bool { return drop[f.Vector] })
-	}
+	excludeVectors(rows, drop)
 	if *title == "" {
 		*title = fs.Arg(0)
 	}
@@ -468,6 +480,7 @@ func cmdScore(args []string) error {
 		if err != nil {
 			return err
 		}
+		excludeVectors(baseRows, drop)
 		delta, err := compare(rows, baseRows, *effective)
 		if err != nil {
 			return err
