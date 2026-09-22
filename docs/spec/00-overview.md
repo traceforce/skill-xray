@@ -596,7 +596,10 @@ python -m skill_xray.cli P --analyze --enrich --json --sarif <out>/py.sarif --op
 with an environment stripped of every `SKILLXRAY_LLM_*` variable (LLM lane off on both sides), the
 same pinned OpenGrep binary (`opengrep.Resolve("")` on the Go side must return the same path), and a
 per-run timeout of 300 s. stdout, stderr and exit code are captured. Python outputs are cached under
-`corpus-cache/<sha256(oracle HEAD + package tree digest)>/` so the oracle runs once per package
+`corpus-cache/<sha256(oracle HEAD + package tree digest)>/`, and the cache names the head it holds in
+`corpus-cache/ORACLE`, so the oracle runs once per package. `run --golden` reads that head and compares
+the Go CLI against the cached outputs alone: Python never runs and a package without a cached run
+fails as `oracle-absent`, which is how a frozen dataset replaces the live oracle
 revision.
 
 **Normalisation of `--json`.** Both documents are parsed. Then: `source` is dropped (argv path);

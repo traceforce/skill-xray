@@ -299,15 +299,34 @@ func cmdRun(args []string) error {
 	outDir := fs.String("out", "corpus", "where parity-report.md and parity.jsonl are written")
 	knownPath := fs.String("known", "tools/parity/known_divergences.json", "accepted divergences")
 	timeout := fs.Duration("timeout", 300*time.Second, "per-run timeout")
+	golden := fs.Bool("golden", false, "compare against the cached Python outputs only: the oracle head is read from <cache>/ORACLE, Python never runs, and a package without a cached run fails")
 	fs.Parse(args)
 
 	known, err := loadDivergences(*knownPath)
 	if err != nil {
 		return err
 	}
-	head, dirty, err := of.pin()
-	if err != nil {
-		return err
+	// the cache names the oracle it holds, so a golden run needs neither the Python tree nor git
+	var head string
+	var dirty []string
+	versions := "golden dataset"
+	if *golden {
+		data, err := os.ReadFile(filepath.Join(*cache, "ORACLE"))
+		if err != nil {
+			return fmt.Errorf("golden dataset: %w", err)
+		}
+		head = strings.TrimSpace(string(data))
+	} else {
+		if head, dirty, err = of.pin(); err != nil {
+			return err
+		}
+		versions = of.versions()
+		if err := os.MkdirAll(*cache, 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(*cache, "ORACLE"), []byte(head+"\n"), 0o644); err != nil {
+			return err
+		}
 	}
 	pkgs, err := cf.packages()
 	if err != nil {
@@ -324,7 +343,7 @@ func cmdRun(args []string) error {
 		sem <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-sem }()
-			results[i] = runOne(pkgs[i], head, *cache, of.python, *goBin, haveGo, *opengrepBin, env, *timeout, known)
+			results[i] = runOne(pkgs[i], head, *cache, of.python, *goBin, haveGo, *opengrepBin, env, *timeout, known, *golden)
 		})
 	}
 	wg.Wait()
@@ -341,7 +360,7 @@ func cmdRun(args []string) error {
 	if err := os.WriteFile(filepath.Join(*outDir, "parity.jsonl"), jl.Bytes(), 0o644); err != nil {
 		return err
 	}
-	report := renderReport(head, dirty, of.versions(), *goBin, haveGo, results, elapsed)
+	report := renderReport(head, dirty, versions, *goBin, haveGo, results, elapsed)
 	if err := os.WriteFile(filepath.Join(*outDir, "parity-report.md"), []byte(report), 0o644); err != nil {
 		return err
 	}
@@ -394,7 +413,7 @@ func cacheKey(head string, p testutil.Pkg) (string, error) {
 }
 
 func runOne(p testutil.Pkg, head, cache, python, goBin string, haveGo bool, opengrepBin string, env []string,
-	timeout time.Duration, known []divergence) result {
+	timeout time.Duration, known []divergence, golden bool) result {
 	r := result{Source: p.Source, Package: filepath.ToSlash(p.Path)}
 	key, err := cacheKey(head, p)
 	if err != nil {
@@ -410,6 +429,10 @@ func runOne(p testutil.Pkg, head, cache, python, goBin string, haveGo bool, open
 		s.PyJSON, _ = os.ReadFile(filepath.Join(dir, "py.json"))
 		s.PySarif, _ = os.ReadFile(filepath.Join(dir, "py.sarif"))
 	} else {
+		if golden {
+			r.Status, r.Error = "oracle-absent", "no cached Python run for this package in the golden dataset"
+			return r
+		}
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			r.Status, r.Error = "oracle-error", err.Error()
 			return r

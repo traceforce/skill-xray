@@ -242,7 +242,7 @@ make corpus    # materialise the parity fixtures under corpus/ from the oracle's
 make clean     # remove bin/
 ```
 
-`make parity` and `make corpus` need Python and a checkout of the Python scanner; `ORACLE` names it (default `../_reference/skill-xray-oracle`) and `PYTHON` names the interpreter. The harness in `tools/parity` runs both scanners over the same packages and diffs the `--json` output and the SARIF bytes; the only accepted differences are listed in `tools/parity/known_divergences.json` and are failure-path message prefixes that embed a Python exception class name. `go run ./tools/parity run -h` lists its flags.
+`make parity` and `make corpus` need Python and a checkout of the Python scanner; `ORACLE` names it (default `../_reference/skill-xray-oracle`) and `PYTHON` names the interpreter. The harness in `tools/parity` runs both scanners over the same packages and diffs the `--json` output and the SARIF bytes; the only accepted differences are listed in `tools/parity/known_divergences.json` and are failure-path message prefixes that embed a Python exception class name. `go run ./tools/parity run -h` lists its flags. `make parity-golden` compares the Go scanner with the Python outputs already cached under `corpus-cache/` and needs no Python: the cache records the oracle it was produced from, and a package without a cached run fails.
 
 CI runs the Go and Python jobs on Linux, macOS and Windows. Each OS exercises a different part: the symlink tests run on Linux and macOS, the NTFS junction test runs on Windows, and macOS is where filenames arrive in a different Unicode form (NFD instead of NFC).
 

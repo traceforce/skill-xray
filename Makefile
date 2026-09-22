@@ -41,6 +41,9 @@ parity: build ## Compare the Go scanner with the Python oracle over the fixtures
 	@[ -f corpus/pytest/manifest.jsonl ] || $(MAKE) corpus
 	$(GO) run ./tools/parity run --corpus corpus/pytest --corpus corpus/msb-test -j $(J)
 
+parity-golden: build ## Compare the Go scanner with the cached Python outputs under corpus-cache/ (no Python needed)
+	$(GO) run ./tools/parity run --corpus corpus/pytest --corpus corpus/msb-test -j $(J) --golden
+
 corpus: ## Materialise the parity fixtures under corpus/ from the oracle's test suite
 	PYTHONPATH="tools/parity$(PATHSEP)$(ORACLE)/src" $(PYTHON) -m pytest $(ORACLE)/tests -q -p pytest_dump_corpus --dump-corpus corpus/pytest
 	@if [ -d "$(MSB)" ]; then $(PYTHON) tools/parity/msb_materialize.py --data $(MSB) --split test --out corpus/msb-test; \
