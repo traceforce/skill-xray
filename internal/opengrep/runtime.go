@@ -103,15 +103,10 @@ func CachedExecutable(dir string) string {
 	return filepath.Join(dir, name)
 }
 
-// digestFile is _digest; a test counts its calls.
-var digestFile = func(path string) (string, error) {
-	f, err := os.Open(path) // #nosec G304 -- hashing the candidate engine is the verification itself
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
+// digestFile is _digest over the open handle; a test counts its calls.
+var digestFile = func(f *os.File) (string, error) {
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
+	if _, err := io.Copy(h, io.NewSectionReader(f, 0, 1<<62)); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
@@ -134,7 +129,10 @@ type digestKey struct {
 }
 
 // verifyExecutable is verify_executable: path must be a regular file with the asset's size
-// and SHA-256 (nil asset: this machine's). It returns the path it verified.
+// and SHA-256 (nil asset: this machine's), both read through one open handle. It returns the
+// path it verified, and the engine runs from that path: the file lives under the user's own
+// cache or at a path the operator named, where a writer already runs as this user, so the pin
+// defends against a corrupt or stale download rather than a concurrent local writer.
 func verifyExecutable(path string, asset *asset) (string, error) {
 	if asset == nil {
 		a, err := hostAsset()
@@ -143,7 +141,12 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 		}
 		asset = &a
 	}
-	info, err := os.Stat(path) // #nosec G703 -- Stat is the first step of verifying the operator's engine path
+	f, err := os.Open(path) // #nosec G304 -- hashing the candidate engine is the verification itself
+	if err != nil {
+		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
+	}
+	defer f.Close()
+	info, err := f.Stat()
 	if err != nil {
 		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 	}
@@ -157,7 +160,7 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 	defer digestsMu.Unlock()
 	digest, ok := digests[key]
 	if !ok {
-		if digest, err = digestFile(path); err != nil {
+		if digest, err = digestFile(f); err != nil {
 			return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 		}
 		if len(digests) >= 8 {

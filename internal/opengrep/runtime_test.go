@@ -68,7 +68,7 @@ func TestVerifiedBinaryDigestIsCachedByFileIdentity(t *testing.T) {
 	clear(digests)
 	calls := 0
 	original := digestFile
-	testutil.Swap(t, &digestFile, func(path string) (string, error) { calls++; return original(path) })
+	testutil.Swap(t, &digestFile, func(f *os.File) (string, error) { calls++; return original(f) })
 	for range 2 {
 		_, err := verifyExecutable(candidate, a)
 		require.NoError(t, err)
