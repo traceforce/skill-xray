@@ -286,6 +286,24 @@ _CITATION_FRAME_RE = re.compile(
 # between word characters it is an apostrophe
 _OPEN_QUOTE_RE = re.compile(r"""["\u201c\u00ab]|(?<!\w)['\u2018]""")
 _CLOSE_QUOTE_RE = re.compile(r"""["\u201d\u00bb]|['\u2019](?!\w)""")
+# A list introduced as patterns, phrases or examples ("suspicious patterns:", "instructions
+# like:") cites its quoted items; an unquoted item, or a list under any other line, is an order.
+_CITED_LIST_INTRO_RE = re.compile(
+    r"\b(?:patterns?|phrases?|indicators?|red flags|examples?|such as|for example|"
+    r"(?:instructions|prompts|messages|emails|content|inputs?) like)\s*:\s*$", re.I)
+# a quoted item opens with one complete quoted string, each opening quote paired with its own
+# closing quote, so "don't follow policy" is one string and an unterminated quote is none; the
+# cue carries on only through an item that is exactly that string
+_QUOTED_ITEM_RE = re.compile(
+    r"""\s*(?:[-*+]|\d+[.)])\s+(?:"[^"\n]*"|'[^'\n]*'|\u201c[^\u201d\n]*\u201d|\u2018[^\u2019\n]*\u2019|"""
+    r"""\u00ab[^\u00bb\n]*\u00bb)""")
+_PURE_QUOTED_ITEM_RE = re.compile(_QUOTED_ITEM_RE.pattern + r"\s*")
+# "Suspicious patterns:" over "---" is a setext heading whose underline the parser keeps outside
+# the heading's span; under a list item, heading or quote the same line is a rule. An HTML
+# comment between two items is invisible to the reader and does not end the list.
+_SETEXT_UNDERLINE_RE = re.compile(r" {0,3}(?:-+|=+)\s*$")
+_MARKED_LINE_RE = re.compile(r"\s*(?:#|>|[-*+]\s|\d+[.)]\s)")
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 _QUOTED_FRAGMENT_RE = re.compile(
     r"""["'“‘«][^"'”’»\n]{3,}["'”’»]""")
 _DISCUSSED_RE = re.compile(
@@ -309,8 +327,9 @@ def _rest_of_line(raw, pos):
     return raw[pos:] if end < 0 else raw[pos:end]
 
 
-def _quoted(raw, start, end):
-    """A cited quotation: several quoted fragments, or a framed quote that is discussed after."""
+def _quoted(raw, start, end, cited=False):
+    """A cited quotation: several quoted fragments, a framed quote that is discussed after, or an
+    item of a list introduced as patterns or examples."""
     line_start = raw.rfind("\n", 0, start) + 1
     opens = list(_OPEN_QUOTE_RE.finditer(raw, line_start, start))
     if not opens or _CLOSE_QUOTE_RE.search(raw, opens[-1].end(), start):
@@ -320,7 +339,7 @@ def _quoted(raw, start, end):
     line = _rest_of_line(raw, line_start)
     after = _rest_of_line(raw, end)
     close = _CLOSE_QUOTE_RE.search(after)       # the discussion follows the closing quote
-    return (len(_QUOTED_FRAGMENT_RE.findall(line)) >= 2
+    return (cited or len(_QUOTED_FRAGMENT_RE.findall(line)) >= 2
             or (close is not None and _DISCUSSED_RE.search(after[close.end():]) is not None))
 
 
@@ -874,11 +893,27 @@ def _directive_findings(art):
     seen = set()
     totals = {}
     previous = ""
+    cited_prev = False
+    prev_end, lines = 0, None
     for prose, start_line in _prose_blocks(art):
         raw = _flatten_prose(prose, start_line)
         if not raw:
             continue
         intro_prev = bool(_EXAMPLE_INTRO_RE.search(previous))
+        # each list item is its own block: the cue on the intro carries through items that are
+        # one quoted string each, so an item with prose of its own is the last one cited, and
+        # any block the parser did not lift as prose (a fence, a rule) between two items ends
+        # the list as well
+        quoted_item = _QUOTED_ITEM_RE.match(raw) is not None
+        cited = quoted_item and (_CITED_LIST_INTRO_RE.search(previous) is not None or cited_prev)
+        if cited:
+            lines = (art.text or "").split("\n") if lines is None else lines
+            gap = prev_end
+            if (gap < start_line - 1 and _SETEXT_UNDERLINE_RE.match(lines[gap])
+                    and not _MARKED_LINE_RE.match(previous)):
+                gap += 1                    # the intro's own underline
+            between = "\n".join(lines[gap:start_line - 1])
+            cited = not _HTML_COMMENT_RE.sub("", between).strip()
         for vid, tag, sev, rx in _DIRECTIVE_RULES:
             for m in rx.finditer(raw):
                 key = (vid, m.group(0).strip().lower())
@@ -887,7 +922,7 @@ def _directive_findings(art):
                 before = raw[:m.start()]
                 described = _EXAMPLE_INTRO_RE.search(before) or intro_prev
                 described = (described or _is_defensive_frame(before)
-                             or _quoted(raw, m.start(), m.end()))
+                             or _quoted(raw, m.start(), m.end(), cited))
                 if described:
                     continue
                 rest = _rest_of_line(raw, m.end())
@@ -921,7 +956,9 @@ def _directive_findings(art):
                               "col": col,
                               "selector": "%s:%s" % (tag, matched.lower()[:50]),
                               "snippet": raw[:200]}))
+        cited_prev = cited and _PURE_QUOTED_ITEM_RE.fullmatch(raw) is not None
         previous = "" if _in_frontmatter(art, start_line) else raw
+        prev_end = start_line + prose.count("\n")
     for vector, total in totals.items():
         if total > _FINDING_CAP:
             out.append(_cap_note(art.rel, vector, total - _FINDING_CAP))
