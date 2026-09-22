@@ -113,18 +113,30 @@ func openRO(t *testing.T, p string) *os.File {
 	return f
 }
 
-// A target swapped between the check and the open is refused: the handle itself is checked, so a
-// directory or a link put in the file's place is never read.
-func TestSingleFileSwappedAfterCheckIsRefused(t *testing.T) {
+// The single-file path reads only through the handle it checked: once opened, the target can be
+// removed or replaced and every later read still sees the checked bytes. A directory or a link in
+// the file's place is refused at the open.
+func TestSingleFileReadsUseTheCheckedHandle(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "skill.md")
 	require.NoError(t, os.WriteFile(p, []byte("# a\n"), 0o644))
 	f, err := openTarget(p)
 	require.NoError(t, err)
-	f.Close()
+	defer f.Close()
 	require.NoError(t, os.Remove(p))
-	require.NoError(t, os.Mkdir(p, 0o755))
-	_, err = openTarget(p)
+	_ = os.WriteFile(p, []byte("# swapped\n"), 0o644) // may fail while a delete is pending on Windows
+	assert.False(t, looksLikeZip(f))
+	assert.False(t, isUnsupportedArchive(f, p))
+	tmp, err := wrapSingleFile(f, p)
+	require.NoError(t, err)
+	defer rmtree(tmp)
+	copied, err := os.ReadFile(filepath.Join(tmp, "skill.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "# a\n", string(copied))
+
+	d := filepath.Join(dir, "dir.md")
+	require.NoError(t, os.Mkdir(d, 0o755))
+	_, err = openTarget(d)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a regular file")
 	target := filepath.Join(dir, "target.md")
