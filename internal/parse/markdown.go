@@ -858,6 +858,8 @@ type htmlInspector struct {
 	fragLines    []int
 	line, column int
 	fully, saw   bool
+	unknown      bool // a tag or attribute outside the presentational set
+	text         bool // a text token that is not whitespace
 	anchors      []*htmlAnchor
 	codeStack    []string
 }
@@ -885,8 +887,9 @@ func (d *mdDoc) inspectHTML(fragment string, line, column int) {
 	if len(h.anchors) > 0 || len(h.codeStack) > 0 {
 		h.fully = false
 	}
-	if !h.saw || !h.fully {
+	if !h.saw || !h.fully || h.unknown {
 		d.md.HasUninspectableHTML = true
+		d.md.HTMLHidesContent = d.md.HTMLHidesContent || !h.saw || !h.fully || h.text
 		d.md.HTMLUninspectable = append(d.md.HTMLUninspectable, HTMLFragment{Text: fragment, Line: line, Column: column})
 	} else {
 		d.md.HTMLProse = append(d.md.HTMLProse, HTMLProse{Text: projectHTML(fragment), Line: line})
@@ -1036,6 +1039,9 @@ func (h *htmlInspector) sourceColumn(l, col int) int {
 }
 
 func (h *htmlInspector) data(s string) {
+	if strings.TrimSpace(s) != "" {
+		h.text = true
+	}
 	for _, a := range h.anchors {
 		a.label = append(a.label, s)
 	}
@@ -1114,12 +1120,12 @@ func (h *htmlInspector) startTag(tag string, norm [][2]string, start int) {
 		h.fully = false
 	}
 	if !presentationalHTML[tag] && tag != "subject" {
-		h.fully = false
+		h.unknown = true
 		return
 	}
 	for _, a := range norm {
 		if !globalHTMLAttrs[a[0]] && !tagHTMLAttrs[tag][a[0]] {
-			h.fully = false
+			h.unknown = true
 			return
 		}
 	}
@@ -1175,7 +1181,7 @@ func (h *htmlInspector) endTag(tag string, start int) {
 	l, col := h.pos(start)
 	h.d.md.HTMLTags = append(h.d.md.HTMLTags, HTMLTag{Name: tag, Line: h.line + l - 1, Column: h.sourceColumn(l, col), Closing: true})
 	if !presentationalHTML[tag] && tag != "subject" {
-		h.fully = false
+		h.unknown = true
 	}
 	if tag == "code" || tag == "pre" {
 		if len(h.codeStack) == 0 || h.codeStack[len(h.codeStack)-1] != tag {

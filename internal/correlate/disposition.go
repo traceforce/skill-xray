@@ -116,7 +116,7 @@ func materialLedgerEntry(e ingest.LedgerEntry, p *parse.Package) bool {
 	if a := p.ByRel[e.Path]; a != nil {
 		kind = a.Kind
 	}
-	return !ingest.BenignLedger[reason] && checks.StaticSeverity(reason, kind) != ""
+	return !ingest.BenignLedger[reason] && checks.StaticSeverity(reason, kind, e.Path) != ""
 }
 
 // triadMap is asdict(triad) with the evidence sorted by canonical form; a deep copy.

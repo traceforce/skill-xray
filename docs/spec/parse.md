@@ -540,7 +540,9 @@ on `kind` (kinds come from `ingest._classify` and `_classify_shebang`):
   separately in list order. `Preprocessing = inline + fenced`; `PreprocessingCounts = {inlineTotal,
   fencedTotal}`; when `Markdown != nil`, its `Preproc` and `PreprocCounts` are overwritten with
   copies. `mderr != ""` -> `("markdown_parse_error", mderr)`; else `HasUninspectableHTML` ->
-  `("raw_html", nil)`.
+  `("raw_html", nil)` when `HTMLHidesContent` (an uninspectable fragment carried text, or a
+  construct the inspector could not resolve), else `("raw_html_markup", nil)` (unknown tags or
+  attributes alone).
   Pins: `test_inline_preprocessing_in_frontmatter_uses_raw_file_location` (3,18),
   `test_frontmatter_and_body_share_one_inline_cap` (25 kept, all `front-`, note `25 more SXV-001`),
   `test_frontmatter_decoys_cannot_crowd_out_live_body_preprocessing`,

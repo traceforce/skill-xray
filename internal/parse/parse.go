@@ -213,7 +213,13 @@ var parseMD = func(a *Artifact, text string, stripFM bool) {
 	md.Preproc = append([]Preproc{}, a.Preprocessing...)
 	md.PreprocCounts = a.PreprocessingCounts
 	if md.HasUninspectableHTML {
-		a.diag("raw_html", nil)
+		// markup the prose model could not project is a gap when it hid content; unknown tags or
+		// attributes alone are a note, their names and attributes being recorded either way
+		reason := "raw_html_markup"
+		if md.HTMLHidesContent {
+			reason = "raw_html"
+		}
+		a.diag(reason, nil)
 	}
 }
 

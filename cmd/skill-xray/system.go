@@ -34,14 +34,15 @@ func (s *systemOptions) bind(c *cobra.Command) {
 }
 
 // headline is a package's one-word verdict: BLOCKING for a high or critical finding with a vector,
-// FINDINGS for anything else reported, CLEAN for nothing.
+// FINDINGS for any other finding with a vector or a gap at medium or above, CLEAN otherwise; a low
+// note stays in the ledger and the JSON without moving the verdict.
 func headline(fs []findings.Finding) string {
 	switch {
 	case slices.ContainsFunc(fs, func(f findings.Finding) bool {
 		return f.Vector != "" && (f.Severity == "critical" || f.Severity == "high")
 	}):
 		return "BLOCKING"
-	case len(fs) > 0:
+	case slices.ContainsFunc(fs, func(f findings.Finding) bool { return f.Vector != "" || f.Severity != "low" }):
 		return "FINDINGS"
 	}
 	return "CLEAN"

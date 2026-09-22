@@ -122,6 +122,9 @@ type Markdown struct {
 	HTMLProse                     []HTMLProse
 	HTMLUninspectable             []HTMLFragment
 	HasHTML, HasUninspectableHTML bool
+	// HTMLHidesContent: an uninspectable fragment carried text, or a construct the inspector
+	// could not resolve; unknown tags or attributes alone leave it false
+	HTMLHidesContent bool
 }
 
 // Preproc is a load-time preprocessing token; Runs is live substitution vs decoy.
