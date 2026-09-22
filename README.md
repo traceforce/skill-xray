@@ -12,7 +12,7 @@ The binary was ported from a Python scanner and, before that code was retired in
 
 ### Prerequisites
 
-- [Go 1.26](https://go.dev/dl/); the module pins the `go1.26.6` toolchain and fetches it when needed
+- [Go 1.26](https://go.dev/dl/), only to build from source; the module pins the `go1.26.6` toolchain and fetches it when needed
 - `git` on the PATH, only when scanning a git repository target
 - OpenGrep 1.29.0, only for the code lane under `--analyze`; `skill-xray install-opengrep` fetches the pinned build
 
