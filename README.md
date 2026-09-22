@@ -67,9 +67,9 @@ The target may be a directory, a single file such as `SKILL.md`, a `.zip` archiv
 | `--enrich` | add capability context and raw candidates; requires `--analyze --json` |
 | `--sarif <path>` | write a validated SARIF report; requires `--analyze`; the path must be outside the scanned package |
 | `--policy <path>` | a scoped operator policy applied to the SARIF dispositions; requires `--sarif` |
-| `--opengrep-bin <path>` | an explicit OpenGrep binary for `--analyze`; it must still match the pinned size and SHA-256 |
+| `--opengrep-bin <path>` | an explicit OpenGrep binary; requires `--analyze` and must still match the pinned size and SHA-256 |
 | `--llm` | the opt-in LLM adjudication pass; sends skill text to the configured provider (see [Configuration](#configuration)); requires `--analyze` |
-| `--llm-shadow`, `--llm-review`, `--llm-apply`, `--llm-additive` | LLM review modes; all require `--llm --analyze --json` |
+| `--llm-shadow`, `--llm-review`, `--llm-apply`, `--llm-additive` | LLM review modes; all require `--llm --analyze --json`, `--llm-apply` also requires `--llm-review`, and `--llm-additive` requires `--llm-shadow` or `--llm-review` |
 
 Exit code 0 means the scan and any report completed, even with critical findings; there is no severity gate. Exit code 2 means a usage error, a refused or failed ingest, a failed SARIF validation or write, a context error, or a high-severity analysis gap such as an unavailable OpenGrep binary when the package ships executable code.
 
@@ -93,9 +93,9 @@ Discover every skill package under the roots the common coding agents load skill
 | `--sarif <path>` | write one validated SARIF document with one run per package; the path must be outside every scanned package |
 | `--opengrep-bin <path>` | an explicit OpenGrep binary; it must still match the pinned size and SHA-256 |
 
-The roots are `~/.claude/skills`, `~/.claude/plugins`, `~/.config/opencode/skills`, `~/.cursor/skills`, `~/.gemini/skills`, `~/.codex/skills`, `~/.copilot/skills`, `~/.agents/skills` and the project-local `.claude/skills`, `.opencode/skills`, `.cursor/skills`, `.gemini/skills`, `.codex/skills`, `.github/skills` and `.agents/skills`. A package is a directory holding a `SKILL.md` or a plugin marker; once found, its subtree is not searched further. Discovery follows a symlinked root but no nested symlink, and stops at fixed directory and entry budgets. A root that does not exist is skipped; a root that could not be walked is reported on stderr and the exit code is 2. Exit code 0 means every package was analyzed completely and discovery was complete, whatever the verdicts; exit code 2 means a usage error, a failed SARIF write, a discovery gap, or an incomplete analysis of any package.
+The roots are `~/.claude/skills`, `~/.claude/plugins`, `~/.config/opencode/skills`, `~/.cursor/skills`, `~/.gemini/skills`, `~/.codex/skills`, `~/.copilot/skills`, `~/.agents/skills` and the project-local `.claude/skills`, `.opencode/skills`, `.cursor/skills`, `.gemini/skills`, `.codex/skills`, `.github/skills` and `.agents/skills`. A package is a directory holding a `SKILL.md` or a plugin marker; once found, its subtree is not searched further. Discovery follows a symlinked root but no nested symlink, and stops at fixed directory and entry budgets. A root that does not exist, or is not a directory, is skipped; a root that could not be walked is reported on stderr and the exit code is 2. Exit code 0 means every package was analyzed completely and discovery was complete, whatever the verdicts; exit code 2 means a usage error, a failed SARIF write, a discovery gap, or an incomplete analysis of any package.
 
-`skill-xray --scan-known-skills [--json]` is the legacy inventory-only walk of the same roots: it prints each package's coverage ledger and runs no detection engine.
+`skill-xray --scan-known-skills [--json]` is the legacy inventory-only walk of the same roots: it prints one line per package with its ledger counts and runs no detection engine; `--json` carries each package's full ledger.
 
 ### install-opengrep
 
@@ -108,7 +108,7 @@ Download the pinned OpenGrep 1.29.0 release for this platform from the OpenGrep 
 
 Pinned builds exist for Windows x86_64, Linux x86_64 and aarch64, and macOS x86_64 and arm64. The cache is `%LOCALAPPDATA%\skill-xray\opengrep\1.29.0` on Windows, `~/Library/Caches/skill-xray/opengrep/1.29.0` on macOS, and `$XDG_CACHE_HOME` or `~/.cache` followed by `skill-xray/opengrep/1.29.0` elsewhere. `make install-opengrep` builds the binary and runs this subcommand. The legacy form is `skill-xray --install-opengrep`.
 
-Under `--analyze` the code lane resolves the engine in this order: `--opengrep-bin`, then `SKILL_XRAY_OPENGREP_BIN`, then the cache, then `opengrep` on the PATH. Every candidate must match the pinned size and SHA-256. When none resolves and the package ships executable code, the scan still runs and reports a high-severity `opengrep-unavailable` coverage gap; a candidate that fails verification reports `opengrep-unverified`.
+Under `--analyze` the code lane resolves the engine in this order: `--opengrep-bin`, then `SKILL_XRAY_OPENGREP_BIN`, then the cache, then `opengrep` on the PATH. Every candidate must match the pinned size and SHA-256. When none resolves and the package ships executable code, the scan still runs and reports a high-severity `opengrep-unavailable` coverage gap; an explicit candidate that is missing or fails verification reports `opengrep-unverified`.
 
 ### version
 
@@ -123,7 +123,7 @@ The legacy form is `skill-xray --version`.
 
 ### Text
 
-Text output is the default. The inventory prints `package: <name>`, one line with the ledger counts (`seen`, `analyzed`, `skipped`, `coverage`), and one line per artifact marked `read` or `SKIP` with its kind and, for a skip, the reason. With `--analyze` the package line is followed by one line per finding, `[SEVERITY ] vector  rule path: message  Lline:column`, with the severity padded to eight characters and the location omitted when it is unknown, or by the single line `no findings`. `system-scan` prints one line per package, `VERDICT  seen=N analyzed=N cov=P%  path`, then that package's findings, and ends with a summary line of the package, blocking, with-findings, clean and discovery-exception counts. Attacker-controlled names such as paths are escaped before printing so a control character cannot hide a file.
+Text output is the default. The inventory prints `package: <name>`, one line with the ledger counts (`seen`, `analyzed`, `skipped`, `coverage`), and one line per artifact marked `read` or `SKIP` with its kind and, for a skip, the reason. With `--analyze` the package line is followed by one line per finding, `[SEVERITY ] vector  rule path: message  Lline:column`, with the severity padded to eight characters and the location omitted when it is unknown, or by the single line `no findings`. `system-scan` prints one line per package, `VERDICT  seen=N analyzed=N cov=P%  path`, then `package: <name>` followed by that package's findings or `no findings`, and ends with a summary line of the package, blocking, with-findings, clean and discovery-exception counts. Attacker-controlled names such as paths are escaped before printing so a control character cannot hide a file.
 
 ### JSON
 
@@ -172,7 +172,7 @@ An operator policy is a JSON object of at most 512 KiB with `"version": "skill-x
 
 ### Environment Variables
 
-The LLM layer is off unless `SKILLXRAY_LLM_PROVIDER` is set, and it runs only when `--llm` is passed. It sends the text of the scanned skill files to the configured provider, so do not use it on confidential packages. Its verdicts are advisory and capped at medium severity; the deterministic verdict is unchanged.
+The LLM layer runs only when `--llm` is passed with `SKILLXRAY_LLM_PROVIDER` and an API key set in the environment; `--llm` without them is a usage error, and without `--llm` the layer is off whatever the environment holds. It sends the text of the scanned skill files to the configured provider, so do not use it on confidential packages. Its verdicts are advisory and capped at medium severity; the deterministic verdict is unchanged.
 
 | variable | meaning |
 |---|---|
@@ -228,7 +228,7 @@ The walker reads a package it does not trust, so:
 - it surfaces active or opaque content (`.svg`, `.pdf`, nested archives) under `opaqueContent` and counts it against coverage, and surfaces shipped secrets and agent/MCP config under `secretMaterial` and `agentConfig`;
 - it records every file it does not read, with a reason, and a skipped file lowers the reported coverage unless it is an inert asset, compiled code, or an excluded cache directory (a bundled `node_modules`/`dist`/`build` does lower it).
 
-The ledger is printed by every inventory, carried in every `--json` object and written into every SARIF run under `coverage`, so a report can never look complete while files went unread.
+The ledger with its counts and exception records is printed by every inventory and carried in every `--json` object; every SARIF run carries the coverage status under `coverage`, `no-reported-gap` or `incomplete`, and each analysis gap is a result of its own, so a report can never look complete while files went unread.
 
 ## Develop
 
