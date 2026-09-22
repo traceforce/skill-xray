@@ -467,7 +467,7 @@ func decodeText(s string) string {
 // ok is markdown-it's isValidEntityCode.
 func codePoint(digits string, base int) (rune, bool) {
 	c, _ := strconv.ParseInt(digits, base, 64)
-	return rune(c), validEntityCode(c)
+	return rune(c), validEntityCode(c) // #nosec G115 -- validEntityCode judges the untruncated value
 }
 
 func validEntityCode(c int64) bool {

@@ -51,6 +51,9 @@ jobs:
       - name: Dependencies against the Go vulnerability database
         if: runner.os == 'Linux'
         run: make vuln
+      - name: Security analysis of the Go code
+        if: runner.os == 'Linux'
+        run: make sec
       - name: Cross-compile for every platform the pinned OpenGrep runtime covers
         if: runner.os == 'Linux'
         run: |

@@ -47,7 +47,7 @@ func hexRune(s string) rune {
 	if err != nil {
 		panic(err)
 	}
-	return rune(v)
+	return rune(v) // #nosec G115 -- v is an embedded table code point parsed with bitSize 32
 }
 
 var scriptRanges = func() []scriptRange {

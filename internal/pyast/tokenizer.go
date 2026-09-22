@@ -230,7 +230,7 @@ func isPotentialIdentifierStart(c int) bool {
 func isPotentialIdentifierChar(c int) bool { return isPotentialIdentifierStart(c) || isDigit(c) }
 
 func isTwoCharOp(a, b int) bool {
-	switch string([]byte{byte(a), byte(b)}) {
+	switch string([]byte{byte(a), byte(b)}) { // #nosec G115 -- a and b are nextc results, a byte or eof
 	case "!=", "%=", "&=", "**", "*=", "+=", "-=", "->", "//", "/=", ":=", "<<", "<=", "<>", "==", ">=", ">>", "@=", "^=", "|=":
 		return b != eof
 	}
@@ -238,7 +238,7 @@ func isTwoCharOp(a, b int) bool {
 }
 
 func isThreeCharOp(a, b, c int) bool {
-	switch string([]byte{byte(a), byte(b), byte(c)}) {
+	switch string([]byte{byte(a), byte(b), byte(c)}) { // #nosec G115 -- a, b and c are nextc results, a byte or eof
 	case "**=", "//=", "<<=", ">>=":
 		return c != eof
 	}
@@ -803,7 +803,7 @@ fstringQuote:
 		t.firstLineno = t.lineno
 		t.multiLineStart = t.lineStart
 		// The line still holds its '\n', so two more quotes never cross a line.
-		if q := t.src[t.cur:]; len(q) >= 2 && q[0] == byte(quote) && q[1] == byte(quote) {
+		if q := t.src[t.cur:]; len(q) >= 2 && q[0] == byte(quote) && q[1] == byte(quote) { // #nosec G115 -- quote is the quote character checked at the string start
 			t.cur += 2
 			quoteSize = 3
 		}
@@ -897,7 +897,7 @@ fstringQuote:
 		}
 	}
 
-	if !pytext.IsPrintable(string(rune(c))) {
+	if !pytext.IsPrintable(string(rune(c))) { // #nosec G115 -- c is a nextc result, a byte or eof
 		return Token{}, t.syntaxError("invalid non-printable character U+%04X", c)
 	}
 	if c == '=' && t.insideFstring() && t.mode().exprStartDepth >= 0 {
@@ -924,7 +924,7 @@ func (t *tokenizer) fstringMode(m *tokMode) (Token, *SyntaxError) {
 	}
 
 	// The closing quotes?
-	if q := strings.Repeat(string(rune(m.quote)), m.quoteSize); strings.HasPrefix(t.src[t.cur:], q) {
+	if q := strings.Repeat(string(rune(m.quote)), m.quoteSize); strings.HasPrefix(t.src[t.cur:], q) { // #nosec G115 -- m.quote is the quote character checked at the f-string start
 		t.cur += m.quoteSize
 		t.modes = t.modes[:len(t.modes)-1]
 		return t.emit(FSTRING_END, t.start, t.cur)

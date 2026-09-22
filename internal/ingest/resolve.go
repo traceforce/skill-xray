@@ -106,7 +106,7 @@ func rmtree(p string) {
 	_ = filepath.WalkDir(p, func(q string, d fs.DirEntry, err error) error {
 		if err == nil && d.Type()&fs.ModeSymlink == 0 {
 			if st, err := os.Lstat(q); err == nil {
-				_ = os.Chmod(q, st.Mode()|0o700)
+				_ = os.Chmod(q, st.Mode()|0o700) // #nosec G122 -- our own temp tree; symlinks were skipped above
 			}
 		}
 		return nil
@@ -203,7 +203,7 @@ func tarHeader(r io.Reader) bool {
 }
 
 func isTar(p string) bool {
-	f, err := os.Open(p)
+	f, err := os.Open(p) // #nosec G304 -- p is the scan target Resolve checked as a regular, non-symlink file
 	if err != nil {
 		return false
 	}
@@ -238,7 +238,7 @@ func zipMemberExtracts(f *zip.File) bool {
 // trailer appended to any file reads as a valid empty zip and would leave an empty
 // package at 100%; anything without a real member takes the single-file path.
 func looksLikeZip(p string) bool {
-	f, err := os.Open(p)
+	f, err := os.Open(p) // #nosec G304 -- p is the scan target Resolve checked as a regular, non-symlink file
 	if err != nil {
 		return false
 	}
@@ -264,12 +264,12 @@ func wrapSingleFile(p string) (string, error) {
 		return "", refuse("cannot read file %s: %s", p, err)
 	}
 	err = func() error {
-		src, err := os.Open(p)
+		src, err := os.Open(p) // #nosec G304 -- p is the scan target Resolve checked as a regular, non-symlink file
 		if err != nil {
 			return err
 		}
 		defer src.Close()
-		dst, err := os.Create(filepath.Join(tmp, baseName(p)))
+		dst, err := os.Create(filepath.Join(tmp, baseName(p))) // #nosec G304 -- a base name under a fresh temp directory
 		if err != nil {
 			return err
 		}
@@ -360,12 +360,12 @@ func extractZip(zipPath, dest string) error {
 			return refuse("zip contains a symlink: %s", info.Name)
 		}
 		if isDir {
-			if err := os.MkdirAll(out, 0o755); err != nil {
+			if err := os.MkdirAll(out, 0o750); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(out), 0o750); err != nil {
 			return err
 		}
 		if err := func() error {
@@ -374,12 +374,12 @@ func extractZip(zipPath, dest string) error {
 				return err
 			}
 			defer src.Close()
-			dst, err := os.Create(out)
+			dst, err := os.Create(out) // #nosec G304 -- out is a member path extractZip already checked
 			if err != nil {
 				return err
 			}
 			defer dst.Close()
-			_, err = io.Copy(cappedWriter{dst, &written, ingestMaxBytes, "zip uncompressed size exceeds %d bytes"}, src)
+			_, err = io.Copy(cappedWriter{dst, &written, ingestMaxBytes, "zip uncompressed size exceeds %d bytes"}, src) // #nosec G110 -- cappedWriter fails closed at ingestMaxBytes
 			return err
 		}(); err != nil {
 			return err
@@ -579,7 +579,7 @@ func (c *deadlineConn) Write(b []byte) (int, error) {
 
 func dialTLSDefault(ctx context.Context, ip netip.Addr, port int, host string) (net.Conn, error) {
 	var d net.Dialer
-	raw, err := d.DialContext(ctx, "tcp", netip.AddrPortFrom(ip, uint16(port)).String())
+	raw, err := d.DialContext(ctx, "tcp", netip.AddrPortFrom(ip, uint16(port)).String()) // #nosec G115 -- port was range-checked by checkURLHostDefault
 	if err != nil {
 		return nil, err
 	}
@@ -631,7 +631,7 @@ func downloadCapped(t urlTarget, dest string, deadline time.Time) error {
 	if resp.StatusCode != 200 {
 		return refuse("URL returned HTTP %d", resp.StatusCode)
 	}
-	fh, err := os.Create(dest)
+	fh, err := os.Create(dest) // #nosec G304 -- a constant name under a fresh temp directory
 	if err != nil {
 		return err
 	}
@@ -702,7 +702,7 @@ func fetchInto(rawurl string, t urlTarget, tmp string, deadline time.Time) (root
 	}
 	if looksLikeZip(download) {
 		extract := filepath.Join(tmp, "extracted")
-		if err := os.Mkdir(extract, 0o755); err != nil {
+		if err := os.Mkdir(extract, 0o750); err != nil {
 			return "", "", err
 		}
 		if err := extractZip(download, extract); err != nil {
@@ -736,7 +736,7 @@ func checkGitRemoteDefault(rawurl string) error {
 }
 
 func runGitDefault(ctx context.Context, argv, env []string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) // #nosec G204 -- git with fixed flags and a URL checkGitRemoteDefault validated
 	cmd.Env = env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

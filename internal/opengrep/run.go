@@ -117,7 +117,7 @@ func run(p *parse.Package, o Options) []findings.Finding {
 		if info, err := os.Stat(rulePath); err != nil || !info.Mode().IsRegular() {
 			return gap("opengrep-rules-unavailable", "Executable code was selected, but the local OpenGrep rules are unavailable.")
 		}
-		b, err := os.ReadFile(rulePath)
+		b, err := os.ReadFile(rulePath) // #nosec G304 -- the explicit rule file, Stat checked as a regular file above
 		if err != nil {
 			return couldNotStart(err)
 		}
@@ -131,12 +131,12 @@ func run(p *parse.Package, o Options) []findings.Finding {
 	sourceRoot := filepath.Join(root, "targets")
 	reportPath := filepath.Join(root, "opengrep-report.json")
 	targets := map[string]Selected{}
-	if err := os.Mkdir(sourceRoot, 0o755); err != nil {
+	if err := os.Mkdir(sourceRoot, 0o750); err != nil {
 		return couldNotStart(err)
 	}
 	for i, item := range selected {
 		name := fmt.Sprintf("%04d%s", i, item.Suffix)
-		if err := os.WriteFile(filepath.Join(sourceRoot, name), []byte(item.Text), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(sourceRoot, name), []byte(item.Text), 0o600); err != nil {
 			return couldNotStart(err)
 		}
 		targets[name] = item
@@ -145,7 +145,7 @@ func run(p *parse.Package, o Options) []findings.Finding {
 	// run from its own path names that path in every engine error; a copy at the engine root
 	// keeps the ids bare, for the embedded rules and an explicit file alike
 	rulePath := filepath.Join(root, "rules.yml")
-	if err := os.WriteFile(rulePath, rules, 0o644); err != nil {
+	if err := os.WriteFile(rulePath, rules, 0o600); err != nil { // #nosec G703 -- rulePath is a constant name under the engine's temp root
 		return couldNotStart(err)
 	}
 	argv := []string{binary, "scan", "--json", "--dataflow-traces",
@@ -158,7 +158,7 @@ func run(p *parse.Package, o Options) []findings.Finding {
 	if err != nil {
 		return couldNotStart(err)
 	}
-	stderr, err := os.Create(filepath.Join(root, "opengrep-stderr.txt"))
+	stderr, err := os.Create(filepath.Join(root, "opengrep-stderr.txt")) // #nosec G304 -- a constant name under the engine's temp root
 	if err != nil {
 		return couldNotStart(err)
 	}
@@ -196,7 +196,7 @@ func run(p *parse.Package, o Options) []findings.Finding {
 	if info.Size() > int64(maxReportBytes) {
 		return gap("opengrep-output-limit", fmt.Sprintf("OpenGrep's JSON report exceeded the %d-byte limit.", maxReportBytes))
 	}
-	data, err := os.ReadFile(reportPath)
+	data, err := os.ReadFile(reportPath) // #nosec G304 -- a constant name under the engine's temp root
 	var doc any
 	if err == nil {
 		doc, err = decodeReport(data)
@@ -218,7 +218,7 @@ func couldNotStart(err error) []findings.Finding {
 
 // execRunner is subprocess.run: stdout discarded, stderr to the file, no shell.
 func execRunner(ctx context.Context, argv []string, dir string, env []string, stderr *os.File) (int, error) {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) // #nosec G204 -- argv[0] is the engine verified by size and digest; the flags are fixed
 	cmd.Dir, cmd.Env, cmd.Stderr = dir, env, stderr
 	cmd.WaitDelay = 10 * time.Second
 	err := cmd.Run()
@@ -299,7 +299,7 @@ func engineEnv(root string) ([]string, error) {
 			"SEMGREP_VERSION_CACHE_PATH="+filepath.Join(root, "version-cache"))
 	}
 	for _, d := range dirs {
-		if err := os.MkdirAll(d, 0o755); err != nil {
+		if err := os.MkdirAll(d, 0o750); err != nil {
 			return nil, err
 		}
 	}

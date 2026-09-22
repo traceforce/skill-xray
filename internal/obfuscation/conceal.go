@@ -87,7 +87,7 @@ func shim(rs []rune) string {
 		case r == '\v' || 0x1C <= r && r <= 0x1F:
 			b[i] = ' '
 		case r < 0x80:
-			b[i] = byte(r)
+			b[i] = byte(r) // #nosec G115 -- r is below 0x80 by the case guard
 		case pytext.IsSpace(r):
 			b[i] = ' '
 		case r == 0x130 || r == 0x131:

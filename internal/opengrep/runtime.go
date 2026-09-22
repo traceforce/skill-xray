@@ -105,7 +105,7 @@ func CachedExecutable(dir string) string {
 
 // digestFile is _digest; a test counts its calls.
 var digestFile = func(path string) (string, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- hashing the candidate engine is the verification itself
 	if err != nil {
 		return "", err
 	}
@@ -143,7 +143,7 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 		}
 		asset = &a
 	}
-	info, err := os.Stat(path)
+	info, err := os.Stat(path) // #nosec G703 -- Stat is the first step of verifying the operator's engine path
 	if err != nil {
 		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 	}
@@ -211,7 +211,7 @@ func Install(cacheDir string, client *http.Client) (string, error) {
 	if _, err := verifyExecutable(temporary, &asset); err != nil {
 		return "", err
 	}
-	if err := os.Chmod(temporary, 0o700); err != nil {
+	if err := os.Chmod(temporary, 0o700); err != nil { // #nosec G302 -- the verified engine must stay executable; 0o700 is owner-only
 		return "", installFailed(err)
 	}
 	if err := os.Rename(temporary, destination); err != nil {
@@ -227,7 +227,7 @@ func installFailed(err error) error {
 // download streams the asset into a ".opengrep-*" file beside destination, capped at 64 MiB.
 // The temp file's name is returned even on failure so the caller removes it.
 func download(asset asset, destination string, client *http.Client) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destination), 0o750); err != nil {
 		return "", installFailed(err)
 	}
 	req, err := http.NewRequest(http.MethodGet, asset.url(), nil)
