@@ -16,6 +16,10 @@ The binary was ported from a Python scanner and, before that code was retired in
 - `git` on the PATH, only when scanning a git repository target
 - OpenGrep 1.29.0, only for the code lane under `--analyze`; `skill-xray install-opengrep` fetches the pinned build
 
+### Download a release
+
+Each tag `v<version>` publishes archives for Linux (amd64, arm64), macOS (amd64, arm64) and Windows (amd64) with their SHA-256 sums on the [Releases](https://github.com/traceforce/skill-xray/releases) page. Verify the archive against `SHA256SUMS`, unpack it and put the binary on the PATH; `skill-xray install-opengrep` then fetches the pinned engine for `--analyze`.
+
 ### Build from Source
 
 ```bash
@@ -240,7 +244,7 @@ make fuzz      # every fuzz target for FUZZTIME (default 30s); a crasher lands i
 make clean     # remove bin/
 ```
 
-CI runs the Go job on Linux, macOS and Windows. Each OS exercises a different part: the symlink tests run on Linux and macOS, the NTFS junction test runs on Windows, and macOS is where filenames arrive in a different Unicode form (NFD instead of NFC).
+A pushed tag `v<version>` runs the release workflow: it checks that the tag names the version in `internal/metadata`, builds the five platform archives and publishes them with their checksums. CI runs the Go job on Linux, macOS and Windows. Each OS exercises a different part: the symlink tests run on Linux and macOS, the NTFS junction test runs on Windows, and macOS is where filenames arrive in a different Unicode form (NFD instead of NFC).
 
 ## Layout
 
