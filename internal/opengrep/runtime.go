@@ -141,7 +141,7 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 		}
 		asset = &a
 	}
-	f, err := os.Open(path) // #nosec G304 -- hashing the candidate engine is the verification itself
+	f, err := os.Open(path) // #nosec G304 G703 -- hashing the engine the operator or the cache names is the verification itself
 	if err != nil {
 		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 	}
