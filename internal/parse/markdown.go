@@ -1119,6 +1119,11 @@ func (h *htmlInspector) startTag(tag string, norm [][2]string, start int) {
 	if len(values) != len(norm) { // a repeated attribute name
 		h.fully = false
 	}
+	for _, a := range norm { // active content in any attribute is never markup alone
+		if activeScheme(a[1]) {
+			h.fully = false
+		}
+	}
 	if !presentationalHTML[tag] && tag != "subject" {
 		h.unknown = true
 		return
@@ -1139,24 +1144,30 @@ func (h *htmlInspector) startTag(tag string, norm [][2]string, start int) {
 	if target == "" {
 		return
 	}
-	compact := pytext.Lower(strings.Map(func(r rune) rune {
-		if r <= 0x20 {
-			return -1
-		}
-		return r
-	}, target))
-	if i := strings.IndexByte(compact, ':'); i >= 0 {
-		switch compact[:i] {
-		case "data", "javascript", "vbscript":
-			h.fully = false
-		}
-	}
+	compact := compactURL(target)
 	if (tag == "img" || tag == "source") && (strings.HasPrefix(compact, "//") || lowerSchemeRE.MatchString(compact)) {
 		h.fully = false
 	}
 	if tag == "a" {
 		h.anchors = append(h.anchors, &htmlAnchor{target: target, line: line})
 	}
+}
+
+// compactURL lowers a URL and drops the control and space characters a browser ignores.
+func compactURL(s string) string {
+	return pytext.Lower(strings.Map(func(r rune) rune {
+		if r <= 0x20 {
+			return -1
+		}
+		return r
+	}, s))
+}
+
+// activeScheme reports a data, javascript or vbscript URL.
+func activeScheme(s string) bool {
+	compact := compactURL(s)
+	i := strings.IndexByte(compact, ':')
+	return i >= 0 && (compact[:i] == "data" || compact[:i] == "javascript" || compact[:i] == "vbscript")
 }
 
 func (h *htmlInspector) popAnchor() {
