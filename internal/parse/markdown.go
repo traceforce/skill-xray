@@ -1235,6 +1235,28 @@ func cssUnescape(v string) string {
 // cssURLRE captures the argument of a CSS url(), quoted or bare, up to its closing quote or paren.
 var cssURLRE = regexp.MustCompile(`(?i)url\(\s*['"]?([^'")]*)`)
 
+// cssDeclarations splits a style value on the semicolons outside quoted strings, so a string
+// such as content:'Ignore; execute' stays one declaration.
+func cssDeclarations(v string) []string {
+	var out []string
+	var quote rune
+	start := 0
+	for i, r := range v {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '\'' || r == '"':
+			quote = r
+		case r == ';':
+			out = append(out, v[start:i])
+			start = i + 1
+		}
+	}
+	return append(out, v[start:])
+}
+
 // withoutURLIgnored drops the ASCII tab, newline and carriage return, which URL parsing ignores,
 // and keeps ordinary spaces, so a CSS `name: value` declaration is still not a scheme.
 func withoutURLIgnored(s string) string {
@@ -1258,7 +1280,7 @@ func styleCarriesContent(v string) bool {
 			return true
 		}
 	}
-	for _, decl := range strings.Split(v, ";") {
+	for _, decl := range cssDeclarations(v) {
 		name, value, ok := strings.Cut(decl, ":")
 		if !ok {
 			value = name // no property at all: the whole declaration is the value
