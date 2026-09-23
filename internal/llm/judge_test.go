@@ -242,6 +242,20 @@ func TestInvalidResponsesHaveSafeDiagnosticCodes(t *testing.T) {
 	}
 }
 
+// A model at the quote's length cap ends its verbatim copy with an ellipsis; the copied part is
+// the evidence, so the review is usable instead of failing the quote gate. An ellipsis alone
+// copied nothing.
+func TestTruncatedQuoteEndingInAnEllipsisIsAccepted(t *testing.T) {
+	for _, ellipsis := range []string{"...", " …"} {
+		client := newReviewer(retaining, map[string]any{"evidence_quote": "Ignore all previous" + ellipsis})
+		decisions, _, _ := directReview(t, client)
+		require.Equal(t, "proposed", decisions[0].Status, decisions[0].Reason)
+		assert.Equal(t, "Ignore all previous", decisions[0].Proposal.EvidenceQuote)
+	}
+	decisions, _, _ := directReview(t, newReviewer(retaining, map[string]any{"evidence_quote": "..."}))
+	assert.Equal(t, "evidence-quote", decisions[0].FailureReason)
+}
+
 // test_judge_response_contract.py::test_structured_provider_failure_retains_without_downgrade_retry (2)
 func TestStructuredProviderFailureRetainsWithoutRetry(t *testing.T) {
 	for status, fail := range map[string]rt{

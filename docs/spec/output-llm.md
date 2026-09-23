@@ -71,7 +71,7 @@ Importers: `cli.py` (`LLMConfigError`, `build_client`, `from_env`); `llm/client.
 | `class LLMConfig(provider, model, api_key, base_url, max_tokens=1024, timeout=30)` frozen, validated in `__post_init__` | `type Config struct { Provider, Model, APIKey, BaseURL string; MaxTokens int; Timeout time.Duration }` + `func NewConfig(provider, model, apiKey, baseURL string) (Config, error)` (validates, lower-cases/strips provider, rstrips `/` from base_url, MaxTokens 1024, Timeout 30s). `func (c Config) String() string` omits APIKey (Python `repr=False`; `%v` must never print the key). |
 | `LLMConfigError` | `type ConfigError struct{ Msg string }`; `Error()` returns Msg verbatim (cli prints it after `error:`). |
 | `from_env(env=None) -> LLMConfig | None` | `func FromEnv(getenv func(string) string) (*Config, error)`; `nil, nil` when `SKILLXRAY_LLM_PROVIDER` is blank. CLI passes `os.Getenv`; tests pass a map closure. |
-| `_PROVIDERS`, `_DEFAULT_MODEL`, `_DEFAULT_BASE`, `_KEY_FALLBACK` | package maps with identical values (`claude-haiku-4-5`, `gpt-5-mini`, `https://api.anthropic.com`, `https://api.openai.com/v1`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` for both openai and openai-compatible). |
+| `_PROVIDERS`, `_DEFAULT_MODEL`, `_DEFAULT_BASE`, `_KEY_FALLBACK` | package maps with identical values (`claude-haiku-4-5`, `gpt-4.1-mini`, `https://api.anthropic.com`, `https://api.openai.com/v1`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` for both openai and openai-compatible). |
 
 ### 1.3 `llm/client.py`, `llm/session.py` -> `internal/llm/client.go`, `session.go`
 

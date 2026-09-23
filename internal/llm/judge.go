@@ -187,7 +187,11 @@ func proposal(reply, candidateID, snippet string) (*Proposal, string) {
 	if vals["verdict"] == "propose_false_positive" && (vals["mechanism"] != "not_supported" || vals["intent"] == "malicious") {
 		return nil, "inconsistent-verdict"
 	}
-	quote := vals["evidence_quote"]
+	// A reply at the quote's length cap ends its verbatim copy with an ellipsis; the copied part is the evidence.
+	quote := strings.TrimSpace(vals["evidence_quote"])
+	for _, ellipsis := range []string{"...", "…"} {
+		quote = strings.TrimSpace(strings.TrimSuffix(quote, ellipsis))
+	}
 	if utf8.RuneCountInString(quote) > 160 || !strings.Contains(snippet, quote) ||
 		pytext.Strip(strings.ReplaceAll(quote, "[REDACTED]", "")) == "" {
 		return nil, "evidence-quote"

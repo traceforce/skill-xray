@@ -142,7 +142,7 @@ The LLM layer runs only when `--llm` is passed with `SKILLXRAY_LLM_PROVIDER` and
 |---|---|
 | `SKILLXRAY_LLM_PROVIDER` | `anthropic`, `openai` or `openai-compatible` |
 | `SKILLXRAY_LLM_API_KEY` | the API key; on a vendor's own default endpoint `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is the fallback, never on a custom base URL |
-| `SKILLXRAY_LLM_MODEL` | the model; defaults to `claude-haiku-4-5` for anthropic and `gpt-5-mini` for openai; required for openai-compatible |
+| `SKILLXRAY_LLM_MODEL` | the model; defaults to `claude-haiku-4-5` for anthropic and `gpt-4.1-mini` for openai; required for openai-compatible. A failure reason of `HTTP 404` on the `llm:` line means the key cannot use the model (OpenAI serves some models, `gpt-5-mini` among them, only to verified organizations); set a model the key can call |
 | `SKILLXRAY_LLM_BASE_URL` | an https endpoint origin with no userinfo, query or fragment; defaults to the vendor endpoint; required for openai-compatible |
 | `SKILL_XRAY_OPENGREP_BIN` | an OpenGrep binary to use instead of the cache; it must still match the pinned size and SHA-256 |
 

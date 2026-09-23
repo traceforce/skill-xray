@@ -149,8 +149,8 @@ the session's size/type boundary has an explicit failure status but no response 
 
 An `llm-disputed` annotation never changes result membership or native `suppressions`. By
 default it does not change severity either. With the additional `--llm-apply` opt-in, a review
-that passed every validation gate (consistent verdict fields, a verbatim evidence quote, high
-confidence, full-file context) demotes the one text-pattern result it disputed (SXV-028/029/030/031
+that passed every validation gate (consistent verdict fields, a verbatim evidence quote with any trailing
+ellipsis of a length-capped copy dropped first, high confidence, full-file context) demotes the one text-pattern result it disputed (SXV-028/029/030/031
 only) to `low` in the correlated results, recorded as `corrected` with `llm-review-policy`
 provenance and `policy_version: skill-xray/llm-apply/v1` -- the same audited shape as an
 operator demote. It never suppresses, never touches a mechanically anchored vector, a protected
