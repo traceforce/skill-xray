@@ -252,10 +252,14 @@ link models never saw):
   scripts written without word spacing, counts as two words, and a hyphen or underscore joined
   identifier such as `nav-menu` stays one token); the ASCII tab, newline and carriage return, which URL parsing ignores, are
   removed before the scheme test while spaces stay. The scheme and URL tests run on every comma-separated
-  candidate of the value, since `srcset` names several; a `style` value has every `url()` argument and every quoted string of its
-  decoded form (line continuations removed, escapes resolved) tested as a URL, then is split per `;` on the raw value (a `;` inside a quoted string,
+  candidate of the value, since `srcset` names several; a `style` value has every `url()` argument of its
+  decoded form (line continuations removed, escapes resolved) tested as a URL, and every quoted string of the
+  raw value (a backslash escaping the character after it, so an escaped quote stays inside its string), decoded,
+  tested as a URL or as two words of letters; then it is split per `;` on the raw value (a `;` inside a quoted string,
   or after a backslash, does not split) and each declaration's value, decoded, is read with the
-  property name before its `:` ignored. An unknown tag stops here. `code`/`pre` push onto
+  property name before its `:` ignored, as a URL or as four words of letters, since two or three keywords
+  are how a shorthand value reads (`1px solid black`, `bold italic`, `Times New Roman`) where a clause such as
+  `Ignore all previous instructions` is content. An unknown tag stops here. `code`/`pre` push onto
   `codeStack`. `target = href` for `a`, else `src`; if non-empty: `compact = lower(removeAll(
   [\x00-\x20]+, target))`; for `img`/`source`, `compact` starting with `//` or matching
   `^[a-z][a-z0-9+.-]*:` -> `fullyInspected = false`; for `a`, push `{target, label, line + tagLine

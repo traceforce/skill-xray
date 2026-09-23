@@ -1196,16 +1196,27 @@ func activeScheme(s string) bool {
 var spacelessScripts = []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul, unicode.Thai}
 
 // attrCarriesContent reports a value outside the modelled set that is more than a layout token:
-// a URL among its comma-separated candidates, or at least two words of letters, whatever
-// punctuation surrounds them. A token of four or more letters in a script without word spacing
-// counts as two words, while a hyphen or underscore joined identifier stays one token.
+// a URL among its comma-separated candidates, or at least two words of letters.
 func attrCarriesContent(v string) bool {
+	return attrHoldsURL(v) || wordCount(v) >= 2
+}
+
+// attrHoldsURL reports a URL among the comma-separated candidates of a value: `://`, a leading
+// `//`, or a scheme followed directly by its payload, which a CSS `name: value` declaration is not.
+func attrHoldsURL(v string) bool {
 	for _, c := range strings.Split(v, ",") {
 		compact := compactURL(c)
 		if strings.Contains(compact, "://") || strings.HasPrefix(compact, "//") || schemePayloadRE.MatchString(pytext.Lower(pytext.Strip(withoutURLIgnored(c)))) {
 			return true
 		}
 	}
+	return false
+}
+
+// wordCount counts the words of letters in a value, whatever punctuation surrounds them. A token
+// of four or more letters in a script without word spacing counts as two words, while a hyphen or
+// underscore joined identifier stays one token.
+func wordCount(v string) int {
 	words := 0
 	for _, f := range pytext.Fields(v) { // the Python whitespace set, so U+001C to U+001F separate words too
 		f = strings.TrimFunc(f, unicode.IsPunct) // sentence punctuation around a word; a digit still makes it a token
@@ -1222,7 +1233,7 @@ func attrCarriesContent(v string) bool {
 			words++
 		}
 	}
-	return words >= 2
+	return words
 }
 
 // cssEscapeRE is a CSS escape: a backslash with up to six hex digits and an optional space, or
@@ -1247,8 +1258,10 @@ func cssUnescape(v string) string {
 	})
 }
 
-// cssStringRE captures a quoted CSS string, which functions such as image-set carry a URL in.
-var cssStringRE = regexp.MustCompile(`"([^"]*)"|'([^']*)'`)
+// cssStringRE captures a quoted CSS string on the raw value, a backslash escaping the character
+// after it, so an escaped quote stays inside its string; functions such as image-set carry a URL in
+// one, and each string is decoded after it is captured.
+var cssStringRE = regexp.MustCompile(`(?s)"((?:[^"\x5c]|\x5c.)*)"|'((?:[^'\x5c]|\x5c.)*)'`)
 
 // cssURLRE captures the argument of a CSS url(), quoted or bare, up to its closing quote or paren.
 var cssURLRE = regexp.MustCompile(`(?i)url\(\s*['"]?([^'")]*)`)
@@ -1292,10 +1305,13 @@ func withoutURLIgnored(s string) string {
 }
 
 // styleCarriesContent reads a style attribute as CSS: a URL or active scheme in any url()
-// argument, a URL in a declaration's value, or two words of letters there, is content; a
-// property name such as display or width is not, with or without a space after its colon. The
-// url() arguments are read from the decoded whole value first, since a data URL carries its own
-// `;`; the declarations are split on the raw value so escapes keep their meaning, then decoded.
+// argument, a URL or two words of letters in any quoted string, or a URL or four words of letters
+// in a declaration's value, is content; a property name such as display or width is not, with or
+// without a space after its colon, and neither are the two or three keywords a shorthand value is
+// made of (`1px solid black`, `bold italic`, `Times New Roman`), where a clause such as `Ignore
+// all previous instructions` is. The url() arguments are read from the decoded whole value first,
+// since a data URL carries its own `;`; the declarations are split on the raw value so escapes
+// keep their meaning, then decoded.
 func styleCarriesContent(v string) bool {
 	decoded := cssUnescape(v)
 	for _, m := range cssURLRE.FindAllStringSubmatch(decoded, -1) {
@@ -1303,8 +1319,8 @@ func styleCarriesContent(v string) bool {
 			return true
 		}
 	}
-	for _, m := range cssStringRE.FindAllStringSubmatch(decoded, -1) { // a URL in any quoted string, image-set included
-		if arg := strings.TrimSpace(m[1] + m[2]); attrCarriesContent(arg) || activeScheme(arg) {
+	for _, m := range cssStringRE.FindAllStringSubmatch(v, -1) { // a URL or words in any quoted string, image-set included
+		if arg := strings.TrimSpace(cssUnescape(m[1] + m[2])); attrCarriesContent(arg) || activeScheme(arg) {
 			return true
 		}
 	}
@@ -1313,7 +1329,7 @@ func styleCarriesContent(v string) bool {
 		if !ok {
 			value = name // no property at all: the whole declaration is the value
 		}
-		if attrCarriesContent(cssUnescape(value)) {
+		if value = cssUnescape(value); attrHoldsURL(value) || wordCount(value) >= 4 {
 			return true
 		}
 	}
