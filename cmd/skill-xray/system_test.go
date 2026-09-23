@@ -50,6 +50,8 @@ func TestSubcommandsKeepUsageErrors(t *testing.T) {
 		{"system-scan extra", "unknown command"},
 		{"system-scan --output ", "non-empty path"},
 		{"pkg --analyze", "unknown command"},
+		{"--json", "unknown flags --json"},
+		{"--install-opengrep", "unknown flags --install-opengrep"},
 	} {
 		t.Run(c.argv, func(t *testing.T) {
 			rc, _, stderr := cli(t, strings.Split(c.argv, " ")...)

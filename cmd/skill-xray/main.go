@@ -73,10 +73,13 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		Args:               cobra.ArbitraryArgs,                          // so the retired root form gets a pointer to scan, not a bare unknown command
 		FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true}, // its retired flags too
 		RunE: func(c *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return c.Help()
+			switch {
+			case len(args) > 0:
+				return fmt.Errorf("unknown command \"%s\"; to analyze a package run: skill-xray scan <package>", console(args[0]))
+			case len(argv) > 0: // cobra answered --help and --version itself, so only retired flags reach here
+				return fmt.Errorf("unknown flags %s; run skill-xray --help", console(strings.Join(argv, " ")))
 			}
-			return fmt.Errorf("unknown command \"%s\"; to analyze a package run: skill-xray scan <package>", console(args[0]))
+			return c.Help()
 		},
 	}
 	root.SetVersionTemplate("skill-xray {{.Version}}\n")
