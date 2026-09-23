@@ -51,6 +51,7 @@ func TestSubcommandsKeepUsageErrors(t *testing.T) {
 		{"system-scan --output ", "non-empty path"},
 		{"pkg --analyze", "unknown command"},
 		{"--json", "unknown flags --json"},
+		{"--json pkg", "skill-xray scan <package>"},
 		{"--install-opengrep", "unknown flags --install-opengrep"},
 	} {
 		t.Run(c.argv, func(t *testing.T) {

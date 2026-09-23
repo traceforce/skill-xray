@@ -52,6 +52,14 @@ func sarifDoc(t *testing.T, target string) (doc any) {
 	return doc
 }
 
+// noIngest fails the test if the input is resolved or unpacked.
+func noIngest(t *testing.T) {
+	testutil.Swap(t, &resolveInput, func(string) (ingest.Resolved, func(), error) {
+		t.Fatal("ingest must not start")
+		return ingest.Resolved{}, nil, nil
+	})
+}
+
 // noScan fails the test if the scan starts.
 func noScan(t *testing.T) {
 	testutil.Swap(t, &scanReport, func(*parse.Package, scan.Options) (*scan.ScanReport, error) {
@@ -233,6 +241,7 @@ func TestUnwritableReportTargetFailsBeforeIngest(t *testing.T) {
 	root := testutil.MakePackage(t, map[string]string{"SKILL.md": manifest})
 	for name, target := range map[string]string{"missing-directory": filepath.Join(t.TempDir(), "absent", "r.sarif"), "directory": t.TempDir()} {
 		noScan(t)
+		noIngest(t)
 		rc, _, stderr := cli(t, "scan", root, "--output", target)
 		assert.Equal(t, 2, rc, name)
 		assert.Contains(t, stderr, "cannot prepare SARIF: SARIF output ", name)
@@ -334,6 +343,7 @@ func TestPathResolutionRuntimeErrorIsReported(t *testing.T) {
 				return sarif.Resolve(p)
 			})
 			noScan(t)
+			noIngest(t)
 			options := []string{"--output", bad}
 			if option == "--policy" {
 				options = []string{"--output", target, "--policy", bad}

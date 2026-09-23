@@ -579,7 +579,7 @@ strings, reach SARIF `failure_reason`), checked in this order:
    `identity-or-enum`.
 6. `propose_false_positive` with `mechanism != "not_supported"` or `intent == "malicious"` ->
    `inconsistent-verdict`.
-7. `evidence_quote`: > 160 code points, or not a substring of `snippet`, or blank after removing
+7. `evidence_quote`: after trimming surrounding whitespace and one trailing `...` or U+2026, > 160 code points, or not a substring of `snippet`, or blank after removing
    `[REDACTED]` and stripping -> `evidence-quote` (`test_verified_quote_is_preserved_exactly`:
    `password=[REDACTED]` is a valid quote when the snippet contains it).
 8. `reason`, `mechanism`, `intent`, `impact` are `redact()`ed; any result > 200 -> `field-bounds`

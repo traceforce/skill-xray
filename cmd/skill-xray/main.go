@@ -73,6 +73,9 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		Args:               cobra.ArbitraryArgs,                          // so the retired root form gets a pointer to scan, not a bare unknown command
 		FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true}, // its retired flags too
 		RunE: func(c *cobra.Command, args []string) error {
+			if i := slices.IndexFunc(argv, func(a string) bool { return !strings.HasPrefix(a, "-") }); len(args) == 0 && i >= 0 {
+				args = argv[i:] // pflag swallowed the package as an unknown flag's value
+			}
 			switch {
 			case len(args) > 0:
 				return fmt.Errorf("unknown command \"%s\"; to analyze a package run: skill-xray scan <package>", console(args[0]))
@@ -366,8 +369,11 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 // JSON object of at most 512 KiB outside the package path. A URL or git address is no local
 // path, so the comparisons against the source wait for contained on the unpacked root.
 func (o *options) preflight(pkg string) (map[string]any, error) {
-	report, err := sarif.CheckTarget(o.output) // a missing directory or a special file fails here, before the scan
+	report, err := resolvePath(o.output)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := sarif.CheckTarget(o.output); err != nil { // a missing directory or a special file fails here, before the scan
 		return nil, err
 	}
 	source := ""

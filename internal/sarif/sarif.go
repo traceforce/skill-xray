@@ -812,7 +812,7 @@ func CheckTarget(target string, roots ...string) (string, error) {
 		return "", errors.New("SARIF output must be a regular file")
 	}
 	if info, err := os.Stat(filepath.Dir(target)); err != nil || !info.IsDir() {
-		return "", errors.New("SARIF output directory does not exist: " + filepath.Dir(target))
+		return "", errors.New("SARIF output directory is missing or not a directory: " + filepath.ToSlash(filepath.Dir(target)))
 	}
 	return target, nil
 }
