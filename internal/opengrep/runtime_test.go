@@ -59,7 +59,7 @@ func TestVerifyRejectsWrongSizeOrDigest(t *testing.T) {
 	assert.Contains(t, err.Error(), "is unavailable")
 	got, err := verifyExecutable(candidate, &asset{"test", 5, hexSHA256([]byte("wrong"))})
 	require.NoError(t, err)
-	assert.Equal(t, candidate, got)
+	assert.True(t, sameFile(candidate, got), got)
 }
 
 // tests/test_opengrep_runtime.py::test_verified_binary_digest_is_cached_by_file_identity
@@ -113,7 +113,7 @@ func TestVerifiedPathIsAbsolute(t *testing.T) {
 	got, err := verifyExecutable("opengrep", &asset{"test", 5, hexSHA256([]byte("valid"))})
 	require.NoError(t, err)
 	assert.True(t, filepath.IsAbs(got))
-	assert.Equal(t, filepath.Join(wd, "opengrep"), got)
+	assert.True(t, sameFile(filepath.Join(wd, "opengrep"), got), got)
 }
 
 // The cached digest is trusted only while the path names the same file: a replacement with the
@@ -203,6 +203,13 @@ func TestUntrustedLocationIsRefused(t *testing.T) {
 	require.NoError(t, os.Symlink(candidate, link)) // a link has open permission bits; its owner is what counts
 	_, err = verifyExecutable(link, a)
 	require.NoError(t, err)
+}
+
+// sameFile reports that two paths name one file, whatever links or spelling separate them.
+func sameFile(a, b string) bool {
+	sa, ea := os.Stat(a)
+	sb, eb := os.Stat(b)
+	return ea == nil && eb == nil && os.SameFile(sa, sb)
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

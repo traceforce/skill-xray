@@ -144,14 +144,14 @@ type digestEntry struct {
 // trustedComponent: on Unix it is owned by this user or root and is not world-writable unless it
 // is a sticky directory; on Windows its owner is this user, Administrators, SYSTEM or
 // TrustedInstaller and its DACL grants no replacing right to Everyone, Authenticated Users or
-// Users. A group one of them granted write to keeps it on both.
-func trustedLocation(info os.FileInfo, abs string) error {
+// Users. A group one of them granted write to keeps it on both. It returns the resolved path.
+func trustedLocation(info os.FileInfo, abs string) (string, error) {
 	real, err := filepath.EvalSymlinks(abs)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := trustedComponent(real, info); err != nil { // the engine itself, as opened
-		return err
+		return "", err
 	}
 	chains := []string{filepath.Dir(real)}
 	if abs != real {
@@ -161,24 +161,24 @@ func trustedLocation(info os.FileInfo, abs string) error {
 		for p := start; ; p = filepath.Dir(p) {
 			st, err := os.Lstat(p) // #nosec G703 -- a component of the engine's path, judged by its owner and permissions
 			if err != nil {
-				return err
+				return "", err
 			}
 			if err := trustedComponent(p, st); err != nil {
-				return err
+				return "", err
 			}
 			if filepath.Dir(p) == p {
 				break
 			}
 		}
 	}
-	return nil
+	return real, nil
 }
 
 // verifyExecutable is verify_executable: path must be a regular file with the asset's size
 // and SHA-256 (nil asset: this machine's), both read through one open handle, in a location
 // that only this user, root or an administrator, or a group one of them granted, can change,
-// on every platform. It returns the absolute path it verified, and the engine runs from that
-// path; the window between the verification and the run is open to those writers alone, so
+// on every platform. It returns the resolved path it verified, links followed, and the engine
+// runs from that path; the window between the verification and the run is open to those writers alone, so
 // the pin defends against a corrupt or stale download rather than against them.
 func verifyExecutable(path string, asset *asset) (string, error) {
 	if asset == nil {
@@ -205,14 +205,15 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 	if err != nil {
 		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 	}
-	if err := trustedLocation(info, abs); err != nil {
+	real, err := trustedLocation(info, abs)
+	if err != nil {
 		return "", runtimeError{fmt.Sprintf("OpenGrep executable location can be changed by another user (%s): %s", err, path)}
 	}
 	ctime, err := changeTime(f, info)
 	if err != nil {
 		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 	}
-	key := digestKey{abs, info.Size(), info.ModTime(), ctime}
+	key := digestKey{real, info.Size(), info.ModTime(), ctime}
 	digestsMu.Lock()
 	defer digestsMu.Unlock()
 	entry, ok := digests[key]
@@ -230,7 +231,7 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 	if entry.digest != asset.SHA256 {
 		return "", mismatch
 	}
-	return abs, nil
+	return real, nil // the resolved name, so the run opens the file that was hashed, not a lexical relative of a link
 }
 
 // Resolve is resolve_opengrep: the explicit path, else $SKILL_XRAY_OPENGREP_BIN, else the

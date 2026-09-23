@@ -18,6 +18,14 @@ const (
 
 var everyUser = map[string]bool{"S-1-1-0": true, "S-1-5-11": true, "S-1-5-32-545": true}
 
+// The other allow entry kinds a DACL can hold: a callback entry has the allow entry's layout up to
+// its SID, an object entry puts two GUIDs before the SID, which this check does not parse.
+const (
+	accessAllowedObjectACEType         = 0x5
+	accessAllowedCallbackACEType       = 0x9
+	accessAllowedCallbackObjectACEType = 0xb
+)
+
 // The rights that replace a file are writing to it, removing it and taking over its security;
 // the right that replaces an entry of a directory is removing it from that directory. Adding
 // entries leaves the existing ones alone, as under a sticky directory on Unix, and the drive
@@ -65,11 +73,16 @@ func trustedComponent(path string, info os.FileInfo) error {
 		if err := windows.GetAce(dacl, i, &ace); err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}
-		if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Header.AceFlags&windows.INHERIT_ONLY_ACE != 0 || ace.Mask&rights == 0 {
+		if ace.Header.AceFlags&windows.INHERIT_ONLY_ACE != 0 || ace.Mask&rights == 0 {
 			continue
 		}
-		if sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart)); everyUser[sid.String()] {
-			return fmt.Errorf("%s is writable by %s", path, sid)
+		switch ace.Header.AceType {
+		case windows.ACCESS_ALLOWED_ACE_TYPE, accessAllowedCallbackACEType:
+			if sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart)); everyUser[sid.String()] {
+				return fmt.Errorf("%s is writable by %s", path, sid)
+			}
+		case accessAllowedObjectACEType, accessAllowedCallbackObjectACEType:
+			return fmt.Errorf("%s grants a replacing right through an object entry this check does not read", path)
 		}
 	}
 	return nil
