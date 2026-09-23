@@ -123,7 +123,7 @@ func install(stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "cannot install OpenGrep: %s\n", pytext.UnicodeEscape(err.Error()))
 		return 2
 	}
-	fmt.Fprintf(stdout, "installed OpenGrep %s at %s\n", opengrep.Version, pytext.UnicodeEscape(installed))
+	fmt.Fprintf(stdout, "installed OpenGrep %s at %s\n", opengrep.Version, console(installed))
 	return 0
 }
 
