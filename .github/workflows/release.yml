@@ -1,9 +1,10 @@
 name: release
 
-# A pushed tag v<version> builds the binary for every platform the pinned OpenGrep runtime
-# covers, checks that the tag names the version compiled into the binary, and publishes the
-# archives with their SHA-256 sums as a GitHub release. The binary installs the pinned engine
-# on first use, so the archives hold the scanner alone.
+# A pushed tag v<version> checks that the tag names the version compiled into the binary, runs
+# the same build, vet and tests as CI, builds the binary for every platform the pinned OpenGrep
+# runtime covers, and publishes the archives with their SHA-256 sums as a GitHub release. The
+# engine is fetched separately by `skill-xray install-opengrep`, so the archives hold the
+# scanner alone.
 on:
   push:
     tags: ['v*']
@@ -32,6 +33,8 @@ jobs:
             echo "tag $GITHUB_REF_NAME does not name the compiled version $version"
             exit 1
           fi
+      - name: Build, vet and test
+        run: make ci
       - name: Build every platform
         run: |
           set -euo pipefail
