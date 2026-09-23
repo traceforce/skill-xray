@@ -546,6 +546,8 @@ Each step lists what it unblocks. Steps on one line can proceed in parallel.
 
 ## 6. `tools/parity` design
 
+> Historical. The parity harness, the Python scanner and the CLI flags this section names were retired in pull request 46 once the port had matched the Python output record for record; sections 6 and 7 record how that was established and are not a description of the current tool.
+
 Layout (module `skillxray`, all Go code under `tools/parity`, Python helpers beside it; nothing
 under `skill-xray/` is modified):
 
