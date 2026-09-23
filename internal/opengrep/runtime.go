@@ -209,6 +209,9 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 	if err != nil {
 		return "", runtimeError{fmt.Sprintf("OpenGrep executable location can be changed by another user (%s): %s", err, path)}
 	}
+	if st, err := os.Stat(real); err != nil || !os.SameFile(st, info) { // #nosec G703 -- the resolved engine path, which must still name the handle that was hashed
+		return "", runtimeError{"OpenGrep executable path changed during verification: " + path}
+	}
 	ctime, err := changeTime(f, info)
 	if err != nil {
 		return "", runtimeError{"OpenGrep executable is unavailable: " + path}

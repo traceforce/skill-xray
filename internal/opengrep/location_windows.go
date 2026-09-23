@@ -3,6 +3,7 @@ package opengrep
 import (
 	"fmt"
 	"os"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -42,7 +43,7 @@ const (
 // or TrustedInstaller, and no allow entry of its DACL that applies to it may grant Everyone,
 // Authenticated Users or Users a right that replaces it. A group one of them granted keeps it.
 func trustedComponent(path string, info os.FileInfo) error {
-	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	sd, err := securityOf(path)
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
@@ -86,6 +87,26 @@ func trustedComponent(path string, info os.FileInfo) error {
 		}
 	}
 	return nil
+}
+
+// securityOf reads the owner and DACL of the component itself, a link or junction included,
+// through a handle opened without following it; addressed by name, the system would describe
+// the link's target instead.
+func securityOf(path string) (*windows.SECURITY_DESCRIPTOR, error) {
+	if !strings.HasPrefix(path, `\\?\`) {
+		path = `\\?\` + path
+	}
+	name, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, err
+	}
+	h, err := windows.CreateFile(name, windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OPEN_REPARSE_POINT|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer windows.CloseHandle(h)
+	return windows.GetSecurityInfo(h, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
 }
 
 // currentUser is the SID of this process's user.
