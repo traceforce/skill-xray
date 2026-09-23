@@ -142,6 +142,16 @@ func TestRunRefusesBadWorkerCountsAndTrailingInput(t *testing.T) {
 		_, err = loadRows(bad)
 		assert.ErrorContains(t, err, "label must be 0 or 1", body)
 	}
+	// a repeated identity would be scored twice and compared once
+	require.NoError(t, os.WriteFile(bad, []byte(`{"benchmark_id":"a","label":0}`+"\n"+`{"benchmark_id":"a","label":0}`+"\n"), 0o644))
+	_, err = loadRows(bad)
+	assert.ErrorContains(t, err, "appears twice")
+
+	// a staged file that vanished before the scan, as a quarantine removes it, is an error and not a clean scan
+	gone := filepath.Join(t.TempDir(), "gone")
+	require.NoError(t, os.Mkdir(gone, 0o755))
+	var vanished row
+	assert.ErrorContains(t, scanRoot(gone, "", &vanished), "empty package")
 }
 
 func note(rule string) finding { return finding{Rule: rule, Severity: "low"} }

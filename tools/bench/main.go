@@ -227,9 +227,11 @@ func loadRecords(path string) ([]record, error) {
 }
 
 // loadRows reads the rows a run wrote, or rows an LLM review rewrote, with the same label check
-// as loadRecords: a row without a label of 0 or 1 is refused, never counted as benign.
+// as loadRecords: a row without a label of 0 or 1 is refused, never counted as benign, and so is
+// a repeated identity, which a score would count twice and a comparison only once.
 func loadRows(path string) ([]row, error) {
 	var out []row
+	seen := map[string]bool{}
 	err := decodeLines(path, func(dec *json.Decoder) error {
 		var r struct {
 			row
@@ -241,6 +243,10 @@ func loadRows(path string) ([]row, error) {
 		if err := checkLabel(r.BenchmarkID, r.Label); err != nil {
 			return err
 		}
+		if seen[r.BenchmarkID] {
+			return fmt.Errorf("benchmark_id %q appears twice", r.BenchmarkID)
+		}
+		seen[r.BenchmarkID] = true
 		r.row.Label = *r.Label
 		out = append(out, r.row)
 		return nil
@@ -342,13 +348,26 @@ func scanOne(work string, rec record, opengrepExe string) (r row) {
 	if err := os.WriteFile(filepath.Join(root, "SKILL.md"), []byte(rec.Text), 0o644); err != nil {
 		return fail(err)
 	}
+	if err := scanRoot(root, opengrepExe, &r); err != nil {
+		return fail(err)
+	}
+	return r
+}
+
+// scanRoot scans the one-file package staged at root into r. Nothing read and nothing skipped
+// means the file vanished after it was written, as an antivirus quarantine removes it; that is
+// an error, not a clean scan.
+func scanRoot(root, opengrepExe string, r *row) error {
 	p := ingest.BuildPackage(root)
 	ledger := ingest.BuildLedger(p)
 	r.LedgerSkipped, r.Analyzed = ledger.ArtifactsSkipped, ledger.ArtifactsAnalyzed
+	if r.Analyzed == 0 && r.LedgerSkipped == 0 {
+		return errors.New("empty package: SKILL.md was not found")
+	}
 	for _, f := range scan.Scan(parse.Parse(p), nil, opengrepExe) {
 		r.Findings = append(r.Findings, findingRow(f))
 	}
-	return r
+	return nil
 }
 
 func findingRow(f findings.Finding) finding {
