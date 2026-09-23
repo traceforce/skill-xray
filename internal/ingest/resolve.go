@@ -131,11 +131,6 @@ func Resolve(target string) (Resolved, func(), error) {
 		}
 		return Resolved{abs, name, "directory"}, noop, nil
 	} else if err == nil && st.Mode().IsRegular() {
-		if lst, err := os.Lstat(target); err == nil && lst.Mode()&fs.ModeSymlink != 0 {
-			// Refuse before the zip check: a symlink to a zip would otherwise be
-			// extracted, pulling the target's contents in.
-			return Resolved{}, noop, refuse("single-file input is a symlink; refused: %s", target)
-		}
 		f, err := openTarget(target)
 		if err != nil {
 			return Resolved{}, noop, err
@@ -256,7 +251,7 @@ func zipMemberExtracts(f *zip.File) bool {
 // package at 100%; anything without a real member takes the single-file path.
 func looksLikeZip(f *os.File) bool {
 	var magic [4]byte
-	if _, err := io.ReadFull(io.NewSectionReader(f, 0, 4), magic[:]); err != nil || string(magic[:]) != "PK\x03\x04" {
+	if _, err := f.ReadAt(magic[:], 0); err != nil || string(magic[:]) != "PK\x03\x04" {
 		return false
 	}
 	r, err := zipReader(f)

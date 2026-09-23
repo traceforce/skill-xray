@@ -230,7 +230,7 @@ func isPotentialIdentifierStart(c int) bool {
 func isPotentialIdentifierChar(c int) bool { return isPotentialIdentifierStart(c) || isDigit(c) }
 
 func isTwoCharOp(a, b int) bool {
-	switch string([]byte{byte(a), byte(b)}) { // #nosec G115 -- a and b are nextc results, a byte or eof
+	switch string([]byte{byte(a), byte(b)}) { // #nosec G115 -- a and b are nextc results, a byte or eof (-1); eof wraps to 0xFF, which no case string contains, so an eof operand matches nothing
 	case "!=", "%=", "&=", "**", "*=", "+=", "-=", "->", "//", "/=", ":=", "<<", "<=", "<>", "==", ">=", ">>", "@=", "^=", "|=":
 		return b != eof
 	}
@@ -238,7 +238,7 @@ func isTwoCharOp(a, b int) bool {
 }
 
 func isThreeCharOp(a, b, c int) bool {
-	switch string([]byte{byte(a), byte(b), byte(c)}) { // #nosec G115 -- a, b and c are nextc results, a byte or eof
+	switch string([]byte{byte(a), byte(b), byte(c)}) { // #nosec G115 -- a, b and c are nextc results, a byte or eof (-1); eof wraps to 0xFF, which no case string contains, so an eof operand matches nothing
 	case "**=", "//=", "<<=", ">>=":
 		return c != eof
 	}

@@ -106,7 +106,7 @@ func CachedExecutable(dir string) string {
 // digestFile is _digest over the open handle; a test counts its calls.
 var digestFile = func(f *os.File) (string, error) {
 	h := sha256.New()
-	if _, err := io.Copy(h, io.NewSectionReader(f, 0, 1<<62)); err != nil {
+	if _, err := io.Copy(h, f); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
