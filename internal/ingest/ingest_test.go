@@ -856,15 +856,10 @@ func TestDecode(t *testing.T) {
 	}
 }
 
-// Ledger JSON: coveragePercent keeps Python's float repr and slices are never null.
-func TestLedgerMarshal(t *testing.T) {
+// The ledger's coverage is rounded to two decimals and its slices are never nil.
+func TestLedgerCoverage(t *testing.T) {
 	ledger := BuildLedger(BuildPackage(testutil.MakePackage(t, map[string]string{"SKILL.md": manifest, "a.md": "x", "b.py": "\x00"})))
-	assert.Equal(t, 66.67, float64(ledger.CoveragePercent))
-	b, err := ledger.CoveragePercent.MarshalJSON()
-	require.NoError(t, err)
-	assert.Equal(t, "66.67", string(b))
-	b, _ = Percent(100).MarshalJSON()
-	assert.Equal(t, "100.0", string(b))
+	assert.Equal(t, 66.67, ledger.CoveragePercent)
 	assert.NotNil(t, ledger.ShippedCompiledCode)
 	assert.NotNil(t, ledger.Exceptions)
 }

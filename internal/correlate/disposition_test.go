@@ -281,7 +281,7 @@ func TestLedgerPolicyUsesMaterialCoverageNotEveryInventoryNote(t *testing.T) {
 				}
 			}
 			if tc.benign {
-				assert.Equal(t, ingest.Percent(100), ingest.BuildLedger(ip).CoveragePercent)
+				assert.Equal(t, 100.0, ingest.BuildLedger(ip).CoveragePercent)
 			}
 		})
 	}

@@ -61,11 +61,6 @@ type Discovery struct {
 	LedgerExceptions []LedgerEntry
 }
 
-// Percent is coveragePercent: a float that marshals with Python's repr (100.0, 66.67).
-type Percent float64
-
-func (p Percent) MarshalJSON() ([]byte, error) { return []byte(pytext.FloatRepr(float64(p))), nil }
-
 // Ledger is the coverage ledger; field order is the Python dict order.
 type Ledger struct {
 	ArtifactsSeen           int            `json:"artifactsSeen"`
@@ -79,7 +74,7 @@ type Ledger struct {
 	SecretMaterial          []string       `json:"secretMaterial"`
 	AgentConfig             []string       `json:"agentConfig"`
 	InspectableDenominator  int            `json:"inspectableDenominator"`
-	CoveragePercent         Percent        `json:"coveragePercent"`
+	CoveragePercent         float64        `json:"coveragePercent"`
 	ByRole                  map[string]int `json:"byRole"`
 	Exceptions              []LedgerEntry  `json:"exceptions"`
 }
@@ -762,7 +757,7 @@ func BuildLedger(p *Package) Ledger {
 		SecretMaterial:          sortedRels(p.Artifacts, func(a *Artifact) bool { return a.Role == "secret" }),
 		AgentConfig:             sortedRels(p.Artifacts, func(a *Artifact) bool { return a.Role == "config" || a.Role == "root_config" }),
 		InspectableDenominator:  denom,
-		CoveragePercent:         Percent(percent),
+		CoveragePercent:         percent,
 		ByRole:                  byRole,
 		Exceptions:              exceptions,
 	}
