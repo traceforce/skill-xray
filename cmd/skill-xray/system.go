@@ -20,6 +20,7 @@ import (
 )
 
 type systemOptions struct {
+	llmFlags
 	output, opengrepBin string
 	roots               []string
 }
@@ -29,6 +30,7 @@ func (s *systemOptions) bind(c *cobra.Command) {
 	f.StringVarP(&s.output, "output", "o", defaultReport, "write one validated SARIF document here, with one run per package; the path must be outside every scanned package")
 	f.StringVar(&s.opengrepBin, "opengrep-bin", "", "explicit pinned OpenGrep binary")
 	f.StringArrayVar(&s.roots, "root", nil, "scan the packages under this directory instead of the known agent skill roots (repeatable)")
+	s.llmFlags.bind(c)
 }
 
 // headline is a package's one-word verdict: BLOCKING for a high or critical finding with a vector,
@@ -77,6 +79,10 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 	if changed("output") && s.output == "" {
 		return 2, errors.New("--output requires a non-empty path")
 	}
+	client, err := s.client()
+	if err != nil {
+		return 2, err
+	}
 	d := ingest.Discover(s.roots)
 	if _, err := sarif.CheckTarget(s.output, d.Paths...); err != nil { // before any package is read, so a report inside one is never scanned
 		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
@@ -89,9 +95,9 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 	for _, path := range d.Paths {
 		p := ingest.BuildPackage(path)
 		parsed := parse.Parse(p)
-		report, err := scanReport(parsed, scan.Options{OpengrepExe: s.opengrepBin})
+		report, err := scanReport(parsed, s.scanOptions(client, s.opengrepBin, nil))
 		if err != nil {
-			panic(err) // no LLM options, so none of scan_report's argument errors
+			panic(err) // the flag checks in client exclude scan_report's argument errors
 		}
 		v := reportHeadline(report)
 		counts[v]++

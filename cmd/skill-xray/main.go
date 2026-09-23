@@ -49,8 +49,13 @@ const defaultReport = "findings.sarif.json"
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 type options struct {
+	llmFlags
+	opengrepBin, output, policy string
+}
+
+// llmFlags are the opt-in LLM lane switches, the same on scan and system-scan.
+type llmFlags struct {
 	llm, llmShadow, llmReview, llmAdditive, llmApply bool
-	opengrepBin, output, policy                      string
 }
 
 // run is the command line: a usage error prints "skill-xray: error: <msg>" and exits 2.
@@ -107,14 +112,53 @@ func (o *options) bind(c *cobra.Command) {
 	f.StringVarP(&o.output, "output", "o", defaultReport, "write the validated SARIF report here; the path must be outside the scanned package")
 	f.StringVar(&o.policy, "policy", "", "explicit scoped operator policy applied to the report's dispositions")
 	f.StringVar(&o.opengrepBin, "opengrep-bin", "", "explicit pinned OpenGrep binary")
-	f.BoolVar(&o.llm, "llm", false, "also run the opt-in LLM adjudication pass (semantic prompt injection). "+
+	o.llmFlags.bind(c)
+}
+
+// bind registers the LLM flags on c.
+func (l *llmFlags) bind(c *cobra.Command) {
+	f := c.Flags()
+	f.BoolVar(&l.llm, "llm", false, "also run the opt-in LLM adjudication pass (semantic prompt injection). "+
 		"SENDS THE TEXT of the scanned skill files to the configured third-party LLM provider, so do not use "+
 		"it on confidential packages. Requires SKILLXRAY_LLM_PROVIDER and an API key in the environment")
-	f.BoolVar(&o.llmShadow, "llm-shadow", false, "review static candidates only, without additive SXV-038 detection; requires --llm")
-	f.BoolVar(&o.llmReview, "llm-review", false, "annotate disputed findings without removing or downgrading them; requires --llm")
-	f.BoolVar(&o.llmAdditive, "llm-additive", false, "also run SXV-038 after LLM review, using the remaining shared budget")
-	f.BoolVar(&o.llmApply, "llm-apply", false, "let a validated llm-disputed review demote that text-pattern finding to low "+
+	f.BoolVar(&l.llmShadow, "llm-shadow", false, "review static candidates only, without additive SXV-038 detection; requires --llm")
+	f.BoolVar(&l.llmReview, "llm-review", false, "annotate disputed findings without removing or downgrading them; requires --llm")
+	f.BoolVar(&l.llmAdditive, "llm-additive", false, "also run SXV-038 after LLM review, using the remaining shared budget")
+	f.BoolVar(&l.llmApply, "llm-apply", false, "let a validated llm-disputed review demote that text-pattern finding to low "+
 		"in the correlated results (audited as corrected, never removed); requires --llm-review")
+}
+
+// client checks the flag combination and builds the opt-in client up front, so a misconfiguration
+// fails before anything is read; a returned error is a usage error and a nil client means the
+// lane is off.
+func (l *llmFlags) client() (llm.Completer, error) {
+	reviewing := l.llmShadow || l.llmReview
+	switch {
+	case reviewing && !l.llm:
+		return nil, errors.New("LLM review requires explicit --llm opt-in")
+	case l.llmShadow && l.llmReview:
+		return nil, errors.New("--llm-shadow and --llm-review are mutually exclusive")
+	case l.llmAdditive && !reviewing:
+		return nil, errors.New("--llm-additive requires --llm-shadow or --llm-review")
+	case l.llmApply && !l.llmReview:
+		return nil, errors.New("--llm-apply requires --llm-review")
+	case !l.llm:
+		return nil, nil
+	}
+	cfg, err := llmFromEnv(os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return nil, errors.New("--llm needs SKILLXRAY_LLM_PROVIDER and an API key in the environment")
+	}
+	return buildClient(*cfg), nil
+}
+
+// scanOptions is the configuration of one package's scan under these flags.
+func (l *llmFlags) scanOptions(client llm.Completer, exe string, policy map[string]any) scan.Options {
+	return scan.Options{Client: client, LLMShadow: l.llmShadow, LLMReview: l.llmReview, LLMApply: l.llmApply,
+		LLMAdditive: l.llmAdditive, OpengrepExe: exe, DispositionPolicy: policy}
 }
 
 // install is the "install-opengrep" subcommand.
@@ -146,29 +190,9 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 	if changed("output") && o.output == "" || changed("policy") && o.policy == "" {
 		return 2, errors.New("--output and --policy require non-empty paths")
 	}
-	reviewing := o.llmShadow || o.llmReview
-	switch {
-	case reviewing && !o.llm:
-		return 2, errors.New("LLM review requires explicit --llm opt-in")
-	case o.llmShadow && o.llmReview:
-		return 2, errors.New("--llm-shadow and --llm-review are mutually exclusive")
-	case o.llmAdditive && !reviewing:
-		return 2, errors.New("--llm-additive requires --llm-shadow or --llm-review")
-	case o.llmApply && !o.llmReview:
-		return 2, errors.New("--llm-apply requires --llm-review")
-	}
-
-	// The opt-in LLM client is built up front so a misconfiguration fails before the scan runs.
-	var client llm.Completer
-	if o.llm {
-		cfg, err := llmFromEnv(os.Getenv)
-		if err != nil {
-			return 2, err
-		}
-		if cfg == nil {
-			return 2, errors.New("--llm needs SKILLXRAY_LLM_PROVIDER and an API key in the environment")
-		}
-		client = buildClient(*cfg)
+	client, err := o.client()
+	if err != nil {
+		return 2, err
 	}
 
 	policy, err := o.preflight(pkg)
@@ -191,8 +215,7 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 	p := ingest.BuildPackage(r.Root)
 	p.Name = r.Name // friendly name; the root may be a temp dir
 	parsed := parse.Parse(p)
-	report, err := scanReport(parsed, scan.Options{Client: client, LLMShadow: o.llmShadow, LLMReview: o.llmReview,
-		LLMApply: o.llmApply, LLMAdditive: o.llmAdditive, OpengrepExe: o.opengrepBin, DispositionPolicy: policy})
+	report, err := scanReport(parsed, o.scanOptions(client, o.opengrepBin, policy))
 	if err != nil {
 		panic(err) // the flag checks above exclude scan_report's argument errors
 	}

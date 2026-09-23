@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/traceforce/skill-xray/internal/ingest"
+	"github.com/traceforce/skill-xray/internal/llm"
 	"github.com/traceforce/skill-xray/internal/metadata"
 	"github.com/traceforce/skill-xray/internal/opengrep"
 	"github.com/traceforce/skill-xray/internal/sarif"
@@ -133,6 +134,30 @@ func TestSystemScanDefaultReportPath(t *testing.T) {
 	assert.Equal(t, 0, rc)
 	assert.Contains(t, stdout, "report: "+defaultReport+"\n")
 	assert.Len(t, runs(t, sarifDoc(t, defaultReport)), 2)
+}
+
+// The LLM lane runs over every discovered package under the same flags as scan, and its usage
+// checks apply.
+func TestSystemScanLLMLane(t *testing.T) {
+	root := t.TempDir()
+	pkg := testutil.MakePackage(t, map[string]string{"SKILL.md": "---\nname: t\ndescription: override the loading agent\n---\n"})
+	require.NoError(t, os.Rename(pkg, filepath.Join(root, "override")))
+	testutil.Swap(t, &llmFromEnv, config(&llm.Config{Provider: "openai", Model: "m", APIKey: "k", BaseURL: "https://api.openai.com/v1"}, nil))
+	testutil.Swap(t, &buildClient, client(&fakeClient{verdict}))
+	target := filepath.Join(t.TempDir(), "system.sarif")
+	rc, _, stderr := cli(t, "system-scan", "--root", root, "--llm", "--output", target)
+	require.Equal(t, 0, rc, stderr)
+	vectors := []string{}
+	for _, r := range at(runs(t, sarifDoc(t, target))[0], "results").([]any) {
+		if v, ok := at(r, "properties", "sxv").(string); ok {
+			vectors = append(vectors, v)
+		}
+	}
+	assert.Contains(t, vectors, "SXV-038")
+
+	rc, _, stderr = cli(t, "system-scan", "--root", root, "--llm-review", "--output", target)
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "explicit --llm opt-in")
 }
 
 func TestVersionSubcommand(t *testing.T) {
