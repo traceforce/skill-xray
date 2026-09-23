@@ -137,8 +137,9 @@ type digestEntry struct {
 }
 
 // trustedLocation refuses an engine that every user could swap between the verification and
-// the run: a world-writable file, or a world-writable directory without the sticky bit. Windows
-// synthesises permission bits, so the check is Unix only; there the cache is created owner-only.
+// the run: a world-writable file, or a world-writable directory without the sticky bit anywhere
+// above it, links resolved. Windows synthesises permission bits and is not checked: the default
+// cache lives under the user's own profile and an explicit path is the operator's choice.
 func trustedLocation(info os.FileInfo, abs string) error {
 	if runtime.GOOS == "windows" {
 		return nil
@@ -146,14 +147,22 @@ func trustedLocation(info os.FileInfo, abs string) error {
 	if info.Mode().Perm()&0o002 != 0 {
 		return errors.New("world-writable file")
 	}
-	dir, err := os.Lstat(filepath.Dir(abs)) // #nosec G703 -- the directory of the engine verifyExecutable opened, checked for world-writability
+	real, err := filepath.EvalSymlinks(abs)
 	if err != nil {
 		return err
 	}
-	if dir.Mode().Perm()&0o002 != 0 && dir.Mode()&os.ModeSticky == 0 {
-		return errors.New("world-writable directory")
+	for dir := filepath.Dir(real); ; dir = filepath.Dir(dir) {
+		st, err := os.Lstat(dir) // #nosec G703 -- an ancestor of the engine verifyExecutable opened, checked for world-writability
+		if err != nil {
+			return err
+		}
+		if st.Mode().Perm()&0o002 != 0 && st.Mode()&os.ModeSticky == 0 {
+			return fmt.Errorf("world-writable directory %s", dir)
+		}
+		if filepath.Dir(dir) == dir {
+			return nil
+		}
 	}
-	return nil
 }
 
 // verifyExecutable is verify_executable: path must be a regular file with the asset's size

@@ -140,23 +140,25 @@ func TestCachedDigestRequiresTheSameFile(t *testing.T) {
 	assert.Equal(t, 2, calls)
 }
 
-// A world-writable file, or a world-writable directory without the sticky bit, is refused.
+// A world-writable file, or a world-writable directory without the sticky bit anywhere above the
+// engine, is refused.
 func TestUntrustedLocationIsRefused(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission bits are synthesised on Windows")
 	}
-	dir := filepath.Join(t.TempDir(), "engine")
-	require.NoError(t, os.Mkdir(dir, 0o755))
+	shared := filepath.Join(t.TempDir(), "shared")
+	dir := filepath.Join(shared, "locked")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
 	candidate := filepath.Join(dir, "opengrep")
 	require.NoError(t, os.WriteFile(candidate, []byte("valid"), 0o644))
 	a := &asset{"test", 5, hexSHA256([]byte("valid"))}
 	clear(digests)
 	_, err := verifyExecutable(candidate, a)
 	require.NoError(t, err)
-	require.NoError(t, os.Chmod(dir, 0o777))
+	require.NoError(t, os.Chmod(shared, 0o777)) // the grandparent, not the engine's own directory
 	_, err = verifyExecutable(candidate, a)
 	assert.ErrorContains(t, err, "writable by every user")
-	require.NoError(t, os.Chmod(dir, 0o777|os.ModeSticky))
+	require.NoError(t, os.Chmod(shared, 0o777|os.ModeSticky))
 	_, err = verifyExecutable(candidate, a)
 	require.NoError(t, err)
 	require.NoError(t, os.Chmod(candidate, 0o666))

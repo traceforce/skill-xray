@@ -202,9 +202,10 @@ func isUnsupportedArchive(f *os.File, name string) bool {
 	return isTar(f) || slices.ContainsFunc(archiveExts, func(e string) bool { return strings.HasSuffix(low, e) })
 }
 
-// openTarget opens a single-file target once, without following a symlink or a junction, and
-// checks on the handle that it is a regular file; every later read of the target goes through
-// that handle, so nothing swapped in after the check is read.
+// openTarget opens a single-file target once, without following a symlink or a junction in its
+// final component, and checks on the handle that it is a regular file; every later read of the
+// target goes through that handle, so nothing swapped in after the check is read. A link among
+// the directories on the way is part of the path the operator named, as for any file name.
 func openTarget(target string) (*os.File, error) {
 	f, err := openNoFollow(target)
 	if err != nil {
