@@ -47,8 +47,13 @@ func headline(fs []findings.Finding) string {
 
 // reportHeadline is the verdict as the report states it: a result the operator policy or a
 // validated review suppressed does not count, and a demoted one counts at its effective
-// severity, so the console agrees with the dispositions in the report.
+// severity, so the console agrees with the dispositions in the report. When the correlation
+// failed, the report has no results and the preserved findings stand, so an incomplete scan
+// never reads as clean.
 func reportHeadline(report *scan.ScanReport) string {
+	if report.Correlation == nil || len(report.Correlation.Errors) > 0 {
+		return headline(report.Findings)
+	}
 	var fs []findings.Finding
 	for _, r := range report.Correlation.Results {
 		if r.Decision != nil && r.Disposition == "suppressed" {

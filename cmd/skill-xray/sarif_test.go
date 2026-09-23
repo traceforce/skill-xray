@@ -205,13 +205,15 @@ func TestCLISchemaWriteAndContextFailures(t *testing.T) {
 					return &fs.PathError{Op: "open", Path: "unwritable report", Err: fs.ErrPermission}
 				})
 			default:
-				root, target = runFixture(t, none, true)
+				root, target = runFixture(t, []findings.Finding{override("SXV-028", "high")}, true)
 			}
 			rc, stdout, stderr := cli(t, "scan", root, "--output", target)
 			assert.Equal(t, 2, rc)
 			if failure != "context" {
 				assert.Contains(t, stderr, "cannot write SARIF")
 				assert.NotContains(t, stdout, "report:")
+			} else {
+				assert.True(t, strings.HasPrefix(stdout, "BLOCKING"), stdout) // the preserved findings, not an empty correlation, set the verdict
 			}
 			if _, err := os.Stat(target); err == nil {
 				invocations := at(sarifDoc(t, target), "runs", 0, "invocations").([]any)
