@@ -244,7 +244,7 @@ make fuzz      # every fuzz target for FUZZTIME (default 30s); a crasher lands i
 make clean     # remove bin/
 ```
 
-A pushed tag `v<version>` runs the release workflow: it checks that the tag names the version in `internal/metadata`, runs `make ci`, builds the five platform archives and publishes them with their checksums. CI runs the Go job on Linux, macOS and Windows. Each OS exercises a different part: the symlink tests run on Linux and macOS, the NTFS junction test runs on Windows, and macOS is where filenames arrive in a different Unicode form (NFD instead of NFC).
+A pushed tag `v<version>` runs the release workflow: it checks that the tag names the version in `internal/metadata`, runs the CI matrix on the tagged commit on Linux, macOS and Windows, and only then builds the five platform archives and publishes them with their checksums. CI runs the Go job on Linux, macOS and Windows. Each OS exercises a different part: the symlink tests run on Linux and macOS, the NTFS junction test runs on Windows, and macOS is where filenames arrive in a different Unicode form (NFD instead of NFC).
 
 ## Layout
 
