@@ -245,8 +245,9 @@ link models never saw):
   or whose value has such a scheme -> `fullyInspected = false`; any other unmodelled attribute ->
   `unknown = true`, and `text = true` when it names a reference on an unknown tag (`href`, `src`,
   `srcset`, `data`, `poster`, `action`, `formaction`, `cite`, `background`, `longdesc`,
-  `xlink:href`, `ping`) or when its value is a URL (`://`, a leading `//` or a scheme) or holds at
-  least two words of letters (runes). The scheme and URL tests run on every comma-separated
+  `xlink:href`, `ping`) or when its value is a URL (`://`, a leading `//` or a scheme followed
+  directly by its payload, which a CSS `name: value` declaration is not) or holds at
+  least two words of letters (runes, with the punctuation around a token trimmed first). The scheme and URL tests run on every comma-separated
   candidate of the value, since `srcset` names several. An unknown tag stops here. `code`/`pre` push onto
   `codeStack`. `target = href` for `a`, else `src`; if non-empty: `compact = lower(removeAll(
   [\x00-\x20]+, target))`; for `img`/`source`, `compact` starting with `//` or matching

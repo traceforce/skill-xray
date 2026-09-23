@@ -843,11 +843,12 @@ var tagHTMLAttrs = map[string]map[string]bool{
 }
 
 var (
-	lowerSchemeRE  = regexp.MustCompile(`^[a-z][a-z0-9+.-]*:`)
-	commentCloseRE = regexp.MustCompile(`--` + pytext.Space + `*>`)                        // _markupbase._commentclose
-	markedCloseRE  = regexp.MustCompile(`\]` + pytext.Space + `*\]` + pytext.Space + `*>`) // _markedsectionclose
-	msMarkedRE     = regexp.MustCompile(`\]` + pytext.Space + `*>`)                        // _msmarkedsectionclose
-	declNameRE     = regexp.MustCompile(`^[a-zA-Z][-_.a-zA-Z0-9]*`)
+	lowerSchemeRE   = regexp.MustCompile(`^[a-z][a-z0-9+.-]*:`)
+	schemePayloadRE = regexp.MustCompile(`^[a-z][a-z0-9+.-]*:\S`)                           // a scheme with its payload; a CSS `name: value` is not one
+	commentCloseRE  = regexp.MustCompile(`--` + pytext.Space + `*>`)                        // _markupbase._commentclose
+	markedCloseRE   = regexp.MustCompile(`\]` + pytext.Space + `*\]` + pytext.Space + `*>`) // _markedsectionclose
+	msMarkedRE      = regexp.MustCompile(`\]` + pytext.Space + `*>`)                        // _msmarkedsectionclose
+	declNameRE      = regexp.MustCompile(`^[a-zA-Z][-_.a-zA-Z0-9]*`)
 )
 
 // htmlCrash marks input on which Python raises past parse_markdown (html.parser's
@@ -1194,16 +1195,18 @@ func activeScheme(s string) bool {
 }
 
 // attrCarriesContent reports a value outside the modelled set that is more than a layout token:
-// a URL among its comma-separated candidates, or at least two words of letters.
+// a URL among its comma-separated candidates, or at least two words of letters, whatever
+// punctuation surrounds them.
 func attrCarriesContent(v string) bool {
 	for _, c := range strings.Split(v, ",") {
 		compact := compactURL(c)
-		if strings.Contains(compact, "://") || strings.HasPrefix(compact, "//") || lowerSchemeRE.MatchString(compact) {
+		if strings.Contains(compact, "://") || strings.HasPrefix(compact, "//") || schemePayloadRE.MatchString(pytext.Lower(strings.TrimSpace(c))) {
 			return true
 		}
 	}
 	words := 0
 	for _, f := range strings.Fields(v) {
+		f = strings.TrimFunc(f, unicode.IsPunct) // sentence punctuation around a word; a digit still makes it a token
 		if utf8.RuneCountInString(f) >= 2 && strings.IndexFunc(f, func(r rune) bool { return !unicode.IsLetter(r) }) < 0 {
 			words++
 		}
