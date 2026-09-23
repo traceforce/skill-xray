@@ -1236,9 +1236,9 @@ func wordCount(v string) int {
 	return words
 }
 
-// cssEscapeRE is a CSS escape: a backslash with up to six hex digits and an optional space, or
-// with any other character.
-var cssEscapeRE = regexp.MustCompile(`\\(?:[0-9a-fA-F]{1,6} ?|.)`)
+// cssEscapeRE is a CSS escape: a backslash with up to six hex digits and one optional whitespace
+// character, which CSS consumes with the escape whatever it is, or with any other character.
+var cssEscapeRE = regexp.MustCompile(`\\(?:[0-9a-fA-F]{1,6}[ \t\r\n\f]?|.)`)
 
 // cssContinuation is a backslash before a line break inside a CSS string, which CSS removes.
 var cssContinuation = strings.NewReplacer("\\\r\n", "", "\\\n", "", "\\\r", "", "\\\f", "")
