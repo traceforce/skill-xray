@@ -124,7 +124,7 @@ func TestScanOneRecordsFindingsAndCleansUp(t *testing.T) {
 
 	empty := scanOne(work, record{BenchmarkID: "e"}, "")
 	require.NotNil(t, empty.Error)
-	assert.Equal(t, "record has no skill_text", *empty.Error)
+	assert.Equal(t, "record has no text", *empty.Error)
 }
 
 // run scans records concurrently in one process, so the scanner's shared caches must take it;

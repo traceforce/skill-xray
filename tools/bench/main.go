@@ -141,8 +141,8 @@ func cmdRun(args []string) (err error) {
 		return err
 	}
 	defer func() { // a staged text left on disk is a failed run, whatever the rows say
-		if e := os.RemoveAll(dir); e != nil && err == nil {
-			err = fmt.Errorf("scratch directory %s was not removed: %w", dir, e)
+		if e := os.RemoveAll(dir); e != nil {
+			err = errors.Join(err, fmt.Errorf("scratch directory %s was not removed: %w", dir, e))
 		}
 	}()
 	if err := os.MkdirAll(filepath.Dir(*out), 0o755); err != nil {
@@ -330,7 +330,7 @@ func scanOne(work string, rec record, opengrepExe string) (r row) {
 		r.AttackCategories = []string{}
 	}
 	if rec.Text == "" {
-		r.Error = ptr("record has no skill_text")
+		r.Error = ptr("record has no text")
 		return r
 	}
 	root := filepath.Join(work, dirName(rec.BenchmarkID))
