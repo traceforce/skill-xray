@@ -1214,10 +1214,19 @@ func attrCarriesContent(v string) bool {
 	return words >= 2
 }
 
-// styleCarriesContent reads a style attribute as CSS: a URL in a declaration's value, or two
-// words of letters there, is content; a property name such as display or width is not, with or
-// without a space after its colon.
+// cssURLRE captures the argument of a CSS url(), quoted or bare, up to its closing quote or paren.
+var cssURLRE = regexp.MustCompile(`(?i)url\(\s*['"]?([^'")]*)`)
+
+// styleCarriesContent reads a style attribute as CSS: a URL or active scheme in any url()
+// argument, a URL in a declaration's value, or two words of letters there, is content; a
+// property name such as display or width is not, with or without a space after its colon. The
+// url() arguments are read from the whole value first, since a data URL carries its own `;`.
 func styleCarriesContent(v string) bool {
+	for _, m := range cssURLRE.FindAllStringSubmatch(v, -1) {
+		if arg := strings.TrimSpace(m[1]); attrCarriesContent(arg) || activeScheme(arg) {
+			return true
+		}
+	}
 	for _, decl := range strings.Split(v, ";") {
 		name, value, ok := strings.Cut(decl, ":")
 		if !ok {
