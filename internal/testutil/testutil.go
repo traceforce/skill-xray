@@ -64,7 +64,6 @@ func SymlinkOrSkip(t testing.TB, target, link string) {
 	}
 }
 
-
 // Reviewer is tests/test_llm_apply.py::Reviewer: an LLM client that disputes every candidate it is
 // shown (per-field overrides in Change) and answers an advisory request benignly; every parsed
 // request is kept in Calls.
