@@ -248,9 +248,9 @@ link models never saw):
   `xlink:href`, `ping`) or when its value is a URL (`://`, a leading `//` or a scheme followed
   directly by its payload, which a CSS `name: value` declaration is not) or holds at
   least two words of letters (runes, with the punctuation around a token trimmed first). The scheme and URL tests run on every comma-separated
-  candidate of the value, since `srcset` names several; a `style` value has every `url()` argument
-  tested as a URL first, then is read per `;`-separated declaration with the property name before
-  its `:` ignored. An unknown tag stops here. `code`/`pre` push onto
+  candidate of the value, since `srcset` names several; a `style` value has its CSS escapes decoded, then
+  every `url()` argument tested as a URL, then is read per `;`-separated declaration with the
+  property name before its `:` ignored. An unknown tag stops here. `code`/`pre` push onto
   `codeStack`. `target = href` for `a`, else `src`; if non-empty: `compact = lower(removeAll(
   [\x00-\x20]+, target))`; for `img`/`source`, `compact` starting with `//` or matching
   `^[a-z][a-z0-9+.-]*:` -> `fullyInspected = false`; for `a`, push `{target, label, line + tagLine

@@ -1214,14 +1214,34 @@ func attrCarriesContent(v string) bool {
 	return words >= 2
 }
 
+// cssEscapeRE is a CSS escape: a backslash with up to six hex digits and an optional space, or
+// with any other character.
+var cssEscapeRE = regexp.MustCompile(`\\(?:[0-9a-fA-F]{1,6} ?|.)`)
+
+// cssUnescape decodes CSS escapes, which a browser resolves before it reads a URL or a word, so
+// `https\3a\2f\2f evil` is `https://evil`.
+func cssUnescape(v string) string {
+	if !strings.Contains(v, `\`) {
+		return v
+	}
+	return cssEscapeRE.ReplaceAllStringFunc(v, func(m string) string {
+		if n, err := strconv.ParseUint(strings.TrimSpace(m[1:]), 16, 32); err == nil && n <= unicode.MaxRune {
+			return string(rune(n)) // #nosec G115 -- bounded by MaxRune on the line above
+		}
+		return m[1:]
+	})
+}
+
 // cssURLRE captures the argument of a CSS url(), quoted or bare, up to its closing quote or paren.
 var cssURLRE = regexp.MustCompile(`(?i)url\(\s*['"]?([^'")]*)`)
 
 // styleCarriesContent reads a style attribute as CSS: a URL or active scheme in any url()
 // argument, a URL in a declaration's value, or two words of letters there, is content; a
-// property name such as display or width is not, with or without a space after its colon. The
-// url() arguments are read from the whole value first, since a data URL carries its own `;`.
+// property name such as display or width is not, with or without a space after its colon. CSS
+// escapes are decoded first, and the url() arguments are read from the whole value before the
+// declarations, since a data URL carries its own `;`.
 func styleCarriesContent(v string) bool {
+	v = cssUnescape(v)
 	for _, m := range cssURLRE.FindAllStringSubmatch(v, -1) {
 		if arg := strings.TrimSpace(m[1]); attrCarriesContent(arg) || activeScheme(arg) {
 			return true
