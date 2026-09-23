@@ -77,12 +77,7 @@ func trustedComponent(path string, info os.FileInfo) error {
 
 // currentUser is the SID of this process's user.
 func currentUser() (string, error) {
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
-		return "", err
-	}
-	defer token.Close()
-	user, err := token.GetTokenUser()
+	user, err := windows.GetCurrentProcessToken().GetTokenUser() // a pseudo handle with query access; nothing to close
 	if err != nil {
 		return "", err
 	}
