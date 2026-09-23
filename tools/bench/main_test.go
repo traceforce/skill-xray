@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -55,6 +56,22 @@ func TestRunWritesOneRowPerRecord(t *testing.T) {
 		got = append(got, r.BenchmarkID)
 	}
 	assert.ElementsMatch(t, ids, got)
+}
+
+// A staged text that could not be removed is a failed row, never a clean one.
+func TestCleanupFailureIsRecorded(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions are not enforced on Windows")
+	}
+	work := t.TempDir()
+	locked := filepath.Join(work, dirName("held"), "locked")
+	require.NoError(t, os.MkdirAll(locked, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(locked, "note.txt"), []byte("x"), 0o644))
+	require.NoError(t, os.Chmod(locked, 0o555)) // its file cannot be unlinked, so the scratch directory stays
+	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+	r := scanOne(work, record{BenchmarkID: "held", Label: 0, Text: manifest + "Read the guide.\n"}, "")
+	require.NotNil(t, r.Error)
+	assert.Contains(t, *r.Error, "cleanup")
 }
 
 func TestPinnedSplitIsTheSortedIDListDigest(t *testing.T) {

@@ -114,7 +114,7 @@ func usage() {
 	os.Exit(2)
 }
 
-func cmdRun(args []string) error {
+func cmdRun(args []string) (err error) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	data := fs.String("data", "", "the split export, one JSON record per line")
 	out := fs.String("out", "", "where to write one JSON row per record")
@@ -140,7 +140,11 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { // a staged text left on disk is a failed run, whatever the rows say
+		if e := os.RemoveAll(dir); e != nil && err == nil {
+			err = fmt.Errorf("scratch directory %s was not removed: %w", dir, e)
+		}
+	}()
 	if err := os.MkdirAll(filepath.Dir(*out), 0o755); err != nil {
 		return err
 	}
@@ -336,7 +340,9 @@ func scanOne(work string, rec record, opengrepExe string) (r row) {
 			r.Error = ptr(fmt.Sprintf("%T: %.200v", p, p))
 		}
 		r.ElapsedMs = time.Since(start).Milliseconds()
-		os.RemoveAll(root)
+		if err := os.RemoveAll(root); err != nil && r.Error == nil {
+			r.Error = ptr("cleanup: " + err.Error()) // the text stayed on disk, so the row is not a clean one
+		}
 	}()
 	fail := func(err error) row {
 		r.Error = ptr(err.Error())
