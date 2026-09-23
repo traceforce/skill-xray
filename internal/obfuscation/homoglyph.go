@@ -44,10 +44,10 @@ func tsvRows(tsv string) [][]string {
 
 func hexRune(s string) rune {
 	v, err := strconv.ParseUint(s, 16, 32)
-	if err != nil {
-		panic(err)
+	if err != nil || v > unicode.MaxRune {
+		panic(fmt.Sprintf("embedded table code point %q", s))
 	}
-	return rune(v) // #nosec G115 -- v is an embedded table code point parsed with bitSize 32
+	return rune(v) // #nosec G115 -- v is at most unicode.MaxRune by the check above
 }
 
 var scriptRanges = func() []scriptRange {

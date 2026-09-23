@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -118,7 +119,7 @@ var digestFile = func(f *os.File) (string, error) {
 // process, so the lookup and the hash run under one lock: the first scan hashes the engine and
 // the others wait for its result instead of hashing the same file again.
 var (
-	digests   = map[digestKey]string{}
+	digests   = map[digestKey]digestEntry{}
 	digestsMu sync.Mutex
 )
 
@@ -128,11 +129,39 @@ type digestKey struct {
 	mtime time.Time
 }
 
+// digestEntry keeps the identity of the file that was hashed; a replacement with the same size
+// and modification time is hashed again.
+type digestEntry struct {
+	digest string
+	info   os.FileInfo
+}
+
+// trustedLocation refuses an engine that every user could swap between the verification and
+// the run: a world-writable file, or a world-writable directory without the sticky bit. Windows
+// synthesises permission bits, so the check is Unix only; there the cache is created owner-only.
+func trustedLocation(info os.FileInfo, abs string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	if info.Mode().Perm()&0o002 != 0 {
+		return errors.New("world-writable file")
+	}
+	dir, err := os.Lstat(filepath.Dir(abs)) // #nosec G703 -- the directory of the engine verifyExecutable opened, checked for world-writability
+	if err != nil {
+		return err
+	}
+	if dir.Mode().Perm()&0o002 != 0 && dir.Mode()&os.ModeSticky == 0 {
+		return errors.New("world-writable directory")
+	}
+	return nil
+}
+
 // verifyExecutable is verify_executable: path must be a regular file with the asset's size
-// and SHA-256 (nil asset: this machine's), both read through one open handle. It returns the
-// path it verified, and the engine runs from that path: the file lives under the user's own
-// cache or at a path the operator named, where a writer already runs as this user, so the pin
-// defends against a corrupt or stale download rather than a concurrent local writer.
+// and SHA-256 (nil asset: this machine's), both read through one open handle, in a location
+// that every user cannot write to. It returns the absolute path it verified, and the engine
+// runs from that path; a writer who can still replace the file there runs as this user or
+// administers that directory, so the pin defends against a corrupt or stale download rather
+// than that writer.
 func verifyExecutable(path string, asset *asset) (string, error) {
 	if asset == nil {
 		a, err := hostAsset()
@@ -154,24 +183,32 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 	if !info.Mode().IsRegular() || info.Size() != asset.Size {
 		return "", mismatch
 	}
-	abs, _ := filepath.Abs(path)
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
+	}
+	if err := trustedLocation(info, abs); err != nil {
+		return "", runtimeError{fmt.Sprintf("OpenGrep executable location is writable by every user (%s): %s", err, path)}
+	}
 	key := digestKey{abs, info.Size(), info.ModTime()}
 	digestsMu.Lock()
 	defer digestsMu.Unlock()
-	digest, ok := digests[key]
-	if !ok {
-		if digest, err = digestFile(f); err != nil {
+	entry, ok := digests[key]
+	if !ok || !os.SameFile(entry.info, info) {
+		digest, err := digestFile(f)
+		if err != nil {
 			return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 		}
 		if len(digests) >= 8 {
 			clear(digests)
 		}
-		digests[key] = digest
+		entry = digestEntry{digest, info}
+		digests[key] = entry
 	}
-	if digest != asset.SHA256 {
+	if entry.digest != asset.SHA256 {
 		return "", mismatch
 	}
-	return path, nil
+	return abs, nil
 }
 
 // Resolve is resolve_opengrep: the explicit path, else $SKILL_XRAY_OPENGREP_BIN, else the

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -85,7 +86,7 @@ func TestConcurrentVerificationsHashOnce(t *testing.T) {
 	clear(digests)
 	var calls atomic.Int32
 	original := digestFile
-	testutil.Swap(t, &digestFile, func(path string) (string, error) { calls.Add(1); return original(path) })
+	testutil.Swap(t, &digestFile, func(f *os.File) (string, error) { calls.Add(1); return original(f) })
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Add(1)
@@ -97,6 +98,70 @@ func TestConcurrentVerificationsHashOnce(t *testing.T) {
 	}
 	wg.Wait()
 	assert.Equal(t, int32(1), calls.Load())
+}
+
+// A bare name is verified in the working directory and the run gets that absolute path, never
+// a PATH lookup of the name.
+func TestVerifiedPathIsAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "opengrep"), []byte("valid"), 0o644))
+	t.Chdir(dir)
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	clear(digests)
+	got, err := verifyExecutable("opengrep", &asset{"test", 5, hexSHA256([]byte("valid"))})
+	require.NoError(t, err)
+	assert.True(t, filepath.IsAbs(got))
+	assert.Equal(t, filepath.Join(wd, "opengrep"), got)
+}
+
+// The cached digest is trusted only while the path names the same file: a replacement with the
+// same size and modification time is hashed again and refused.
+func TestCachedDigestRequiresTheSameFile(t *testing.T) {
+	dir := t.TempDir()
+	candidate := filepath.Join(dir, "opengrep")
+	require.NoError(t, os.WriteFile(candidate, []byte("valid"), 0o644))
+	a := &asset{"test", 5, hexSHA256([]byte("valid"))}
+	clear(digests)
+	calls := 0
+	original := digestFile
+	testutil.Swap(t, &digestFile, func(f *os.File) (string, error) { calls++; return original(f) })
+	_, err := verifyExecutable(candidate, a)
+	require.NoError(t, err)
+	st, err := os.Stat(candidate)
+	require.NoError(t, err)
+	other := filepath.Join(dir, "other")
+	require.NoError(t, os.WriteFile(other, []byte("wrong"), 0o644))
+	require.NoError(t, os.Rename(other, candidate))
+	require.NoError(t, os.Chtimes(candidate, st.ModTime(), st.ModTime()))
+	_, err = verifyExecutable(candidate, a)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not match")
+	assert.Equal(t, 2, calls)
+}
+
+// A world-writable file, or a world-writable directory without the sticky bit, is refused.
+func TestUntrustedLocationIsRefused(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are synthesised on Windows")
+	}
+	dir := filepath.Join(t.TempDir(), "engine")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	candidate := filepath.Join(dir, "opengrep")
+	require.NoError(t, os.WriteFile(candidate, []byte("valid"), 0o644))
+	a := &asset{"test", 5, hexSHA256([]byte("valid"))}
+	clear(digests)
+	_, err := verifyExecutable(candidate, a)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(dir, 0o777))
+	_, err = verifyExecutable(candidate, a)
+	assert.ErrorContains(t, err, "writable by every user")
+	require.NoError(t, os.Chmod(dir, 0o777|os.ModeSticky))
+	_, err = verifyExecutable(candidate, a)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(candidate, 0o666))
+	_, err = verifyExecutable(candidate, a)
+	assert.ErrorContains(t, err, "writable by every user")
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

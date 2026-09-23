@@ -54,6 +54,9 @@ jobs:
       - name: Security analysis of the Go code
         if: runner.os == 'Linux'
         run: make sec
+      - name: Security analysis of the Windows build
+        if: runner.os == 'Windows'
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 -quiet -severity medium -confidence medium -exclude-dir internal/testutil -exclude-dir tools ./...
       - name: Cross-compile for every platform the pinned OpenGrep runtime covers
         if: runner.os == 'Linux'
         run: |
