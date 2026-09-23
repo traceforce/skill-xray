@@ -102,10 +102,6 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 		}
 		v := reportHeadline(report)
 		counts[v]++
-		if explainIncomplete(stderr, display(path), report) {
-			counts["incomplete"]++
-			rc = 2
-		}
 		if sarifErr == nil {
 			doc, err := buildSarif(parsed, report)
 			if err == nil {
@@ -121,6 +117,10 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 			}
 		}
 		verdictLine(stdout, v, ingest.BuildLedger(p), display(path))
+		if explainIncomplete(stderr, display(path), report) { // after the verdict line it explains
+			counts["incomplete"]++
+			rc = 2
+		}
 		lane.add(report)
 	}
 	lane.line(stdout)

@@ -76,7 +76,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 			if len(args) == 0 {
 				return c.Help()
 			}
-			return fmt.Errorf("unknown command %q; to analyze a package run: skill-xray scan <package>", console(args[0]))
+			return fmt.Errorf("unknown command \"%s\"; to analyze a package run: skill-xray scan <package>", console(args[0]))
 		},
 	}
 	root.SetVersionTemplate("skill-xray {{.Version}}\n")
