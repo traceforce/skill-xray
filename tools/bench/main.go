@@ -340,8 +340,12 @@ func scanOne(work string, rec record, opengrepExe string) (r row) {
 			r.Error = ptr(fmt.Sprintf("%T: %.200v", p, p))
 		}
 		r.ElapsedMs = time.Since(start).Milliseconds()
-		if err := os.RemoveAll(root); err != nil && r.Error == nil {
-			r.Error = ptr("cleanup: " + err.Error()) // the text stayed on disk, so the row is not a clean one
+		if err := os.RemoveAll(root); err != nil { // the text stayed on disk, so the row is not a clean one
+			msg := "cleanup: " + err.Error()
+			if r.Error != nil {
+				msg = *r.Error + "; " + msg
+			}
+			r.Error = ptr(msg)
 		}
 	}()
 	fail := func(err error) row {
