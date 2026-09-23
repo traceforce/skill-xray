@@ -97,6 +97,8 @@ func TestCleanCLIAndSecondRunAreByteIdentical(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, first, second)
 	assert.Equal(t, []any{}, at(sarifDoc(t, target), "runs", 0, "results"))
+	_, lane := at(sarifDoc(t, target), "runs", 0, "properties").(map[string]any)["llmUsage"]
+	assert.False(t, lane, "no LLM lane, no llmUsage property")
 }
 
 // A control character in the output path cannot forge a console line either.

@@ -133,7 +133,8 @@ When report validation or writing fails, the console still prints the verdict li
 ### Optional LLM audit
 
 With `--llm --llm-review`, validated review annotations
-also appear in `runs[].properties.llmReview`. `authoritative` is always false. Each
+also appear in `runs[].properties.llmReview`; every run with the lane on, review or not, carries
+`runs[].properties.llmUsage` with the calls, failures, provider, model and enabled passes. `authoritative` is always false. Each
 decision references the same stable `candidate_id` used by `rawCandidates`, result
 `candidateIds` and `candidateLinks`; a reused review references its original candidate.
 With `--llm --llm-shadow` the same properties carry the shadow decisions with `mode: "shadow"`.

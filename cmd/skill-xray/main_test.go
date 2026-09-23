@@ -171,6 +171,9 @@ func TestLLMPathWiresTheClientIntoTheReport(t *testing.T) {
 	rc, stdout, _, doc := scanned(t, root, "--llm")
 	assert.Equal(t, 0, rc)
 	assert.Contains(t, property(doc, "sxv"), "SXV-038")
+	usage := at(doc, "runs", 0, "properties", "llmUsage").(map[string]any) // the report records that the lane ran
+	assert.Equal(t, true, usage["advisoryEnabled"])
+	assert.GreaterOrEqual(t, usage["calls"].(float64), 1.0)
 	assert.Contains(t, stdout, "\nllm: ", "the console states what the lane did")
 	assert.NotContains(t, stdout, "llm: 0 model calls")
 }
