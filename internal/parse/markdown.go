@@ -1050,7 +1050,7 @@ func (h *htmlInspector) sourceColumn(l, col int) int {
 }
 
 func (h *htmlInspector) data(s string) {
-	if strings.TrimSpace(s) != "" {
+	if pytext.Strip(s) != "" { // the Python whitespace set, so a separator-only token is not text
 		h.text = true
 	}
 	for _, a := range h.anchors {
@@ -1200,12 +1200,12 @@ func activeScheme(s string) bool {
 func attrCarriesContent(v string) bool {
 	for _, c := range strings.Split(v, ",") {
 		compact := compactURL(c)
-		if strings.Contains(compact, "://") || strings.HasPrefix(compact, "//") || schemePayloadRE.MatchString(pytext.Lower(strings.TrimSpace(c))) {
+		if strings.Contains(compact, "://") || strings.HasPrefix(compact, "//") || schemePayloadRE.MatchString(pytext.Lower(pytext.Strip(withoutURLIgnored(c)))) {
 			return true
 		}
 	}
 	words := 0
-	for _, f := range strings.Fields(v) {
+	for _, f := range pytext.Fields(v) { // the Python whitespace set, so U+001C to U+001F separate words too
 		f = strings.TrimFunc(f, unicode.IsPunct) // sentence punctuation around a word; a digit still makes it a token
 		if utf8.RuneCountInString(f) >= 2 && strings.IndexFunc(f, func(r rune) bool { return !unicode.IsLetter(r) }) < 0 {
 			words++
@@ -1234,6 +1234,17 @@ func cssUnescape(v string) string {
 
 // cssURLRE captures the argument of a CSS url(), quoted or bare, up to its closing quote or paren.
 var cssURLRE = regexp.MustCompile(`(?i)url\(\s*['"]?([^'")]*)`)
+
+// withoutURLIgnored drops the ASCII tab, newline and carriage return, which URL parsing ignores,
+// and keeps ordinary spaces, so a CSS `name: value` declaration is still not a scheme.
+func withoutURLIgnored(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, s)
+}
 
 // styleCarriesContent reads a style attribute as CSS: a URL or active scheme in any url()
 // argument, a URL in a declaration's value, or two words of letters there, is content; a

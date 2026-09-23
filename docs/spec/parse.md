@@ -247,7 +247,9 @@ link models never saw):
   `srcset`, `data`, `poster`, `action`, `formaction`, `cite`, `background`, `longdesc`,
   `xlink:href`, `ping`) or when its value is a URL (`://`, a leading `//` or a scheme followed
   directly by its payload, which a CSS `name: value` declaration is not) or holds at
-  least two words of letters (runes, with the punctuation around a token trimmed first). The scheme and URL tests run on every comma-separated
+  least two words of letters (runes, split on Python's whitespace set, with the punctuation around a
+  token trimmed first); the ASCII tab, newline and carriage return, which URL parsing ignores, are
+  removed before the scheme test while spaces stay. The scheme and URL tests run on every comma-separated
   candidate of the value, since `srcset` names several; a `style` value has its CSS escapes decoded, then
   every `url()` argument tested as a URL, then is read per `;`-separated declaration with the
   property name before its `:` ignored. An unknown tag stops here. `code`/`pre` push onto
@@ -262,7 +264,7 @@ link models never saw):
   stack top (else `fullyInspected = false`) and pop; `a` pops the anchor into `Links` (label
   `strip()`ped).
 - text: appended to every open anchor's label (all nested anchors receive it); a token that is not
-  whitespace sets `text = true`.
+  whitespace (Python's set, `pytext.Strip`) sets `text = true`.
 - comment: `sawMarkup`; `HTMLComments += {data, line + cLine - 1, sourceColumn}`. A bogus comment
   `<!foo>` is a comment with data `foo` (both Python's html.parser and x/net/html agree).
 - doctype (`<!DOCTYPE`), processing instruction (`<?...>`), marked section (`<![...`): `sawMarkup`
