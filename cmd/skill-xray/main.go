@@ -170,6 +170,11 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 		client = buildClient(*cfg)
 	}
 
+	policy, err := o.preflight(pkg)
+	if err != nil {
+		fmt.Fprintf(stderr, "cannot prepare SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
+		return 2, nil
+	}
 	r, cleanup, err := resolveInput(pkg)
 	if err != nil {
 		// The package argument and the error text can carry attacker-controlled names (zip
@@ -178,8 +183,7 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 		return 2, nil
 	}
 	defer cleanup()
-	policy, err := o.preflight(pkg, r.Root)
-	if err != nil {
+	if err := o.contained(r.Root); err != nil {
 		fmt.Fprintf(stderr, "cannot prepare SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
 		return 2, nil
 	}
@@ -201,7 +205,7 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
 		rc = 2
 	}
-	verdictLine(stdout, headline(fs), ingest.BuildLedger(p), pytext.UnicodeEscape(pkg))
+	verdictLine(stdout, reportHeadline(report), ingest.BuildLedger(p), pytext.UnicodeEscape(pkg))
 	if rc == 0 {
 		fmt.Fprintf(stdout, "report: %s\n", o.output) // the operator's own path, printed as given
 	}
@@ -211,10 +215,10 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 	return rc, nil
 }
 
-// preflight: the report must lie outside the scanned package and must not overwrite its source
-// or its operator policy, and the policy must be a regular JSON object of at most 512 KiB outside
-// the scanned package. Every failure is reported before any file of the package is read.
-func (o *options) preflight(pkg, root string) (map[string]any, error) {
+// preflight runs before the input is read or unpacked: the report must lie outside the package
+// path and must not overwrite its source or its operator policy, and the policy must be a regular
+// JSON object of at most 512 KiB outside the package path.
+func (o *options) preflight(pkg string) (map[string]any, error) {
 	report, err := resolvePath(o.output)
 	if err != nil {
 		return nil, err
@@ -226,10 +230,7 @@ func (o *options) preflight(pkg, root string) (map[string]any, error) {
 	if report == source || sameFile(report, source) {
 		return nil, errors.New("Report cannot overwrite its source")
 	}
-	if root, err = resolvePath(root); err != nil {
-		return nil, err
-	}
-	if sarif.IsWithinSource(report, root) {
+	if sarif.IsWithinSource(report, source) {
 		return nil, errors.New("Report must be outside the scanned package")
 	}
 	if o.policy == "" {
@@ -242,7 +243,7 @@ func (o *options) preflight(pkg, root string) (map[string]any, error) {
 	if policy == report || sameFile(policy, report) {
 		return nil, errors.New("Report cannot overwrite its operator policy")
 	}
-	if policy == source || sameFile(policy, source) || sarif.IsWithinSource(policy, root) {
+	if policy == source || sameFile(policy, source) || sarif.IsWithinSource(policy, source) {
 		return nil, errors.New("Operator policy must be outside the scanned package")
 	}
 	if st, err := os.Stat(policy); err != nil || !st.Mode().IsRegular() {
@@ -269,6 +270,34 @@ func (o *options) preflight(pkg, root string) (map[string]any, error) {
 		return nil, errors.New("Operator policy must be an object")
 	}
 	return doc, nil
+}
+
+// contained repeats the two containment checks against the resolved package root once the input
+// is materialised and before any file of it is read: an archive or a download unpacks to a root
+// that is not the path the operator named.
+func (o *options) contained(root string) error {
+	root, err := resolvePath(root)
+	if err != nil {
+		return err
+	}
+	report, err := resolvePath(o.output)
+	if err != nil {
+		return err
+	}
+	if sarif.IsWithinSource(report, root) {
+		return errors.New("Report must be outside the scanned package")
+	}
+	if o.policy == "" {
+		return nil
+	}
+	policy, err := resolvePath(o.policy)
+	if err != nil {
+		return err
+	}
+	if sarif.IsWithinSource(policy, root) {
+		return errors.New("Operator policy must be outside the scanned package")
+	}
+	return nil
 }
 
 // sameFile is a.exists() and b.exists() and a.samefile(b).

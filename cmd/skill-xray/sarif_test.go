@@ -135,8 +135,9 @@ func TestCLIExactOperatorPolicySuppressesOnlyInAudit(t *testing.T) {
 	policy := filepath.Join(filepath.Dir(root), "operator-policy.json")
 	doc, _ := json.Marshal(policyFor(report.Correlation.Results[0]))
 	require.NoError(t, os.WriteFile(policy, doc, 0o644))
-	rc, _, _ := cli(t, "scan", root, "--output", target, "--policy", policy)
+	rc, stdout, _ := cli(t, "scan", root, "--output", target, "--policy", policy)
 	assert.Equal(t, 0, rc)
+	assert.True(t, strings.HasPrefix(stdout, "CLEAN   "), stdout) // the console follows the report's dispositions
 	results := at(sarifDoc(t, target), "runs", 0, "results").([]any)
 	require.Len(t, results, 1)
 	assert.Equal(t, "suppressed", at(results[0], "properties", "disposition"))
@@ -231,6 +232,19 @@ func TestEmptyReportingPathsFailBeforeIngest(t *testing.T) {
 			assert.Contains(t, stderr, "non-empty path")
 		})
 	}
+}
+
+// A report that would overwrite its source is refused before the input is read or unpacked.
+func TestReportOverSourceFailsBeforeIngest(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "skill.zip")
+	require.NoError(t, os.WriteFile(source, []byte("never read"), 0o644))
+	testutil.Swap(t, &resolveInput, func(string) (ingest.Resolved, func(), error) {
+		t.Fatal("ingest must not start")
+		return ingest.Resolved{}, nil, nil
+	})
+	rc, _, stderr := cli(t, "scan", source, "--output", source)
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "cannot overwrite its source")
 }
 
 func TestInvalidPolicyNeverStartsScan(t *testing.T) {
