@@ -1235,14 +1235,19 @@ func cssUnescape(v string) string {
 // cssURLRE captures the argument of a CSS url(), quoted or bare, up to its closing quote or paren.
 var cssURLRE = regexp.MustCompile(`(?i)url\(\s*['"]?([^'")]*)`)
 
-// cssDeclarations splits a style value on the semicolons outside quoted strings, so a string
-// such as content:'Ignore; execute' stays one declaration.
+// cssDeclarations splits the raw style value on the semicolons outside quoted strings, with a
+// backslash escaping the character after it, so content:'Ignore; execute' and an escaped quote
+// inside a string both stay one declaration; each value is decoded afterwards.
 func cssDeclarations(v string) []string {
 	var out []string
 	var quote rune
-	start := 0
+	start, escaped := 0, false
 	for i, r := range v {
 		switch {
+		case escaped:
+			escaped = false
+		case r == '\\':
+			escaped = true
 		case quote != 0:
 			if r == quote {
 				quote = 0
@@ -1270,12 +1275,11 @@ func withoutURLIgnored(s string) string {
 
 // styleCarriesContent reads a style attribute as CSS: a URL or active scheme in any url()
 // argument, a URL in a declaration's value, or two words of letters there, is content; a
-// property name such as display or width is not, with or without a space after its colon. CSS
-// escapes are decoded first, and the url() arguments are read from the whole value before the
-// declarations, since a data URL carries its own `;`.
+// property name such as display or width is not, with or without a space after its colon. The
+// url() arguments are read from the decoded whole value first, since a data URL carries its own
+// `;`; the declarations are split on the raw value so escapes keep their meaning, then decoded.
 func styleCarriesContent(v string) bool {
-	v = cssUnescape(v)
-	for _, m := range cssURLRE.FindAllStringSubmatch(v, -1) {
+	for _, m := range cssURLRE.FindAllStringSubmatch(cssUnescape(v), -1) {
 		if arg := strings.TrimSpace(m[1]); attrCarriesContent(arg) || activeScheme(arg) {
 			return true
 		}
@@ -1285,7 +1289,7 @@ func styleCarriesContent(v string) bool {
 		if !ok {
 			value = name // no property at all: the whole declaration is the value
 		}
-		if attrCarriesContent(value) {
+		if attrCarriesContent(cssUnescape(value)) {
 			return true
 		}
 	}
