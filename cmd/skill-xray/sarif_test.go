@@ -99,6 +99,18 @@ func TestCleanCLIAndSecondRunAreByteIdentical(t *testing.T) {
 	assert.Equal(t, []any{}, at(sarifDoc(t, target), "runs", 0, "results"))
 }
 
+// A control character in the output path cannot forge a console line either.
+func TestReportPathEscapesControlChars(t *testing.T) {
+	root, _ := runFixture(t, none)
+	target := filepath.Join(filepath.Dir(root), "re\x1bport.sarif")
+	rc, stdout, _ := cli(t, "scan", root, "--output", target)
+	if rc != 0 {
+		t.Skip("control characters in a file name are not permitted on this host")
+	}
+	assert.NotContains(t, stdout, "\x1b")
+	assert.Contains(t, stdout, `report: `+filepath.Join(filepath.Dir(root), `re\x1bport.sarif`)+"\n")
+}
+
 // Without --output the report lands in the working directory, as MCP X-Ray's does.
 func TestDefaultReportPathIsTheWorkingDirectory(t *testing.T) {
 	root, _ := runFixture(t, none)

@@ -207,7 +207,7 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 	}
 	verdictLine(stdout, reportHeadline(report), ingest.BuildLedger(p), console(pkg))
 	if rc == 0 {
-		fmt.Fprintf(stdout, "report: %s\n", o.output) // the operator's own path, printed as given
+		fmt.Fprintf(stdout, "report: %s\n", console(o.output))
 	}
 	if incomplete(report, fs) {
 		rc = 2

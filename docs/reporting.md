@@ -137,13 +137,13 @@ With `--llm --llm-review`, validated review annotations
 also appear in `runs[].properties.llmReview`. `authoritative` is always false. Each
 decision references the same stable `candidate_id` used by `rawCandidates`, result
 `candidateIds` and `candidateLinks`; a reused review references its original candidate.
-The existing shadow API exports the same audit with `mode: "shadow"`.
+With `--llm --llm-shadow` the same properties carry the shadow decisions with `mode: "shadow"`.
 
 Records preserve review status, reason, policy/provenance, validated proposal and, when
 available, reviewer identity and request/response hashes. Confidence belongs to the model's
 evidence assessment, not a calibrated maliciousness probability. Whole requests, manifests
-and source windows are not duplicated into SARIF. The enriched JSON retains the request
-audit; hashes identify original requests/responses, before candidate IDs are canonicalized.
+and source windows are not duplicated into SARIF; hashes identify original
+requests/responses, before candidate IDs are canonicalized.
 Response hashes cover bounded text returned by the LLM session. A response rejected at
 the session's size/type boundary has an explicit failure status but no response hash.
 

@@ -118,7 +118,7 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(sarifErr.Error()))
 		rc = 2
 	} else {
-		fmt.Fprintf(stdout, "report: %s\n", s.output) // the operator's own path, printed as given
+		fmt.Fprintf(stdout, "report: %s\n", console(s.output))
 	}
 	fmt.Fprintf(stdout, "packages: %d, blocking: %d, with findings: %d, clean: %d, discovery exceptions: %d\n",
 		len(d.Paths), counts["BLOCKING"], counts["FINDINGS"], counts["CLEAN"], len(d.LedgerExceptions))
