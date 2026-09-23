@@ -59,11 +59,9 @@ decision provenance, candidate references, governing manifest, capability contex
 coverage status. Suppressed results stay in the audit. Duplicate links point to the
 retained result. No reporting threshold hides a demoted result.
 
-Full capability evidence lives once per manifest in `correlation.capability_contexts`.
-Correlated JSON results keep compact capability states. SARIF results use only
-`governingManifest` to reference `runs[].properties.capabilityContexts`.
-This replaces the repeated per-result evidence array, not the evidence itself. The
-existing top-level JSON `triads` remains available for compatibility.
+Full capability evidence lives once per manifest under `runs[].properties.capabilityContexts`,
+and each result references it through `governingManifest`. This replaces the repeated
+per-result evidence array, not the evidence itself.
 
 Operational/coverage records cannot be suppressed. Missing source/manifest context,
 parse diagnostics, malformed positions, unsupported traces or reported coverage gaps

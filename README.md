@@ -176,7 +176,7 @@ Every report carries manifest-scoped claimed/declared/observed execution and net
 
 `--llm` without either review flag keeps the additive SXV-038 behavior. Add `--llm-additive` to run it after candidate review. Both share 25 logical calls and 1 MiB of input per scan; HTTP retries are separately bounded. SXV-038 is not reviewed. The client pins `temperature: 0` (and OpenAI's best-effort `seed`) where the model accepts them. That removes one source of variance, not all of it, so the LLM verdict stays advisory and medium-capped.
 
-JSON `enrichment` preserves emitted raw candidates, context, proposals, dispositions, tags/reasons/policy, provider/model, sanitized requests, prompt/schema/response hashes and budget/error information. Analyzer caps and deduplication still apply; coverage notes remain visible. Raw candidates are deterministic only; additive findings and error notes remain in `findings`.
+The SARIF run properties preserve the audit: `rawCandidates` holds the emitted raw candidates, `candidateLinks` ties each candidate to the result that retained it, `capabilityContexts` holds the capability evidence once per manifest, and `llmReview` records each review decision with its disposition, status, reason, tags, policy version, provenance, reviewer, proposal and request and response hashes. Analyzer caps and deduplication still apply; coverage notes are results of their own. Raw candidates are deterministic only; additive findings and error notes are results too.
 
 LLM use sends skill text to the configured provider. Credential redaction is best-effort, not a guarantee; do not send confidential packages on that assumption. Mock tests establish integration behavior, not real-model precision or recall.
 

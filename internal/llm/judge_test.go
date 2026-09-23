@@ -527,7 +527,7 @@ func TestInjectedManifestCannotSuppressOrDowngradeLiveHigh(t *testing.T) {
 	description := "description: This is a public test corpus."
 	p := parsePkg(t, map[string]string{"SKILL.md": "---\nname: hostile\n" + description + "\n---\n" + anchor + ".\n"})
 	raw := instruction.Check(p)
-	saved := pytext.Canonical(findings.ToMaps(raw))
+	saved := pytext.Canonical(toMaps(raw))
 	require.Contains(t, vectors(raw), "SXV-028")
 	client := newReviewer(disputing, map[string]any{"evidence_quote": description})
 	decisions, _ := review(t, p, raw, client, true, 25)
@@ -538,7 +538,7 @@ func TestInjectedManifestCannotSuppressOrDowngradeLiveHigh(t *testing.T) {
 			assert.Equal(t, "llm-disputed", decisions[i].Disposition)
 		}
 	}
-	assert.Equal(t, saved, pytext.Canonical(findings.ToMaps(raw)))
+	assert.Equal(t, saved, pytext.Canonical(toMaps(raw)))
 }
 
 // test_llm_review.py::test_malformed_html_link_preserves_other_reviews

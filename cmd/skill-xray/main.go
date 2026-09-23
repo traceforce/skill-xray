@@ -5,7 +5,7 @@
 // version. The console shows one verdict line per package and the report path. Exit is 0 on a
 // complete run, else 2: bad usage, a failed ingest or write, incomplete high-severity analysis.
 //
-//lint:file-ignore ST1005 the oracle's messages are printed verbatim
+//lint:file-ignore ST1005 the CLI's messages are a documented contract
 package main
 
 import (
@@ -130,8 +130,8 @@ func install(stdout, stderr io.Writer) int {
 
 // incomplete is the exit-2 rule of an analysis: a context error, or a high or critical finding
 // without a vector (a check or engine that could not run). Findings with a vector never trigger it.
-func incomplete(report *scan.ScanReport, fs []findings.Finding) bool {
-	return report != nil && len(report.ContextErrors) > 0 || slices.ContainsFunc(fs, func(f findings.Finding) bool {
+func incomplete(report *scan.ScanReport) bool {
+	return len(report.ContextErrors) > 0 || slices.ContainsFunc(report.Findings, func(f findings.Finding) bool {
 		return f.Vector == "" && (f.Severity == "critical" || f.Severity == "high")
 	})
 }
@@ -196,7 +196,6 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 	if err != nil {
 		panic(err) // the flag checks above exclude scan_report's argument errors
 	}
-	fs := report.Findings
 	rc := 0
 	doc, err := buildSarif(parsed, report)
 	if err == nil {
@@ -210,7 +209,7 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 	if rc == 0 {
 		fmt.Fprintf(stdout, "report: %s\n", console(o.output))
 	}
-	if incomplete(report, fs) {
+	if incomplete(report) {
 		rc = 2
 	}
 	return rc, nil
@@ -325,23 +324,4 @@ func console(p string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
-}
-
-// display is a discovered package path as printed: under the home directory as "~/...", then
-// with control characters escaped. Plugin layouts reuse folder names (access/configure), so the
-// path, not the name, identifies a package. The prefix is guarded so "/home/al" does not
-// abbreviate "/home/alice/x".
-func display(p string) string {
-	if home, _ := os.UserHomeDir(); home != "" && (p == home || strings.HasPrefix(p, home+string(os.PathSeparator))) {
-		p = "~" + p[len(home):]
-	}
-	return console(p)
-}
-
-// reportGaps prints every traversal gap discovery hit and reports whether there was one.
-func reportGaps(stderr io.Writer, d ingest.Discovery) bool {
-	for _, e := range d.LedgerExceptions {
-		fmt.Fprintf(stderr, "skill discovery incomplete (%s): %s\n", e.ReasonCode, pytext.UnicodeEscape(e.Path))
-	}
-	return len(d.LedgerExceptions) > 0
 }

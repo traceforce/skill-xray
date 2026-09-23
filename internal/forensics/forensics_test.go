@@ -371,7 +371,7 @@ func TestPackage(t *testing.T) {
 	// test_findings_are_deterministic_and_severity_ordered
 	files := map[string]string{"SKILL.md": fm, "evil.md": string(elf), "pic.png": "\xff\xd8\xff\xe0\x00\x10JFIF"}
 	first, second := analyzed(t, files), analyzed(t, files)
-	assert.Equal(t, findings.ToMaps(first), findings.ToMaps(second))
+	assert.Equal(t, findings.Sort(first), findings.Sort(second))
 	var ranks []int
 	for _, f := range first {
 		ranks = append(ranks, findings.SeverityRank[f.Severity])

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -77,7 +78,7 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 		return 2, errors.New("--output requires a non-empty path")
 	}
 	d := ingest.Discover(s.roots)
-	if _, err := checkTarget(s.output, d.Paths); err != nil { // before any package is read, so a report inside one is never scanned
+	if _, err := sarif.CheckTarget(s.output, d.Paths...); err != nil { // before any package is read, so a report inside one is never scanned
 		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
 		return 2, nil
 	}
@@ -92,9 +93,9 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 		if err != nil {
 			panic(err) // no LLM options, so none of scan_report's argument errors
 		}
-		fs, v := report.Findings, reportHeadline(report)
+		v := reportHeadline(report)
 		counts[v]++
-		if incomplete(report, fs) {
+		if incomplete(report) {
 			rc = 2
 		}
 		if sarifErr == nil {
@@ -133,38 +134,12 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 	return rc, nil
 }
 
-// checkTarget refuses a report path that is a symlink, lies inside any scanned package or names
-// a special file, and returns it resolved. It runs before any package is read and again before
-// the write.
-func checkTarget(target string, packageRoots []string) (string, error) {
-	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return "", errors.New("SARIF output must be outside the scanned package")
-	}
-	target, err := sarif.Resolve(target)
-	if err != nil {
-		return "", err
-	}
-	for _, root := range packageRoots {
-		root, err := sarif.Resolve(root)
-		if err != nil {
-			return "", err
-		}
-		if sarif.IsWithinSource(target, root) {
-			return "", errors.New("SARIF output must be outside the scanned package")
-		}
-	}
-	if info, err := os.Stat(target); err == nil && !info.Mode().IsRegular() {
-		return "", errors.New("SARIF output must be a regular file")
-	}
-	return target, nil
-}
-
-// writeRuns writes the merged document under sarif.Write's rules, checkTarget's checks first:
-// the encoding is canonical and capped at 64 MiB, and the target is replaced atomically through
-// a temporary file beside it. Each run was validated on its own, since the validator reads a
+// writeRuns writes the merged document under sarif.Write's rules, sarif.CheckTarget first: the
+// encoding is canonical and capped at 64 MiB, and the target is replaced atomically through a
+// temporary file beside it. Each run was validated on its own, since the validator reads a
 // single-run document.
 func writeRuns(doc map[string]any, target string, packageRoots []string) error {
-	target, err := checkTarget(target, packageRoots)
+	target, err := sarif.CheckTarget(target, packageRoots...)
 	if err != nil {
 		return err
 	}
@@ -189,4 +164,23 @@ func writeRuns(doc map[string]any, target string, packageRoots []string) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), target)
+}
+
+// display is a discovered package path as printed: under the home directory as "~/...", then
+// with control characters escaped. Plugin layouts reuse folder names (access/configure), so the
+// path, not the name, identifies a package. The prefix is guarded so "/home/al" does not
+// abbreviate "/home/alice/x".
+func display(p string) string {
+	if home, _ := os.UserHomeDir(); home != "" && (p == home || strings.HasPrefix(p, home+string(os.PathSeparator))) {
+		p = "~" + p[len(home):]
+	}
+	return console(p)
+}
+
+// reportGaps prints every traversal gap discovery hit and reports whether there was one.
+func reportGaps(stderr io.Writer, d ingest.Discovery) bool {
+	for _, e := range d.LedgerExceptions {
+		fmt.Fprintf(stderr, "skill discovery incomplete (%s): %s\n", e.ReasonCode, pytext.UnicodeEscape(e.Path))
+	}
+	return len(d.LedgerExceptions) > 0
 }

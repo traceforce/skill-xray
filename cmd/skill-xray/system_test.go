@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/traceforce/skill-xray/internal/ingest"
 	"github.com/traceforce/skill-xray/internal/metadata"
 	"github.com/traceforce/skill-xray/internal/opengrep"
 	"github.com/traceforce/skill-xray/internal/sarif"
@@ -101,6 +102,19 @@ func TestSystemScanEmptyRoot(t *testing.T) {
 	assert.Empty(t, stderr)
 	assert.True(t, strings.HasSuffix(stdout, "packages: 0, blocking: 0, with findings: 0, clean: 0, discovery exceptions: 0\n"), stdout)
 	assert.Equal(t, []any{}, at(sarifDoc(t, target), "runs"))
+}
+
+// A discovery walk that hits its directory budget is a visible gap: the exit is 2, stderr names
+// the reason and the summary line counts the exception, even with no package found.
+func TestSystemScanFailsVisibleWhenDiscoveryTruncates(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "a", "b"), 0o755))
+	testutil.Swap(t, &ingest.MaxDiscoveryDirs, 1)
+	target := filepath.Join(t.TempDir(), "system.sarif")
+	rc, stdout, stderr := cli(t, "system-scan", "--root", root, "--output", target)
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "skill discovery incomplete (walk_truncated)")
+	assert.True(t, strings.HasSuffix(stdout, "discovery exceptions: 1\n"), stdout)
 }
 
 func TestSystemScanRootRepeats(t *testing.T) {

@@ -332,12 +332,21 @@ func TestAdditiveRedactsBeforeCutoffAndInExplanations(t *testing.T) {
 	c := &fakeClient{reply: string(reply)}
 	out := Adjudicate(parsePkg(t, map[string]string{"SKILL.md": "---\nname: demo\n---\n" + pem + strings.Repeat("x", 21000)}), c, 25)
 	assert.NotContains(t, c.lastUser, "SecretBodyForTest")
-	assert.NotContains(t, pytext.Dumps(findings.ToMaps(out), 0), token)
+	assert.NotContains(t, pytext.Dumps(toMaps(out), 0), token)
 	secret := "password: 'prefix''opaque-value'"
 	reply, _ = json.Marshal(map[string]any{"prompt_injection": true, "reason": secret, "evidence_quote": secret})
 	out = Adjudicate(parsePkg(t, map[string]string{"SKILL.md": "---\nname: demo\n---\n" + text}), &fakeClient{reply: string(reply)}, 25)
 	assert.Equal(t, []string{"semantic-prompt-injection"}, rules(out))
-	assert.NotContains(t, pytext.Dumps(findings.ToMaps(out), 0), "opaque-value")
+	assert.NotContains(t, pytext.Dumps(toMaps(out), 0), "opaque-value")
+}
+
+// toMaps is the findings as a report serialises them: sorted, then each mapped.
+func toMaps(fs []findings.Finding) []map[string]any {
+	out := make([]map[string]any, 0, len(fs))
+	for _, f := range findings.Sort(fs) {
+		out = append(out, f.ToMap())
+	}
+	return out
 }
 
 // test_llm_review_core.py::test_decorated_secret_redaction_reaches_outbound_advisory,
@@ -357,23 +366,4 @@ func TestSecretsAreRedactedBeforeTransmission(t *testing.T) {
 			assert.NotContains(t, c.lastUser, part, source)
 		}
 	}
-}
-
-// test_llm.py::test_coverage_summary_counts_budget_skips_accurately,
-// test_coverage_summary_whole_pass_abort_counts_every_eligible_as_errored
-func TestCoverageSummary(t *testing.T) {
-	var arts []*parse.Artifact
-	for i := range 5 {
-		arts = append(arts, art(fmt.Sprintf("f%d.md", i), "instruction", "override the loading agent", nil))
-	}
-	p := pkgOf(arts...)
-	fs := Adjudicate(p, &fakeClient{reply: `{"prompt_injection": true, "severity": "high", "reason": "r", "evidence_quote": "override the loading agent"}`}, 2)
-	assert.Equal(t, map[string]any{"eligible": 5, "checked": 2, "truncated": 0, "skipped": 3, "errored": 0, "flagged": 2},
-		CoverageSummary(p, fs))
-	aborted := []findings.Finding{{Rule: "llm-error", Severity: "low", Message: "adjudication aborted"}}
-	cov := CoverageSummary(p, aborted)
-	assert.Equal(t, 5, cov["eligible"])
-	assert.Equal(t, 0, cov["checked"])
-	assert.Equal(t, 5, cov["errored"])
-	assert.Equal(t, cov["eligible"], cov["checked"].(int)+cov["skipped"].(int)+cov["errored"].(int))
 }

@@ -125,8 +125,8 @@ var (
 	IdentityFiles = pytext.Set("claude.md", "agents.md", "agent.md", "gemini.md", "soul.md", "memory.md",
 		"identity.md", ".cursorrules", ".windsurfrules", ".clinerules", ".roorules", "copilot-instructions.md")
 
-	// KnownSkillRoots are the directories agents load skills from; tests replace it.
-	KnownSkillRoots = []string{
+	// knownSkillRoots are the directories agents load skills from.
+	knownSkillRoots = []string{
 		"~/.claude/skills", "~/.claude/plugins",
 		"~/.config/opencode/skills", ".opencode/skills",
 		"~/.cursor/skills", ".cursor/skills",
@@ -563,13 +563,13 @@ func discoveryError(err error, path string) LedgerEntry {
 	return discoveryEntry("walk_error:"+pytext.OSErrorName(err), posix(abs))
 }
 
-// Discover returns the skill package roots found under roots (nil means
-// KnownSkillRoots). A root is a directory holding a SKILL.md or a plugin marker;
+// Discover returns the skill package roots found under roots (nil means the known
+// agent skill roots). A root is a directory holding a SKILL.md or a plugin marker;
 // once found its subtree is pruned. A symlinked ROOT is followed, nested symlinks
 // are not, and hard directory and entry budgets bound the scan.
 func Discover(roots []string) Discovery {
 	if roots == nil {
-		roots = KnownSkillRoots
+		roots = knownSkillRoots
 	}
 	found := map[string]string{}
 	seen := map[string]bool{}

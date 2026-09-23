@@ -199,12 +199,3 @@ func CapFindings(fs []Finding) []Finding {
 	}
 	return kept
 }
-
-// ToMaps sorts then maps.
-func ToMaps(fs []Finding) []map[string]any {
-	out := make([]map[string]any, 0, len(fs))
-	for _, f := range Sort(fs) {
-		out = append(out, f.ToMap())
-	}
-	return out
-}

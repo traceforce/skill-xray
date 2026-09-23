@@ -744,24 +744,39 @@ func IsWithinSource(path, root string) bool {
 	}
 }
 
+// CheckTarget refuses a report path that is a symlink, lies inside any of the roots or names a
+// special file, and returns it resolved. Write runs it over the scanned package; system-scan
+// runs it over every discovered package before the first one is read, so a report inside a
+// package is never scanned as part of it.
+func CheckTarget(target string, roots ...string) (string, error) {
+	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("SARIF output must be outside the scanned package")
+	}
+	target, err := Resolve(target)
+	if err != nil {
+		return "", err
+	}
+	for _, root := range roots {
+		root, err := Resolve(root)
+		if err != nil {
+			return "", err
+		}
+		if IsWithinSource(target, root) {
+			return "", errors.New("SARIF output must be outside the scanned package")
+		}
+	}
+	if info, err := os.Stat(target); err == nil && !info.Mode().IsRegular() {
+		return "", errors.New("SARIF output must be a regular file")
+	}
+	return target, nil
+}
+
 // Write is write_sarif: refuse a destination inside the scanned package, validate, then replace
 // the target atomically through a temporary file in its directory.
 func Write(document any, target, sourceRoot string) error {
-	root, err := Resolve(sourceRoot)
+	target, err := CheckTarget(target, sourceRoot)
 	if err != nil {
 		return err
-	}
-	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("SARIF output must be outside the scanned package")
-	}
-	if target, err = Resolve(target); err != nil {
-		return err
-	}
-	if IsWithinSource(target, root) {
-		return errors.New("SARIF output must be outside the scanned package")
-	}
-	if info, err := os.Stat(target); err == nil && !info.Mode().IsRegular() {
-		return errors.New("SARIF output must be a regular file")
 	}
 	data, err := Encode(document)
 	if err != nil {

@@ -28,8 +28,6 @@ var (
 	// Risk-first order, so traversal order cannot push a payload past the call budget.
 	kindOrder = map[string]int{"skill_manifest": 0, "agent_identity": 1, "instruction": 2, "agent_config": 3,
 		"hooks_config": 3, "mcp_config": 3, "plugin_manifest": 3, "app_manifest": 3, "plugin_lock": 3, "doc": 4}
-	skipRules  = map[string]bool{"llm-budget": true, "llm-unavailable": true}
-	errorRules = map[string]bool{"llm-error": true, "llm-unparseable": true, "llm-inconclusive": true}
 )
 
 const (
@@ -308,36 +306,4 @@ func Adjudicate(p *parse.Package, c Completer, maxFiles int) []findings.Finding 
 				"oracle": "llm"}})
 	}
 	return out
-}
-
-// CoverageSummary is coverage_summary: LLM-pass coverage from the findings. skipped sums the
-// per-note unchecked counts; a path-less llm-error (the whole pass aborted) counts every eligible
-// file as errored so the tally still balances.
-func CoverageSummary(p *parse.Package, fs []findings.Finding) map[string]any {
-	eligible, truncated, flagged, skipped, errored, aborted := 0, 0, 0, 0, 0, false
-	for _, a := range p.Artifacts {
-		if _, ok := targetText(a); ok {
-			eligible++
-		}
-	}
-	for _, f := range fs {
-		switch {
-		case f.Rule == "llm-truncated":
-			truncated++
-		case f.Vector == "SXV-038":
-			flagged++
-		case skipRules[f.Rule]:
-			n, _ := f.Evidence["unchecked"].(int)
-			skipped += n
-		case errorRules[f.Rule]:
-			errored++
-			aborted = aborted || f.Rule == "llm-error" && f.Path == ""
-		}
-	}
-	checked := max(0, eligible-skipped-errored)
-	if aborted {
-		checked, errored = 0, eligible
-	}
-	return map[string]any{"eligible": eligible, "checked": checked, "truncated": truncated, "skipped": skipped,
-		"errored": errored, "flagged": flagged}
 }

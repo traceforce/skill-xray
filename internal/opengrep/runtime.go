@@ -18,7 +18,7 @@ import (
 	"github.com/traceforce/skill-xray/internal/pytext"
 )
 
-// Version is the pinned OpenGrep release; it reaches analysis.opengrepVersion.
+// Version is the pinned OpenGrep release; it reaches the run property opengrepVersion.
 const Version = "1.29.0"
 
 const (
