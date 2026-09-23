@@ -261,6 +261,22 @@ func TestReportOverSourceFailsBeforeIngest(t *testing.T) {
 	assert.Contains(t, stderr, "cannot overwrite its source")
 }
 
+// A remote target has no local path to compare the report against, so it reaches ingest; the
+// containment checks run on the unpacked root instead.
+func TestRemoteTargetReachesIngest(t *testing.T) {
+	for _, target := range []string{"https://example.invalid/skill.zip", "https://example.invalid/skill.git"} {
+		reached := false
+		testutil.Swap(t, &resolveInput, func(string) (ingest.Resolved, func(), error) {
+			reached = true
+			return ingest.Resolved{}, nil, errors.New("offline")
+		})
+		rc, _, stderr := cli(t, "scan", target, "--output", filepath.Join(t.TempDir(), "r.sarif"))
+		assert.Equal(t, 2, rc)
+		assert.True(t, reached, target)
+		assert.Contains(t, stderr, "cannot ingest", target)
+	}
+}
+
 func TestInvalidPolicyNeverStartsScan(t *testing.T) {
 	for name, content := range map[string]string{"deep": strings.Repeat("[", 20000) + strings.Repeat("]", 20000), "null": "null"} {
 		t.Run(name, func(t *testing.T) {

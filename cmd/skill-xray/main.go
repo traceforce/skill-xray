@@ -218,21 +218,24 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 
 // preflight runs before the input is read or unpacked: the report must lie outside the package
 // path and must not overwrite its source or its operator policy, and the policy must be a regular
-// JSON object of at most 512 KiB outside the package path.
+// JSON object of at most 512 KiB outside the package path. A URL or git address is no local
+// path, so the comparisons against the source wait for contained on the unpacked root.
 func (o *options) preflight(pkg string) (map[string]any, error) {
 	report, err := resolvePath(o.output)
 	if err != nil {
 		return nil, err
 	}
-	source, err := resolvePath(pkg)
-	if err != nil {
-		return nil, err
-	}
-	if report == source || sameFile(report, source) {
-		return nil, errors.New("Report cannot overwrite its source")
-	}
-	if sarif.IsWithinSource(report, source) {
-		return nil, errors.New("Report must be outside the scanned package")
+	source := ""
+	if _, err := os.Lstat(pkg); err == nil {
+		if source, err = resolvePath(pkg); err != nil {
+			return nil, err
+		}
+		if report == source || sameFile(report, source) {
+			return nil, errors.New("Report cannot overwrite its source")
+		}
+		if sarif.IsWithinSource(report, source) {
+			return nil, errors.New("Report must be outside the scanned package")
+		}
 	}
 	if o.policy == "" {
 		return nil, nil
@@ -244,7 +247,7 @@ func (o *options) preflight(pkg string) (map[string]any, error) {
 	if policy == report || sameFile(policy, report) {
 		return nil, errors.New("Report cannot overwrite its operator policy")
 	}
-	if policy == source || sameFile(policy, source) || sarif.IsWithinSource(policy, source) {
+	if source != "" && (policy == source || sameFile(policy, source) || sarif.IsWithinSource(policy, source)) {
 		return nil, errors.New("Operator policy must be outside the scanned package")
 	}
 	if st, err := os.Stat(policy); err != nil || !st.Mode().IsRegular() {
