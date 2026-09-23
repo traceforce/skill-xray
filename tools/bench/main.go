@@ -118,7 +118,7 @@ func cmdRun(args []string) (err error) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	data := fs.String("data", "", "the split export, one JSON record per line")
 	out := fs.String("out", "", "where to write one JSON row per record")
-	workers := fs.Int("workers", max(4, runtime.NumCPU()-1), "concurrent scans")
+	workers := fs.Int("workers", min(8, max(4, runtime.NumCPU()-1)), "concurrent scans; each may start an engine process holding up to half a gigabyte, so the default stops at eight")
 	work := fs.String("work", "", "parent of the scratch directory (default: the system temp dir)")
 	opengrepBin := fs.String("opengrep-bin", "", "an explicit OpenGrep binary (default: the pinned one)")
 	fs.Parse(args)

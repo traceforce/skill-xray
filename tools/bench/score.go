@@ -110,22 +110,18 @@ func ratio(a, b int) float64 {
 // counter counts keys and lists them by count, ties by key, so a report does not depend on the
 // order the rows were written in.
 type counter struct {
-	order []string
-	n     map[string]int
+	n map[string]int
 }
 
 func (c *counter) add(k string) {
 	if c.n == nil {
 		c.n = map[string]int{}
 	}
-	if _, seen := c.n[k]; !seen {
-		c.order = append(c.order, k)
-	}
 	c.n[k]++
 }
 
 func (c *counter) mostCommon(limit int) []string {
-	keys := slices.Clone(c.order)
+	keys := slices.Collect(maps.Keys(c.n))
 	slices.SortFunc(keys, func(a, b string) int { return cmp.Or(cmp.Compare(c.n[b], c.n[a]), cmp.Compare(a, b)) })
 	if limit > 0 && len(keys) > limit {
 		keys = keys[:limit]
@@ -290,7 +286,7 @@ func report(rows []row, title string, effective bool) string {
 	for _, v := range slices.Sorted(maps.Keys(hits)) {
 		line("| %s | %s | %d | %d |", v, tiers[v], hits[v][1], hits[v][0])
 	}
-	if len(errKinds.order) > 0 {
+	if len(errKinds.n) > 0 {
 		line("")
 		line("## Errors")
 		line("")
