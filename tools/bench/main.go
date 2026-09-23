@@ -180,6 +180,9 @@ func cmdRun(args []string) error {
 	}
 feed:
 	for _, rec := range records {
+		if ctx.Err() != nil {
+			break // a ready send must not win the select over a finished context
+		}
 		select {
 		case next <- rec:
 		case <-ctx.Done():
@@ -213,8 +216,8 @@ func loadRecords(path string) ([]record, error) {
 		if err := dec.Decode(&rec); err != nil {
 			return err
 		}
-		if rec.Label == nil || (*rec.Label != 0 && *rec.Label != 1) {
-			return fmt.Errorf("benchmark_id %q: label must be 0 or 1", rec.BenchmarkID)
+		if err := checkLabel(rec.BenchmarkID, rec.Label); err != nil {
+			return err
 		}
 		rec.record.Label = *rec.Label
 		out = append(out, rec.record)
@@ -223,17 +226,33 @@ func loadRecords(path string) ([]record, error) {
 	return out, err
 }
 
+// loadRows reads the rows a run wrote, or rows an LLM review rewrote, with the same label check
+// as loadRecords: a row without a label of 0 or 1 is refused, never counted as benign.
 func loadRows(path string) ([]row, error) {
 	var out []row
 	err := decodeLines(path, func(dec *json.Decoder) error {
-		var r row
+		var r struct {
+			row
+			Label *int `json:"label"`
+		}
 		if err := dec.Decode(&r); err != nil {
 			return err
 		}
-		out = append(out, r)
+		if err := checkLabel(r.BenchmarkID, r.Label); err != nil {
+			return err
+		}
+		r.row.Label = *r.Label
+		out = append(out, r.row)
 		return nil
 	})
 	return out, err
+}
+
+func checkLabel(id string, label *int) error {
+	if label == nil || (*label != 0 && *label != 1) {
+		return fmt.Errorf("benchmark_id %q: label must be 0 or 1", id)
+	}
+	return nil
 }
 
 // decodeLines calls decode once per JSON value in the file, up to a clean end of input; any

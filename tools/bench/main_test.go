@@ -134,10 +134,12 @@ func TestRunRefusesBadWorkerCountsAndTrailingInput(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, records, 1)
 
-	// a label that is missing or not binary is refused, never scored as benign
+	// a label that is missing or not binary is refused in a record and in a row, never scored as benign
 	for _, body := range []string{`{"benchmark_id":"a","text":"x"}`, `{"benchmark_id":"a","label":2,"text":"x"}`} {
 		require.NoError(t, os.WriteFile(bad, []byte(body+"\n"), 0o644))
 		_, err = loadRecords(bad)
+		assert.ErrorContains(t, err, "label must be 0 or 1", body)
+		_, err = loadRows(bad)
 		assert.ErrorContains(t, err, "label must be 0 or 1", body)
 	}
 }
