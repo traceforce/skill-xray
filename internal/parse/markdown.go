@@ -1180,19 +1180,27 @@ func compactURL(s string) string {
 	}, s))
 }
 
-// activeScheme reports a data, javascript or vbscript URL.
+// activeScheme reports a data, javascript or vbscript URL among the comma-separated candidates
+// of a value: srcset names several, and a later one hides as well as the first.
 func activeScheme(s string) bool {
-	compact := compactURL(s)
-	i := strings.IndexByte(compact, ':')
-	return i >= 0 && (compact[:i] == "data" || compact[:i] == "javascript" || compact[:i] == "vbscript")
+	for _, c := range strings.Split(s, ",") {
+		compact := compactURL(c)
+		i := strings.IndexByte(compact, ':')
+		if i >= 0 && (compact[:i] == "data" || compact[:i] == "javascript" || compact[:i] == "vbscript") {
+			return true
+		}
+	}
+	return false
 }
 
 // attrCarriesContent reports a value outside the modelled set that is more than a layout token:
-// a URL, or at least two words of letters.
+// a URL among its comma-separated candidates, or at least two words of letters.
 func attrCarriesContent(v string) bool {
-	compact := compactURL(v)
-	if strings.Contains(compact, "://") || strings.HasPrefix(compact, "//") || lowerSchemeRE.MatchString(compact) {
-		return true
+	for _, c := range strings.Split(v, ",") {
+		compact := compactURL(c)
+		if strings.Contains(compact, "://") || strings.HasPrefix(compact, "//") || lowerSchemeRE.MatchString(compact) {
+			return true
+		}
 	}
 	words := 0
 	for _, f := range strings.Fields(v) {

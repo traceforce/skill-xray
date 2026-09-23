@@ -230,6 +230,7 @@ type Markdown struct {
     HTMLProse            []HTMLProse
     HTMLUninspectable    []HTMLFragment
     HasHTML, HasUninspectableHTML bool
+    HTMLHidesContent bool  // an uninspectable fragment carried text, or a construct the inspector could not resolve
 }
 type Preproc struct { Kind, Code string; Line, Column int; Runs bool; Info string }
 type PreprocCounts struct { Inline, Fenced int }
