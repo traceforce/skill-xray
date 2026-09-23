@@ -211,9 +211,9 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 	return rc, nil
 }
 
-// preflight: the report must not overwrite its source or its operator policy, and the policy
-// must be a regular JSON object of at most 512 KiB outside the scanned package. Every failure is
-// reported before the scan starts.
+// preflight: the report must lie outside the scanned package and must not overwrite its source
+// or its operator policy, and the policy must be a regular JSON object of at most 512 KiB outside
+// the scanned package. Every failure is reported before any file of the package is read.
 func (o *options) preflight(pkg, root string) (map[string]any, error) {
 	report, err := resolvePath(o.output)
 	if err != nil {
@@ -226,6 +226,12 @@ func (o *options) preflight(pkg, root string) (map[string]any, error) {
 	if report == source || sameFile(report, source) {
 		return nil, errors.New("Report cannot overwrite its source")
 	}
+	if root, err = resolvePath(root); err != nil {
+		return nil, err
+	}
+	if sarif.IsWithinSource(report, root) {
+		return nil, errors.New("Report must be outside the scanned package")
+	}
 	if o.policy == "" {
 		return nil, nil
 	}
@@ -235,9 +241,6 @@ func (o *options) preflight(pkg, root string) (map[string]any, error) {
 	}
 	if policy == report || sameFile(policy, report) {
 		return nil, errors.New("Report cannot overwrite its operator policy")
-	}
-	if root, err = resolvePath(root); err != nil {
-		return nil, err
 	}
 	if policy == source || sameFile(policy, source) || sarif.IsWithinSource(policy, root) {
 		return nil, errors.New("Operator policy must be outside the scanned package")

@@ -53,6 +53,10 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 		return 2, errors.New("--output requires a non-empty path")
 	}
 	d := ingest.Discover(s.roots)
+	if _, err := checkTarget(s.output, d.Paths); err != nil { // before any package is read, so a report inside one is never scanned
+		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
+		return 2, nil
+	}
 	rc := 0
 	var sarifErr error
 	var merged map[string]any
@@ -105,29 +109,40 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 	return rc, nil
 }
 
-// writeRuns writes the merged document under sarif.Write's rules: the target is never a symlink,
-// never inside any scanned package and never a special file, the encoding is canonical and
-// capped at 64 MiB, and the target is replaced atomically through a temporary file beside it.
-// Each run was validated on its own, since the validator reads a single-run document.
-func writeRuns(doc map[string]any, target string, packageRoots []string) error {
+// checkTarget refuses a report path that is a symlink, lies inside any scanned package or names
+// a special file, and returns it resolved. It runs before any package is read and again before
+// the write.
+func checkTarget(target string, packageRoots []string) (string, error) {
 	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("SARIF output must be outside the scanned package")
+		return "", errors.New("SARIF output must be outside the scanned package")
 	}
 	target, err := sarif.Resolve(target)
 	if err != nil {
-		return err
+		return "", err
 	}
 	for _, root := range packageRoots {
 		root, err := sarif.Resolve(root)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if sarif.IsWithinSource(target, root) {
-			return errors.New("SARIF output must be outside the scanned package")
+			return "", errors.New("SARIF output must be outside the scanned package")
 		}
 	}
 	if info, err := os.Stat(target); err == nil && !info.Mode().IsRegular() {
-		return errors.New("SARIF output must be a regular file")
+		return "", errors.New("SARIF output must be a regular file")
+	}
+	return target, nil
+}
+
+// writeRuns writes the merged document under sarif.Write's rules, checkTarget's checks first:
+// the encoding is canonical and capped at 64 MiB, and the target is replaced atomically through
+// a temporary file beside it. Each run was validated on its own, since the validator reads a
+// single-run document.
+func writeRuns(doc map[string]any, target string, packageRoots []string) error {
+	target, err := checkTarget(target, packageRoots)
+	if err != nil {
+		return err
 	}
 	data := []byte(pytext.Canonical(doc) + "\n")
 	if len(data) > 64<<20 {

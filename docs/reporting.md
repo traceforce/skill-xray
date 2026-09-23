@@ -82,7 +82,7 @@ skill-xray scan ./skill-package --output ../reports/skill.sarif --policy ../revi
 
 The report and operator policy must be outside the scanned package. The report's parent
 directory must already exist. A generated report therefore cannot become input on the
-next identical scan. Existing JSON/text output remains available; the audit SARIF retains
+next identical scan. SARIF is the only output; the audit retains
 suppressed results using native `suppressions` with a reason, rather than deleting them.
 
 The order is checks, raw candidates, correlation, explicit dispositions, final results,

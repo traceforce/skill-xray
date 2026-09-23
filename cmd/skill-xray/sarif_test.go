@@ -109,12 +109,15 @@ func TestDefaultReportPathIsTheWorkingDirectory(t *testing.T) {
 	require.NoError(t, sarif.Validate(sarifDoc(t, defaultReport)))
 }
 
-// The default path inside the scanned package is refused like any other, and nothing is written.
+// The default path inside the scanned package is refused like any other, before the package is
+// read, and nothing is written.
 func TestDefaultReportInsideThePackageIsRefused(t *testing.T) {
 	root, _ := runFixture(t, none)
 	t.Chdir(root)
+	noScan(t)
 	rc, stdout, stderr := cli(t, "scan", ".")
 	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "cannot prepare SARIF")
 	assert.Contains(t, stderr, "outside the scanned package")
 	assert.NotContains(t, stdout, "report:")
 	assert.NoFileExists(t, filepath.Join(root, defaultReport))

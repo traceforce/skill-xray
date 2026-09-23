@@ -82,13 +82,15 @@ func TestSystemScanConsoleAndReport(t *testing.T) {
 	assert.Equal(t, 1, vectors)
 }
 
+// A target inside a discovered package is refused before any package is scanned.
 func TestSystemScanSarifRefusesAScannedPackage(t *testing.T) {
 	root := systemRoot(t)
 	target := filepath.Join(root, "leaky", "report.sarif")
+	noScan(t)
 	rc, stdout, stderr := cli(t, "system-scan", "--root", root, "--output", target)
 	assert.Equal(t, 2, rc)
 	assert.Contains(t, stderr, "cannot write SARIF")
-	assert.NotContains(t, stdout, "report:")
+	assert.Empty(t, stdout)
 	assert.NoFileExists(t, target)
 }
 
