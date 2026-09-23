@@ -107,7 +107,8 @@ func ratio(a, b int) float64 {
 	return float64(a) / float64(b)
 }
 
-// counter counts keys and lists them by count, ties in first-seen order.
+// counter counts keys and lists them by count, ties by key, so a report does not depend on the
+// order the rows were written in.
 type counter struct {
 	order []string
 	n     map[string]int
@@ -125,7 +126,7 @@ func (c *counter) add(k string) {
 
 func (c *counter) mostCommon(limit int) []string {
 	keys := slices.Clone(c.order)
-	slices.SortStableFunc(keys, func(a, b string) int { return cmp.Compare(c.n[b], c.n[a]) })
+	slices.SortFunc(keys, func(a, b string) int { return cmp.Or(cmp.Compare(c.n[b], c.n[a]), cmp.Compare(a, b)) })
 	if limit > 0 && len(keys) > limit {
 		keys = keys[:limit]
 	}

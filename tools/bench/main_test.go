@@ -39,6 +39,8 @@ func TestPinnedSplitIsTheSortedIDListDigest(t *testing.T) {
 	assert.Equal(t, "tiny", name)
 	_, ok = pinnedSplit([]record{{BenchmarkID: "a"}})
 	assert.False(t, ok)
+	_, ok = pinnedSplit([]record{{BenchmarkID: "a\nb"}})
+	assert.False(t, ok, "an id carrying the delimiter cannot stand in for two ids")
 }
 
 func TestScanOneRecordsFindingsAndCleansUp(t *testing.T) {
@@ -101,6 +103,9 @@ func TestScanOneRunsConcurrently(t *testing.T) {
 	for _, r := range rows {
 		assert.Nil(t, r.Error)
 		assert.Equal(t, 1, r.Analyzed)
+		for _, f := range r.Findings {
+			assert.NotContains(t, []string{"opengrep-unavailable", "opengrep-unverified"}, f.Rule, "the engine resolves, so the shared cache is exercised")
+		}
 	}
 	entries, err := os.ReadDir(work)
 	require.NoError(t, err)
@@ -190,8 +195,7 @@ func TestVerdictsMetricsAndReport(t *testing.T) {
 		"excluded from TN and FPR: 1",
 		"benign packages with ONLY T3 capability findings (correctly not counted): 1",
 		"| SXV-008 | 1 |",
-		"| SXV-008 / r | 1 |",
-		"| SXV-008 / r2 | 1 |",
+		"| SXV-008 / r | 1 |\n| SXV-008 / r2 | 1 |",
 		"| good | 1 |",
 		"| (unmapped) | 1 / 1 | 100.0% |",
 		"| Exfil | 0 / 1 | 0.0% |",

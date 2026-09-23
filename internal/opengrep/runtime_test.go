@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -72,6 +74,29 @@ func TestVerifiedBinaryDigestIsCachedByFileIdentity(t *testing.T) {
 		require.NoError(t, err)
 	}
 	assert.Equal(t, 1, calls)
+}
+
+// Concurrent verifications of one binary hash it once: the first holds the lock while it hashes
+// and the others read its result.
+func TestConcurrentVerificationsHashOnce(t *testing.T) {
+	candidate := filepath.Join(t.TempDir(), "opengrep")
+	require.NoError(t, os.WriteFile(candidate, []byte("valid"), 0o644))
+	a := &asset{"test", 5, hexSHA256([]byte("valid"))}
+	clear(digests)
+	var calls atomic.Int32
+	original := digestFile
+	testutil.Swap(t, &digestFile, func(path string) (string, error) { calls.Add(1); return original(path) })
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := verifyExecutable(candidate, a)
+			assert.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, int32(1), calls.Load())
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

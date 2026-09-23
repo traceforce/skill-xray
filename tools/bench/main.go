@@ -7,12 +7,15 @@
 // The export is one JSON object per record of the pinned revision's source-disjoint split with
 // the keys benchmark_id, split, label, source_name, attack_categories and text (skill_text, else
 // public_skill_text); run refuses a file whose sorted id list is not the pinned test or dev
-// split. Each record is written as <work>/<id>/SKILL.md, scanned in process with the
-// deterministic checks and the pinned OpenGrep, then removed; nothing is executed. A record that
-// errors, is oversize or leaves a file unread is recorded as such, never as clean.
+// split. Each record is written as <work>/msb-work-*/<sanitised id>-<sha1 prefix>/SKILL.md,
+// scanned in process with the deterministic checks and the pinned OpenGrep, then removed; nothing
+// is executed. A record that errors, is oversize or leaves a file unread is recorded as such,
+// never as clean. An interrupt stops the feed, lets the running scans finish and removes the
+// scratch root; the rows written so far stay in the output file.
 package main
 
 import (
+	"context"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -40,7 +44,9 @@ import (
 // datasetRevision is the dataset commit the pinned id lists come from.
 const datasetRevision = "d4b42ce5766a6e0359c987cf59c1007cb3795a90"
 
-// pinnedSplits holds, per split, the SHA-256 of its sorted benchmark_id list joined by newlines.
+// pinnedSplits holds, per split, the SHA-256 of its sorted benchmark_id list joined by newlines,
+// as the dataset's frozen manifest records it at datasetRevision. The pin fixes the identity list
+// of a split; labels and texts come from the export as they are.
 var pinnedSplits = map[string]string{
 	"test": "3cf59383d752094a9d25022d8bd90890db8ad6d1b54620af8088ff1b8ae0b7bb",
 	"dev":  "f01c122ea57d0a73c153cdbcc685a87a0af0be85f8a3115112253c6224b6e457",
@@ -142,6 +148,8 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 	start := time.Now()
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -170,8 +178,13 @@ func cmdRun(args []string) error {
 			}
 		}()
 	}
+feed:
 	for _, rec := range records {
-		next <- rec
+		select {
+		case next <- rec:
+		case <-ctx.Done():
+			break feed
+		}
 	}
 	close(next)
 	wg.Wait()
@@ -180,6 +193,9 @@ func cmdRun(args []string) error {
 	}
 	if writeErr != nil {
 		return writeErr
+	}
+	if ctx.Err() != nil {
+		return fmt.Errorf("interrupted after %d of %d records; %s holds the rows written so far", done, len(records), *out)
 	}
 	fmt.Fprintf(os.Stderr, "done: split %s, %d records, %d errors, %.1fs, %s\n", split, len(records), failed, time.Since(start).Seconds(), *out)
 	return nil
@@ -230,10 +246,14 @@ func decodeLines(path string, decode func(*json.Decoder) error) error {
 	}
 }
 
-// pinnedSplit names the pinned split whose id list the records are, exactly.
+// pinnedSplit names the pinned split whose id list the records are, exactly. The list is joined
+// by newlines, so an id that carries one can never match.
 func pinnedSplit(records []record) (string, bool) {
 	ids := make([]string, len(records))
 	for i, r := range records {
+		if strings.ContainsRune(r.BenchmarkID, '\n') {
+			return "", false
+		}
 		ids[i] = r.BenchmarkID
 	}
 	slices.Sort(ids)

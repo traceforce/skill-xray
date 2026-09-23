@@ -120,7 +120,8 @@ var digestFile = func(path string) (string, error) {
 // digests caches a verified binary's digest by file identity (_digest_cached, lru_cache(8)).
 // ponytail: identity is (abs path, size, mtime) since ctime/ino/dev need syscall (code.md R10);
 // the cache is cleared rather than LRU-evicted when it fills. Scans may run concurrently in one
-// process, so the map is guarded; the hash itself runs outside the lock.
+// process, so the lookup and the hash run under one lock: the first scan hashes the engine and
+// the others wait for its result instead of hashing the same file again.
 var (
 	digests   = map[digestKey]string{}
 	digestsMu sync.Mutex
@@ -153,18 +154,16 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 	abs, _ := filepath.Abs(path)
 	key := digestKey{abs, info.Size(), info.ModTime()}
 	digestsMu.Lock()
+	defer digestsMu.Unlock()
 	digest, ok := digests[key]
-	digestsMu.Unlock()
 	if !ok {
 		if digest, err = digestFile(path); err != nil {
 			return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 		}
-		digestsMu.Lock()
 		if len(digests) >= 8 {
 			clear(digests)
 		}
 		digests[key] = digest
-		digestsMu.Unlock()
 	}
 	if digest != asset.SHA256 {
 		return "", mismatch
