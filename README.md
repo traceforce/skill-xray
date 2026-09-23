@@ -18,7 +18,7 @@ The binary was ported from a Python scanner and, before that code was retired in
 
 ### Download a release
 
-Each tag `v<version>` publishes archives for Linux (amd64, arm64), macOS (amd64, arm64) and Windows (amd64) with their SHA-256 sums on the [Releases](https://github.com/traceforce/skill-xray/releases) page. Verify the archive against `SHA256SUMS`, unpack it and put the binary on the PATH; `skill-xray install-opengrep` then fetches the pinned engine for `--analyze`.
+Each tag `v<version>` publishes archives for Linux (amd64, arm64), macOS (amd64, arm64) and Windows (amd64) with their SHA-256 sums on the [Releases](https://github.com/traceforce/skill-xray/releases) page. Verify the archive against `SHA256SUMS`, unpack it and put the binary on the PATH; `skill-xray install-opengrep` then fetches the pinned engine for the code lane, which `scan` and `system-scan` run over bundled Python, shell, JavaScript and TypeScript.
 
 ### Build from Source
 
