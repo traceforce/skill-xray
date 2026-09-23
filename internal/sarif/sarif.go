@@ -395,7 +395,7 @@ func Build(p *parse.Package, r *scan.ScanReport) (map[string]any, error) {
 		"rawCandidates": raw, "candidateLinks": links,
 	}
 	if usage, _ := doc["llm_usage"].(map[string]any); len(usage) > 0 { // the lane was on: the report says so even when it found nothing
-		properties["llmUsage"] = map[string]any{"calls": usage["calls"], "failures": usage["failures"], "unavailable": usage["unavailable"],
+		properties["llmUsage"] = map[string]any{"calls": usage["calls"], "failures": usage["failures"], "failureReason": usage["failure_reason"], "unavailable": usage["unavailable"],
 			"provider": usage["provider"], "model": usage["model"], "advisoryEnabled": usage["advisory_enabled"],
 			"judgeEnabled": usage["judge_enabled"], "applyEnabled": usage["apply_enabled"]}
 	}

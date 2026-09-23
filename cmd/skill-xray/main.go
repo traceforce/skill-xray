@@ -188,6 +188,7 @@ func incomplete(report *scan.ScanReport) bool {
 type llmSummary struct {
 	configured, calls, failures, sent int
 	unavailable, advisoryOff          bool
+	reason                            string // the first failure's reason seen
 	held                              map[string]int
 }
 
@@ -199,6 +200,9 @@ func (s *llmSummary) add(report *scan.ScanReport) {
 	s.configured++
 	s.calls += count(u["calls"])
 	s.failures += count(u["failures"])
+	if r, _ := u["failure_reason"].(string); r != "" && s.reason == "" {
+		s.reason = r
+	}
 	s.unavailable = s.unavailable || pytext.Truthy(u["unavailable"])
 	s.advisoryOff = s.advisoryOff || !pytext.Truthy(u["advisory_enabled"])
 	decisions := report.Shadow
@@ -226,6 +230,9 @@ func (s *llmSummary) line(w io.Writer) {
 	fmt.Fprintf(w, "llm: %d model calls", s.calls)
 	if s.failures > 0 {
 		fmt.Fprintf(w, ", %d failed", s.failures)
+		if s.reason != "" {
+			fmt.Fprintf(w, " (%s)", s.reason)
+		}
 	}
 	if s.unavailable {
 		fmt.Fprint(w, ", provider unavailable")

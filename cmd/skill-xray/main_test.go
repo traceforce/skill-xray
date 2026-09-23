@@ -77,6 +77,11 @@ type fakeClient struct{ reply string }
 
 func (c *fakeClient) Complete(_, _ string) (string, error) { return c.reply, nil }
 
+// failingClient is a provider that refuses every request.
+type failingClient struct{ err error }
+
+func (c *failingClient) Complete(_, _ string) (string, error) { return "", c.err }
+
 // config and client replace llmFromEnv and buildClient.
 func config(cfg *llm.Config, err error) func(func(string) string) (*llm.Config, error) {
 	return func(func(string) string) (*llm.Config, error) { return cfg, err }
@@ -176,6 +181,19 @@ func TestLLMPathWiresTheClientIntoTheReport(t *testing.T) {
 	assert.GreaterOrEqual(t, usage["calls"].(float64), 1.0)
 	assert.Contains(t, stdout, "\nllm: ", "the console states what the lane did")
 	assert.NotContains(t, stdout, "llm: 0 model calls")
+}
+
+// A failing provider is named on the console and in the report with its sanitised reason, so a
+// run whose every call failed cannot pass for a clean one.
+func TestLLMFailureReasonIsReported(t *testing.T) {
+	root := testutil.MakePackage(t, map[string]string{"SKILL.md": "---\nname: t\ndescription: override the loading agent\n---\n"})
+	testutil.Swap(t, &llmFromEnv, config(&llm.Config{Provider: "openai", Model: "m", APIKey: "k", BaseURL: "https://api.openai.com/v1"}, nil))
+	testutil.Swap(t, &buildClient, client(&failingClient{&llm.Error{Kind: llm.Transport, Msg: "LLM endpoint returned HTTP 401"}}))
+	rc, stdout, _, doc := scanned(t, root, "--llm")
+	assert.Equal(t, 0, rc)
+	assert.Contains(t, stdout, "1 failed (LLM endpoint returned HTTP 401)", stdout)
+	assert.Contains(t, stdout, "provider unavailable", stdout)
+	assert.Equal(t, "LLM endpoint returned HTTP 401", at(doc, "runs", 0, "properties", "llmUsage", "failureReason"))
 }
 
 func TestReviewRequiresLLM(t *testing.T) {
