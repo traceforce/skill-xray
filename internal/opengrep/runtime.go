@@ -130,7 +130,9 @@ type digestKey struct {
 }
 
 // digestEntry keeps the identity of the file that was hashed; a replacement with the same size
-// and modification time is hashed again.
+// and modification time is hashed again. Rewriting that same file in place with its size and
+// time kept is not detected: it needs write access to a location trustedLocation accepted, and
+// the cache lives for one process.
 type digestEntry struct {
 	digest string
 	info   os.FileInfo
