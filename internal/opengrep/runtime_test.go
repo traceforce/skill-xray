@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -140,6 +141,30 @@ func TestCachedDigestRequiresTheSameFile(t *testing.T) {
 	assert.Equal(t, 2, calls)
 }
 
+// The cached digest is dropped when the same file is rewritten in place with its size and its
+// modification time kept: the write moves the change time, which is part of the key.
+func TestCachedDigestDropsARewrittenFile(t *testing.T) {
+	candidate := filepath.Join(t.TempDir(), "opengrep")
+	require.NoError(t, os.WriteFile(candidate, []byte("valid"), 0o644))
+	a := &asset{"test", 5, hexSHA256([]byte("valid"))}
+	clear(digests)
+	calls := 0
+	original := digestFile
+	testutil.Swap(t, &digestFile, func(f *os.File) (string, error) { calls++; return original(f) })
+	_, err := verifyExecutable(candidate, a)
+	require.NoError(t, err)
+	st, err := os.Stat(candidate)
+	require.NoError(t, err)
+	// File times come from a clock that advances once per scheduler tick; this pause spans several
+	// ticks on every platform, so the rewrite is stamped later than the file it replaces.
+	time.Sleep(50 * time.Millisecond)
+	require.NoError(t, os.WriteFile(candidate, []byte("wrong"), 0o644))
+	require.NoError(t, os.Chtimes(candidate, st.ModTime(), st.ModTime()))
+	_, err = verifyExecutable(candidate, a)
+	assert.ErrorContains(t, err, "does not match")
+	assert.Equal(t, 2, calls)
+}
+
 // A world-writable file, or a world-writable directory without the sticky bit anywhere above the
 // engine, on the path as named or as resolved, is refused.
 func TestUntrustedLocationIsRefused(t *testing.T) {
@@ -157,13 +182,13 @@ func TestUntrustedLocationIsRefused(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.Chmod(shared, 0o777)) // the grandparent, not the engine's own directory
 	_, err = verifyExecutable(candidate, a)
-	assert.ErrorContains(t, err, "writable by every user")
+	assert.ErrorContains(t, err, "changed by another user")
 	require.NoError(t, os.Chmod(shared, 0o777|os.ModeSticky))
 	_, err = verifyExecutable(candidate, a)
 	require.NoError(t, err)
 	require.NoError(t, os.Chmod(candidate, 0o666))
 	_, err = verifyExecutable(candidate, a)
-	assert.ErrorContains(t, err, "writable by every user")
+	assert.ErrorContains(t, err, "changed by another user")
 	require.NoError(t, os.Chmod(candidate, 0o644))
 	open := filepath.Join(t.TempDir(), "open")
 	require.NoError(t, os.Mkdir(open, 0o755))
@@ -171,7 +196,13 @@ func TestUntrustedLocationIsRefused(t *testing.T) {
 	link := filepath.Join(open, "opengrep")
 	require.NoError(t, os.Symlink(candidate, link)) // the link's own directory is on the path as named
 	_, err = verifyExecutable(link, a)
-	assert.ErrorContains(t, err, "writable by every user")
+	assert.ErrorContains(t, err, "changed by another user")
+	private := filepath.Join(t.TempDir(), "private")
+	require.NoError(t, os.Mkdir(private, 0o755))
+	link = filepath.Join(private, "opengrep")
+	require.NoError(t, os.Symlink(candidate, link)) // a link has open permission bits; its owner is what counts
+	_, err = verifyExecutable(link, a)
+	require.NoError(t, err)
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

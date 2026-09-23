@@ -218,7 +218,7 @@ func couldNotStart(err error) []findings.Finding {
 
 // execRunner is subprocess.run: stdout discarded, stderr to the file, no shell.
 func execRunner(ctx context.Context, argv []string, dir string, env []string, stderr *os.File) (int, error) {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) // #nosec G204 -- argv[0] is the absolute path verifyExecutable matched to the pinned size and digest in a location every user cannot write to; the flags are fixed
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) // #nosec G204 -- argv[0] is the absolute path verifyExecutable matched to the pinned size and digest, in a location only this user, root or an administrator, or a group one of them granted, can change on every platform; the flags are fixed
 	cmd.Dir, cmd.Env, cmd.Stderr = dir, env, stderr
 	cmd.WaitDelay = 10 * time.Second
 	err := cmd.Run()

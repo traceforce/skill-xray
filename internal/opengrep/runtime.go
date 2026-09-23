@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -114,10 +113,11 @@ var digestFile = func(f *os.File) (string, error) {
 }
 
 // digests caches a verified binary's digest by file identity (_digest_cached, lru_cache(8)).
-// ponytail: identity is (abs path, size, mtime) since ctime/ino/dev need syscall (code.md R10);
-// the cache is cleared rather than LRU-evicted when it fills. Scans may run concurrently in one
-// process, so the lookup and the hash run under one lock: the first scan hashes the engine and
-// the others wait for its result instead of hashing the same file again.
+// ponytail: identity is (abs path, size, mtime, ctime) plus the os.SameFile check on the entry,
+// which stands for ino and dev (code.md R10); the cache is cleared rather than LRU-evicted when
+// it fills. Scans may run concurrently in one process, so the lookup and the hash run under one
+// lock: the first scan hashes the engine and the others wait for its result instead of hashing
+// the same file again.
 var (
 	digests   = map[digestKey]digestEntry{}
 	digestsMu sync.Mutex
@@ -127,43 +127,46 @@ type digestKey struct {
 	path  string
 	size  int64
 	mtime time.Time
+	ctime int64
 }
 
-// digestEntry keeps the identity of the file that was hashed; a replacement with the same size
-// and modification time is hashed again. Rewriting that same file in place with its size and
-// time kept is not detected: it needs write access to a location trustedLocation accepted, and
-// the cache lives for one process.
+// digestEntry keeps the identity of the file that was hashed. A replacement with the same size
+// and modification time is hashed again, and so is the same file rewritten in place with both
+// kept, since a write moves its change time, which is part of the key.
 type digestEntry struct {
 	digest string
 	info   os.FileInfo
 }
 
-// trustedLocation refuses an engine that every user could swap between the verification and
-// the run: a world-writable file, or a world-writable directory without the sticky bit anywhere
-// above it, on the path as named and on the path it resolves to. Windows synthesises permission
-// bits and is not checked: the default cache lives under the user's own profile and an explicit
-// path is the operator's choice.
+// trustedLocation refuses an engine that a user other than this one or an administrator could
+// swap between the verification and the run. Every component on the path as named and on the
+// path it resolves to, from the engine itself up to the root, must pass the platform's
+// trustedComponent: on Unix it is owned by this user or root and is not world-writable unless it
+// is a sticky directory; on Windows its owner is this user, Administrators, SYSTEM or
+// TrustedInstaller and its DACL grants no replacing right to Everyone, Authenticated Users or
+// Users. A group one of them granted write to keeps it on both.
 func trustedLocation(info os.FileInfo, abs string) error {
-	if runtime.GOOS == "windows" {
-		return nil
-	}
-	if info.Mode().Perm()&0o002 != 0 {
-		return errors.New("world-writable file")
-	}
 	real, err := filepath.EvalSymlinks(abs)
 	if err != nil {
 		return err
 	}
-	for _, start := range []string{abs, real} {
-		for dir := filepath.Dir(start); ; dir = filepath.Dir(dir) {
-			st, err := os.Lstat(dir) // #nosec G703 -- an ancestor of the engine verifyExecutable opened, checked for world-writability
+	if err := trustedComponent(real, info); err != nil { // the engine itself, as opened
+		return err
+	}
+	chains := []string{filepath.Dir(real)}
+	if abs != real {
+		chains = append(chains, abs) // the link and every directory on the path as named
+	}
+	for _, start := range chains {
+		for p := start; ; p = filepath.Dir(p) {
+			st, err := os.Lstat(p) // #nosec G703 -- a component of the engine's path, judged by its owner and permissions
 			if err != nil {
 				return err
 			}
-			if st.Mode().Perm()&0o002 != 0 && st.Mode()&os.ModeSticky == 0 {
-				return fmt.Errorf("world-writable directory %s", dir)
+			if err := trustedComponent(p, st); err != nil {
+				return err
 			}
-			if filepath.Dir(dir) == dir {
+			if filepath.Dir(p) == p {
 				break
 			}
 		}
@@ -173,10 +176,10 @@ func trustedLocation(info os.FileInfo, abs string) error {
 
 // verifyExecutable is verify_executable: path must be a regular file with the asset's size
 // and SHA-256 (nil asset: this machine's), both read through one open handle, in a location
-// that every user cannot write to. It returns the absolute path it verified, and the engine
-// runs from that path; a writer who can still replace the file there runs as this user, owns a
-// directory on a path the operator chose to trust, or administers the machine, so the pin
-// defends against a corrupt or stale download rather than that writer.
+// that only this user, root or an administrator, or a group one of them granted, can change,
+// on every platform. It returns the absolute path it verified, and the engine runs from that
+// path; the window between the verification and the run is open to those writers alone, so
+// the pin defends against a corrupt or stale download rather than against them.
 func verifyExecutable(path string, asset *asset) (string, error) {
 	if asset == nil {
 		a, err := hostAsset()
@@ -203,9 +206,13 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 	}
 	if err := trustedLocation(info, abs); err != nil {
-		return "", runtimeError{fmt.Sprintf("OpenGrep executable location is writable by every user (%s): %s", err, path)}
+		return "", runtimeError{fmt.Sprintf("OpenGrep executable location can be changed by another user (%s): %s", err, path)}
 	}
-	key := digestKey{abs, info.Size(), info.ModTime()}
+	ctime, err := changeTime(f, info)
+	if err != nil {
+		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
+	}
+	key := digestKey{abs, info.Size(), info.ModTime(), ctime}
 	digestsMu.Lock()
 	defer digestsMu.Unlock()
 	entry, ok := digests[key]
