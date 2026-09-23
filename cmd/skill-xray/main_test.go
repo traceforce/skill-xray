@@ -139,6 +139,10 @@ func TestEmptyPackageIsNoted(t *testing.T) {
 
 // A control character in a package name must not forge or hide console lines: the argument is
 // escaped in the error and in the verdict line.
+func TestConsoleEscapesLineSeparators(t *testing.T) {
+	assert.Equal(t, `a\u2028b\u2029c\x1bd`, console("a\u2028b\u2029c\x1bd"))
+}
+
 func TestConsoleEscapesControlChars(t *testing.T) {
 	rc, _, stderr := cli(t, "scan", "/nonexistent/ev\x1bil")
 	assert.Equal(t, 2, rc)
@@ -212,6 +216,10 @@ func TestLLMFailureReasonIsReported(t *testing.T) {
 	assert.Contains(t, stdout, "1 failed (LLM endpoint returned HTTP 401)", stdout)
 	assert.Contains(t, stdout, "provider unavailable", stdout)
 	assert.Equal(t, "LLM endpoint returned HTTP 401", at(doc, "runs", 0, "properties", "llmUsage", "failureReason"))
+	testutil.Swap(t, &buildClient, client(&failingClient{&llm.Error{Kind: llm.Transport, Msg: "token=do-not-echo"}})) // a wrapped client's own text never reaches the report
+	_, stdout, _, doc = scanned(t, root, "--llm")
+	assert.NotContains(t, stdout, "do-not-echo")
+	assert.Equal(t, "LLMError", at(doc, "runs", 0, "properties", "llmUsage", "failureReason"))
 }
 
 func TestReviewRequiresLLM(t *testing.T) {

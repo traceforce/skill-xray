@@ -517,11 +517,14 @@ func sameFile(a, b string) bool {
 func console(p string) string {
 	var b strings.Builder
 	for _, r := range p {
-		if unicode.IsControl(r) {
+		switch {
+		case unicode.IsControl(r):
 			fmt.Fprintf(&b, `\x%02x`, r)
-			continue
+		case r == '\u2028' || r == '\u2029': // the line and paragraph separators, which a terminal may break a line on
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteRune(r)
 		}
-		b.WriteRune(r)
 	}
 	return b.String()
 }

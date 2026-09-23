@@ -3,6 +3,7 @@ package llm
 import (
 	"errors"
 	"net"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/traceforce/skill-xray/internal/pytext"
@@ -70,8 +71,8 @@ func (s *Session) complete(system, user string, schema any) (string, error) {
 	if s.FirstFailure == "" {
 		s.FirstFailure = errName(err)
 		var known *Error
-		if errors.As(err, &known) {
-			s.FirstFailure = known.Msg // never carries the key or a response body
+		if errors.As(err, &known) && strings.HasPrefix(known.Msg, "LLM ") {
+			s.FirstFailure = known.Msg // the client's own sanitised text; any other message keeps only the error class
 		}
 	}
 	var e *Error

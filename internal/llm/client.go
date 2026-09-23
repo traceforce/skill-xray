@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -209,7 +210,8 @@ var httpHint = map[int]string{401: " (API key rejected)", 403: " (access denied 
 
 func unreachable(err error) error {
 	why := "connection failed"
-	if errors.Is(err, context.DeadlineExceeded) {
+	var ne net.Error
+	if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &ne) && ne.Timeout() {
 		why = "timed out"
 	}
 	return &Error{Transport, "LLM endpoint unreachable: " + why}
