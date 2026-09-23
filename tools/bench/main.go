@@ -201,14 +201,23 @@ feed:
 	return nil
 }
 
+// loadRecords reads the export; a record without a label, or with a label other than 0 or 1,
+// is refused rather than scored as benign.
 func loadRecords(path string) ([]record, error) {
 	var out []record
 	err := decodeLines(path, func(dec *json.Decoder) error {
-		var rec record
+		var rec struct {
+			record
+			Label *int `json:"label"`
+		}
 		if err := dec.Decode(&rec); err != nil {
 			return err
 		}
-		out = append(out, rec)
+		if rec.Label == nil || (*rec.Label != 0 && *rec.Label != 1) {
+			return fmt.Errorf("benchmark_id %q: label must be 0 or 1", rec.BenchmarkID)
+		}
+		rec.record.Label = *rec.Label
+		out = append(out, rec.record)
 		return nil
 	})
 	return out, err

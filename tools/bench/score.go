@@ -150,16 +150,13 @@ func analyze(rows []row, blocking func([]finding) bool, effective bool) analysis
 		switch {
 		case blocking(r.Findings):
 			a.fpSources.add(r.SourceName)
-			seenVector, seenRule := map[string]bool{}, map[string]bool{}
+			hotVectors := hot(r.Findings, effective)
+			for _, v := range slices.Sorted(maps.Keys(hotVectors)) {
+				a.fpVectors.add(v)
+			}
+			seenRule := map[string]bool{} // every rule that fired under a blocking vector, once per package
 			for _, f := range fs {
-				if !f.attack() || !highOrCritical[f.Severity] {
-					continue
-				}
-				if !seenVector[f.Vector] {
-					seenVector[f.Vector] = true
-					a.fpVectors.add(f.Vector)
-				}
-				if rule := f.Vector + " / " + f.Rule; !seenRule[rule] {
+				if rule := f.Vector + " / " + f.Rule; hotVectors[f.Vector] && !seenRule[rule] {
 					seenRule[rule] = true
 					a.fpRules.add(rule)
 				}
@@ -319,11 +316,15 @@ func compare(rows, base []row, effective bool) (string, error) {
 		baseBy[r.BenchmarkID] = r
 	}
 	for _, r := range rows {
-		if _, ok := baseBy[r.BenchmarkID]; ok {
-			afterBy[r.BenchmarkID] = r
-		} else {
+		b, ok := baseBy[r.BenchmarkID]
+		if !ok {
 			unknown = append(unknown, r.BenchmarkID)
+			continue
 		}
+		if b.Label != r.Label {
+			return "", fmt.Errorf("--compare: the label of %s differs between the runs", r.BenchmarkID)
+		}
+		afterBy[r.BenchmarkID] = r
 	}
 	if len(unknown) > 0 {
 		slices.Sort(unknown)
@@ -425,12 +426,13 @@ func compare(rows, base []row, effective bool) (string, error) {
 	for _, c := range cats.mostCommon(0) {
 		line("| %s | %d |", c, cats.n[c])
 	}
-	ids := func(rs []row) string {
-		out := make([]string, 0, min(25, len(rs)))
-		for _, r := range rs[:min(25, len(rs))] {
+	ids := func(rs []row) string { // sorted, then cut, so the list does not follow completion order
+		out := make([]string, 0, len(rs))
+		for _, r := range rs {
 			out = append(out, r.BenchmarkID)
 		}
-		return strings.Join(out, ", ")
+		slices.Sort(out)
+		return strings.Join(out[:min(25, len(out))], ", ")
 	}
 	if len(newFP) > 0 {
 		line("")

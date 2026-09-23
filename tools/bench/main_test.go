@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/traceforce/skill-xray/internal/opengrep"
 	"github.com/traceforce/skill-xray/internal/testutil"
 )
 
@@ -88,6 +89,12 @@ func TestScanOneRecordsFindingsAndCleansUp(t *testing.T) {
 // a fenced command makes every scan resolve the engine. The engine may time out on a small
 // machine, which the row records; the test asks for no crash and a clean scratch root.
 func TestScanOneRunsConcurrently(t *testing.T) {
+	if exe, err := opengrep.Resolve(""); err != nil || exe == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("pinned OpenGrep is required in CI")
+		}
+		t.Skip("pinned OpenGrep is not installed")
+	}
 	work := t.TempDir()
 	rows := make([]row, 8)
 	var wg sync.WaitGroup
@@ -115,17 +122,24 @@ func TestScanOneRunsConcurrently(t *testing.T) {
 func TestRunRefusesBadWorkerCountsAndTrailingInput(t *testing.T) {
 	dir := t.TempDir()
 	data := filepath.Join(dir, "in.jsonl")
-	require.NoError(t, os.WriteFile(data, []byte(`{"benchmark_id":"a","text":"x"}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(data, []byte(`{"benchmark_id":"a","label":1,"text":"x"}`+"\n"), 0o644))
 	err := cmdRun([]string{"--data", data, "--out", filepath.Join(dir, "out.jsonl"), "--workers", "0"})
 	assert.ErrorContains(t, err, "at least one worker")
 
 	bad := filepath.Join(dir, "bad.jsonl")
-	require.NoError(t, os.WriteFile(bad, []byte(`{"benchmark_id":"a","text":"x"}`+"\n]\n"), 0o644))
+	require.NoError(t, os.WriteFile(bad, []byte(`{"benchmark_id":"a","label":1,"text":"x"}`+"\n]\n"), 0o644))
 	_, err = loadRecords(bad)
 	assert.ErrorContains(t, err, "record 2")
 	records, err := loadRecords(data)
 	require.NoError(t, err)
 	assert.Len(t, records, 1)
+
+	// a label that is missing or not binary is refused, never scored as benign
+	for _, body := range []string{`{"benchmark_id":"a","text":"x"}`, `{"benchmark_id":"a","label":2,"text":"x"}`} {
+		require.NoError(t, os.WriteFile(bad, []byte(body+"\n"), 0o644))
+		_, err = loadRecords(bad)
+		assert.ErrorContains(t, err, "label must be 0 or 1", body)
+	}
 }
 
 func note(rule string) finding { return finding{Rule: rule, Severity: "low"} }
@@ -170,7 +184,8 @@ func TestVerdictsMetricsAndReport(t *testing.T) {
 		{BenchmarkID: "tp", Label: 1, SourceName: "bad", Findings: []finding{hit("SXV-011", "T1", "high")}},
 		{BenchmarkID: "fn", Label: 1, SourceName: "bad", AttackCategories: []string{"Exfil"}, Findings: []finding{hit("SXV-033", "T3", "high")}},
 		{BenchmarkID: "fp", Label: 0, SourceName: "good", Findings: []finding{hit("SXV-008", "T2", "critical"),
-			{Vector: "SXV-008", Rule: "r2", Severity: "high", Tier: ptr("T2")}}},
+			{Vector: "SXV-008", Rule: "r2", Severity: "high", Tier: ptr("T2")},
+			{Vector: "SXV-008", Rule: "r3", Severity: "medium", Tier: ptr("T2")}}},
 		{BenchmarkID: "tn-medium", Label: 0, SourceName: "good", Findings: []finding{hit("SXV-020", "T1", "medium")}},
 		{BenchmarkID: "tn-t3", Label: 0, SourceName: "good", Findings: []finding{hit("SXV-033", "T3", "high")}},
 		{BenchmarkID: "tn", Label: 0, SourceName: "good"},
@@ -195,7 +210,7 @@ func TestVerdictsMetricsAndReport(t *testing.T) {
 		"excluded from TN and FPR: 1",
 		"benign packages with ONLY T3 capability findings (correctly not counted): 1",
 		"| SXV-008 | 1 |",
-		"| SXV-008 / r | 1 |\n| SXV-008 / r2 | 1 |",
+		"| SXV-008 / r | 1 |\n| SXV-008 / r2 | 1 |\n| SXV-008 / r3 | 1 |",
 		"| good | 1 |",
 		"| (unmapped) | 1 / 1 | 100.0% |",
 		"| Exfil | 0 / 1 | 0.0% |",
@@ -220,15 +235,22 @@ func TestCompareCarriesUnpairedBaseRowsAndRejectsUnknownIDs(t *testing.T) {
 		{BenchmarkID: "a", Label: 1, AttackCategories: []string{"Exfil"}},
 		{BenchmarkID: "b", Label: 0, Findings: []finding{hit("SXV-008", "T2", "high")}},
 		{BenchmarkID: "c", Label: 1, Findings: []finding{hit("SXV-011", "T1", "high")}},
+		{BenchmarkID: "zz", Label: 0},
+		{BenchmarkID: "aa", Label: 0},
 	}
-	after := []row{{BenchmarkID: "a", Label: 1, AttackCategories: []string{"Exfil"}, Findings: []finding{hit("SXV-011", "T1", "high")}}}
+	after := []row{
+		{BenchmarkID: "a", Label: 1, AttackCategories: []string{"Exfil"}, Findings: []finding{hit("SXV-011", "T1", "high")}},
+		{BenchmarkID: "zz", Label: 0, Findings: []finding{hit("SXV-008", "T2", "high")}},
+		{BenchmarkID: "aa", Label: 0, Findings: []finding{hit("SXV-008", "T2", "high")}},
+	}
 	text, err := compare(after, base, false)
 	require.NoError(t, err)
 	for _, want := range []string{
-		"## Before / after on 3 paired identities (2 carried over unchanged from the base run: the after-run is a subset)",
-		"| blocking (T1/T2 and high/critical) | 50.00% / 50.00% / 50.00% / 100.00% | 66.67% / 100.00% / 80.00% / 100.00% | 1 1 0 1 | 2 1 0 0 |",
-		"| SXV-008 | 1 | 1 |",
-		"newly caught malicious: 1 | malicious lost: 0 | benign FPs fixed: 0 | new benign FPs: 0",
+		"## Before / after on 5 paired identities (2 carried over unchanged from the base run: the after-run is a subset)",
+		"| blocking (T1/T2 and high/critical) | 50.00% / 50.00% / 50.00% / 33.33% | 40.00% / 100.00% / 57.14% / 100.00% | 1 1 2 1 | 2 3 0 0 |",
+		"| SXV-008 | 1 | 3 |",
+		"newly caught malicious: 1 | malicious lost: 0 | benign FPs fixed: 0 | new benign FPs: 2",
+		"new benign FP ids: aa, zz",
 		"| SXV-011 | 1 |",
 		"| Exfil | 1 |",
 	} {
@@ -237,13 +259,16 @@ func TestCompareCarriesUnpairedBaseRowsAndRejectsUnknownIDs(t *testing.T) {
 	// an exclusion applies to both runs of a comparison
 	drop := map[string]bool{"SXV-008": true}
 	excludeVectors(base, drop)
+	excludeVectors(after, drop)
 	assert.Empty(t, base[1].Findings)
 	text, err = compare(after, base, false)
 	require.NoError(t, err)
 	assert.NotContains(t, text, "SXV-008")
 
-	_, err = compare([]row{{BenchmarkID: "zz"}}, base, false)
+	_, err = compare([]row{{BenchmarkID: "zz-unknown"}}, base, false)
 	assert.ErrorContains(t, err, "not in the base run")
+	_, err = compare([]row{{BenchmarkID: "a", Label: 0}}, base, false)
+	assert.ErrorContains(t, err, "label of a differs")
 	_, err = compare(nil, base, false)
 	require.NoError(t, err)
 }
