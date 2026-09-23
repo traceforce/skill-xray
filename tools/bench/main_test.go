@@ -244,23 +244,24 @@ func TestVerdictsMetricsAndReport(t *testing.T) {
 		{BenchmarkID: "tn-t3", Label: 0, SourceName: "good", Findings: []finding{hit("SXV-033", "T3", "high")}},
 		{BenchmarkID: "tn", Label: 0, SourceName: "good"},
 		{BenchmarkID: "unanalyzed", Label: 0, SourceName: "good", Error: ptr("ValueError: x")},
+		{BenchmarkID: "unanalyzed-empty", Label: 0, SourceName: "good", Error: ptr("")}, // counted as an error, so not a true negative
 	}
 	vs := verdicts(false)
 	blocking := metrics(rows, vs[0].flagged)
-	assert.Equal(t, [5]int{1, 1, 3, 1, 1}, counts(blocking))
+	assert.Equal(t, [5]int{1, 1, 3, 1, 2}, counts(blocking))
 	assert.InDelta(t, 0.5, blocking.Precision, 1e-9)
 	assert.InDelta(t, 0.5, blocking.Recall, 1e-9)
 	assert.InDelta(t, 0.5, blocking.F1, 1e-9)
 	assert.InDelta(t, 0.25, blocking.FPR, 1e-9)
-	assert.Equal(t, [5]int{2, 2, 2, 0, 1}, counts(metrics(rows, vs[1].flagged)))
-	assert.Equal(t, [5]int{2, 3, 1, 0, 1}, counts(metrics(rows, vs[2].flagged)))
-	assert.Equal(t, [5]int{2, 3, 1, 0, 1}, counts(metrics(rows, vs[3].flagged)))
+	assert.Equal(t, [5]int{2, 2, 2, 0, 2}, counts(metrics(rows, vs[1].flagged)))
+	assert.Equal(t, [5]int{2, 3, 1, 0, 2}, counts(metrics(rows, vs[2].flagged)))
+	assert.Equal(t, [5]int{2, 3, 1, 0, 2}, counts(metrics(rows, vs[3].flagged)))
 
 	text := report(rows, "t", false)
 	for _, want := range []string{
 		"# t",
-		"records: 7  (malicious 2 / benign 5)  errors: 1  oversize: 0",
-		"| blocking (T1/T2 and high/critical) | 1 | 1 | 3 | 1 | 1 | 50.00% | 50.00% | 50.00% | 25.00% |",
+		"records: 8  (malicious 2 / benign 6)  errors: 2  oversize: 0",
+		"| blocking (T1/T2 and high/critical) | 1 | 1 | 3 | 1 | 2 | 50.00% | 50.00% | 50.00% | 25.00% |",
 		"unanalyzed: benign records whose scan did not complete and that carry no finding under that verdict, excluded from TN and FPR",
 		"benign packages with ONLY T3 capability findings (correctly not counted): 1",
 		"| SXV-008 | 1 |",

@@ -61,7 +61,7 @@ func verdicts(effective bool) []verdict {
 // a verified true negative: an error, an oversize or skipped file, a high-severity note without
 // a vector, or an LLM lane that gave no verdict.
 func incomplete(r row) bool {
-	if r.Error != nil && *r.Error != "" || r.Oversize || r.LedgerSkipped != 0 {
+	if r.Error != nil || r.Oversize || r.LedgerSkipped != 0 { // any recorded error, even an empty one, is a scan that did not complete
 		return true
 	}
 	return slices.ContainsFunc(r.Findings, func(f finding) bool {

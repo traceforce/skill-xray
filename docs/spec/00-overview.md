@@ -578,7 +578,7 @@ of this file.
    still valid inputs: both CLIs run them with production limits.
 2. `corpus/msb-test/<benchmark_id>/SKILL.md`: `msb_materialize.py --data <snapshot dir>
    --split test`. Reads `primary.parquet` (`benchmark_id`, `text`) and
-   `splits/source_disjoint.parquet` exactly as the Python runner did and `tools/bench run` does, checks the snapshot
+   `splits/source_disjoint.parquet` exactly as the Python runner did (`tools/bench run` reads only the JSONL export named by `--data`), checks the snapshot
    against `benchmark-reports/frozen-dataset/MSB_FROZEN.json` (`id_list_sha256.test` =
    `3cf59383…0b7bb`, 1,384 ids from `msb_frozen_ids.json`), writes each text with
    `encoding="utf-8", errors="surrogatepass", newline=""` into a directory named like
