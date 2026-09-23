@@ -208,8 +208,8 @@ func TestVerdictsMetricsAndReport(t *testing.T) {
 	for _, want := range []string{
 		"# t",
 		"records: 7  (malicious 2 / benign 5)  errors: 1  oversize: 0",
-		"| blocking (T1/T2 and high/critical) | 1 | 1 | 3 | 1 | 50.00% | 50.00% | 50.00% | 25.00% |",
-		"excluded from TN and FPR: 1",
+		"| blocking (T1/T2 and high/critical) | 1 | 1 | 3 | 1 | 1 | 50.00% | 50.00% | 50.00% | 25.00% |",
+		"unanalyzed: benign records whose scan did not complete and that carry no finding under that verdict, excluded from TN and FPR",
 		"benign packages with ONLY T3 capability findings (correctly not counted): 1",
 		"| SXV-008 | 1 |",
 		"| SXV-008 / r | 1 |\n| SXV-008 / r2 | 1 |\n| SXV-008 / r3 | 1 |",
@@ -239,19 +239,22 @@ func TestCompareCarriesUnpairedBaseRowsAndRejectsUnknownIDs(t *testing.T) {
 		{BenchmarkID: "c", Label: 1, Findings: []finding{hit("SXV-011", "T1", "high")}},
 		{BenchmarkID: "zz", Label: 0},
 		{BenchmarkID: "aa", Label: 0},
+		{BenchmarkID: "d", Label: 0, Findings: []finding{hit("SXV-008", "T2", "high")}},
 	}
 	after := []row{
 		{BenchmarkID: "a", Label: 1, AttackCategories: []string{"Exfil"}, Findings: []finding{hit("SXV-011", "T1", "high")}},
 		{BenchmarkID: "zz", Label: 0, Findings: []finding{hit("SXV-008", "T2", "high")}},
 		{BenchmarkID: "aa", Label: 0, Findings: []finding{hit("SXV-008", "T2", "high")}},
+		{BenchmarkID: "d", Label: 0, Error: ptr("ValueError: x")}, // its finding vanished with the scan, not with a detector
 	}
 	text, err := compare(after, base, false)
 	require.NoError(t, err)
 	for _, want := range []string{
-		"## Before / after on 5 paired identities (2 carried over unchanged from the base run: the after-run is a subset)",
-		"| blocking (T1/T2 and high/critical) | 50.00% / 50.00% / 50.00% / 33.33% | 40.00% / 100.00% / 57.14% / 100.00% | 1 1 2 1 | 2 3 0 0 |",
-		"| SXV-008 | 1 | 3 |",
+		"## Before / after on 6 paired identities (2 carried over unchanged from the base run: the after-run is a subset)",
+		"| blocking (T1/T2 and high/critical) | 33.33% / 50.00% / 40.00% / 50.00% | 40.00% / 100.00% / 57.14% / 100.00% | 1 2 2 1 | 2 3 0 0 |",
+		"| SXV-008 | 2 | 3 |",
 		"newly caught malicious: 1 | malicious lost: 0 | benign FPs fixed: 0 | new benign FPs: 2",
+		"records whose scan completed on one side only, left out of these transitions: 1",
 		"new benign FP ids: aa, zz",
 		"| SXV-011 | 1 |",
 		"| Exfil | 1 |",

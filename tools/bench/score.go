@@ -234,18 +234,16 @@ func report(rows []row, title string, effective bool) string {
 	line("")
 	line("records: %d  (malicious %d / benign %d)  errors: %d  oversize: %d", len(rows), malicious, benign, errs, oversize)
 	line("")
-	line("| verdict | TP | FP | TN | FN | precision | recall | F1 | FPR |")
-	line("|---|---|---|---|---|---|---|---|---|")
+	line("| verdict | TP | FP | TN | FN | unanalyzed | precision | recall | F1 | FPR |")
+	line("|---|---|---|---|---|---|---|---|---|---|")
 	vs := verdicts(effective)
 	for _, v := range vs {
 		m := metrics(rows, v.flagged)
-		line("| %s | %d | %d | %d | %d | %.2f%% | %.2f%% | %.2f%% | %.2f%% |", v.name, m.TP, m.FP, m.TN, m.FN,
+		line("| %s | %d | %d | %d | %d | %d | %.2f%% | %.2f%% | %.2f%% | %.2f%% |", v.name, m.TP, m.FP, m.TN, m.FN, m.Unanalyzed,
 			100*m.Precision, 100*m.Recall, 100*m.F1, 100*m.FPR)
 	}
-	if u := metrics(rows, vs[3].flagged).Unanalyzed; u > 0 {
-		line("")
-		line("benign records whose scan did not complete and that carry no finding, excluded from TN and FPR: %d", u)
-	}
+	line("")
+	line("unanalyzed: benign records whose scan did not complete and that carry no finding under that verdict, excluded from TN and FPR")
 	a := analyze(rows, vs[0].flagged, effective)
 	line("")
 	line("## Where the blocking false positives come from")
@@ -388,8 +386,13 @@ func compare(rows, base []row, effective bool) (string, error) {
 		line("| %s | %d | %d |", v, fb[v], fa[v])
 	}
 	var newTP, lostTP, newFP, fixedFP []row
+	oneSided := 0
 	for i := range order {
 		a, bf := after[i], before[i]
+		if incomplete(a) != incomplete(bf) { // a finding that appeared or vanished with the scan itself is not a detection change
+			oneSided++
+			continue
+		}
 		wasHit, isHit := blocking(bf.Findings), blocking(a.Findings)
 		switch {
 		case a.Label == 1 && isHit && !wasHit:
@@ -405,6 +408,9 @@ func compare(rows, base []row, effective bool) (string, error) {
 	line("")
 	line("newly caught malicious: %d | malicious lost: %d | benign FPs fixed: %d | new benign FPs: %d",
 		len(newTP), len(lostTP), len(fixedFP), len(newFP))
+	if oneSided > 0 {
+		line("records whose scan completed on one side only, left out of these transitions: %d", oneSided)
+	}
 	var carrier, cats counter
 	for _, a := range newTP {
 		for _, v := range slices.Sorted(maps.Keys(hot(a.Findings, effective))) {
