@@ -251,7 +251,7 @@ link models never saw):
   token trimmed first); the ASCII tab, newline and carriage return, which URL parsing ignores, are
   removed before the scheme test while spaces stay. The scheme and URL tests run on every comma-separated
   candidate of the value, since `srcset` names several; a `style` value has every `url()` argument of its
-  decoded form tested as a URL, then is split per `;` on the raw value (a `;` inside a quoted string,
+  decoded form (line continuations removed, escapes resolved) tested as a URL, then is split per `;` on the raw value (a `;` inside a quoted string,
   or after a backslash, does not split) and each declaration's value, decoded, is read with the
   property name before its `:` ignored. An unknown tag stops here. `code`/`pre` push onto
   `codeStack`. `target = href` for `a`, else `src`; if non-empty: `compact = lower(removeAll(

@@ -1218,12 +1218,16 @@ func attrCarriesContent(v string) bool {
 // with any other character.
 var cssEscapeRE = regexp.MustCompile(`\\(?:[0-9a-fA-F]{1,6} ?|.)`)
 
+// cssContinuation is a backslash before a line break inside a CSS string, which CSS removes.
+var cssContinuation = strings.NewReplacer("\\\r\n", "", "\\\n", "", "\\\r", "", "\\\f", "")
+
 // cssUnescape decodes CSS escapes, which a browser resolves before it reads a URL or a word, so
-// `https\3a\2f\2f evil` is `https://evil`.
+// `https\3a\2f\2f evil` is `https://evil`; a line continuation vanishes first.
 func cssUnescape(v string) string {
 	if !strings.Contains(v, `\`) {
 		return v
 	}
+	v = cssContinuation.Replace(v)
 	return cssEscapeRE.ReplaceAllStringFunc(v, func(m string) string {
 		if n, err := strconv.ParseUint(strings.TrimSpace(m[1:]), 16, 32); err == nil && n <= unicode.MaxRune {
 			return string(rune(n)) // #nosec G115 -- bounded by MaxRune on the line above
