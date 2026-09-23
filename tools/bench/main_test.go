@@ -337,3 +337,28 @@ func TestCompareCarriesUnpairedBaseRowsAndRejectsUnknownIDs(t *testing.T) {
 	_, err = compare(nil, base, false)
 	require.NoError(t, err)
 }
+
+// The Errors summary counts our own messages by their kind and a filesystem error by its
+// operation, since the scratch path before its colon differs on every row.
+func TestErrKindGroupsFilesystemErrorsByOperation(t *testing.T) {
+	for _, tc := range []struct{ msg, want string }{
+		{"record has no text", "record has no text"},
+		{"empty package: SKILL.md was not found", "empty package"},
+		{"cleanup: unlinkat /tmp/msb-work-1/a-1/SKILL.md: permission denied", "cleanup"},
+		{"runtime.boundsError: runtime error: index out of range [3] with length 3", "runtime.boundsError"},
+		{"open /tmp/msb-work-1/a-1/SKILL.md: permission denied", "open"},
+		{"open /tmp/msb-work-1/b-2/SKILL.md: permission denied", "open"},
+		{"mkdir /tmp/msb-work-1/c-3: permission denied", "mkdir"},
+		{"write /tmp/msb-work-1/d-4/SKILL.md: no space left on device", "write"},
+		{`open C:\Temp\msb-work-1\e-5\SKILL.md: Access is denied.`, "open"},
+		{"open /tmp/msb-work-1/f-6/SKILL.md: permission denied; cleanup: unlinkat /tmp/msb-work-1/f-6/SKILL.md: permission denied", "open"},
+	} {
+		assert.Equal(t, tc.want, errKind(tc.msg), tc.msg)
+	}
+	err := os.WriteFile(filepath.Join(t.TempDir(), "missing", "SKILL.md"), nil, 0o644) // a path error the OS wrote
+	require.Error(t, err)
+	assert.Equal(t, "open", errKind(err.Error()))
+	text := report([]row{{BenchmarkID: "a", Label: 0, Error: ptr("open /tmp/msb-work-1/a-1/SKILL.md: permission denied")},
+		{BenchmarkID: "b", Label: 0, Error: ptr("open /tmp/msb-work-1/b-2/SKILL.md: permission denied")}}, "t", false)
+	assert.Contains(t, text, "- open: 2")
+}

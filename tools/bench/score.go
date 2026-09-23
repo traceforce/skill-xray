@@ -197,6 +197,17 @@ func hot(fs []finding, effective bool) map[string]bool {
 	return out
 }
 
+// errKind is the label an error is counted under: the text before the first colon, as our own
+// "kind: detail" messages are written. A filesystem error puts its operation and a scratch path
+// there, and the path differs on every row, so only the operation is kept.
+func errKind(msg string) string {
+	kind, _, _ := strings.Cut(msg, ": ")
+	if op, _, ok := strings.Cut(kind, " "); ok && strings.ContainsAny(kind, `/\`) {
+		return op
+	}
+	return kind
+}
+
 func report(rows []row, title string, effective bool) string {
 	var b strings.Builder
 	line := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
@@ -219,8 +230,7 @@ func report(rows []row, title string, effective bool) string {
 		}
 		if r.Error != nil {
 			errs++
-			kind, _, _ := strings.Cut(*r.Error, ":")
-			errKinds.add(kind)
+			errKinds.add(errKind(*r.Error))
 		}
 		if r.Oversize {
 			oversize++
