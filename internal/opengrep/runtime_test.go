@@ -141,7 +141,7 @@ func TestCachedDigestRequiresTheSameFile(t *testing.T) {
 }
 
 // A world-writable file, or a world-writable directory without the sticky bit anywhere above the
-// engine, is refused.
+// engine, on the path as named or as resolved, is refused.
 func TestUntrustedLocationIsRefused(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission bits are synthesised on Windows")
@@ -163,6 +163,14 @@ func TestUntrustedLocationIsRefused(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.Chmod(candidate, 0o666))
 	_, err = verifyExecutable(candidate, a)
+	assert.ErrorContains(t, err, "writable by every user")
+	require.NoError(t, os.Chmod(candidate, 0o644))
+	open := filepath.Join(t.TempDir(), "open")
+	require.NoError(t, os.Mkdir(open, 0o755))
+	require.NoError(t, os.Chmod(open, 0o777))
+	link := filepath.Join(open, "opengrep")
+	require.NoError(t, os.Symlink(candidate, link)) // the link's own directory is on the path as named
+	_, err = verifyExecutable(link, a)
 	assert.ErrorContains(t, err, "writable by every user")
 }
 

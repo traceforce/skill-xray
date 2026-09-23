@@ -140,8 +140,9 @@ type digestEntry struct {
 
 // trustedLocation refuses an engine that every user could swap between the verification and
 // the run: a world-writable file, or a world-writable directory without the sticky bit anywhere
-// above it, links resolved. Windows synthesises permission bits and is not checked: the default
-// cache lives under the user's own profile and an explicit path is the operator's choice.
+// above it, on the path as named and on the path it resolves to. Windows synthesises permission
+// bits and is not checked: the default cache lives under the user's own profile and an explicit
+// path is the operator's choice.
 func trustedLocation(info os.FileInfo, abs string) error {
 	if runtime.GOOS == "windows" {
 		return nil
@@ -153,26 +154,29 @@ func trustedLocation(info os.FileInfo, abs string) error {
 	if err != nil {
 		return err
 	}
-	for dir := filepath.Dir(real); ; dir = filepath.Dir(dir) {
-		st, err := os.Lstat(dir) // #nosec G703 -- an ancestor of the engine verifyExecutable opened, checked for world-writability
-		if err != nil {
-			return err
-		}
-		if st.Mode().Perm()&0o002 != 0 && st.Mode()&os.ModeSticky == 0 {
-			return fmt.Errorf("world-writable directory %s", dir)
-		}
-		if filepath.Dir(dir) == dir {
-			return nil
+	for _, start := range []string{abs, real} {
+		for dir := filepath.Dir(start); ; dir = filepath.Dir(dir) {
+			st, err := os.Lstat(dir) // #nosec G703 -- an ancestor of the engine verifyExecutable opened, checked for world-writability
+			if err != nil {
+				return err
+			}
+			if st.Mode().Perm()&0o002 != 0 && st.Mode()&os.ModeSticky == 0 {
+				return fmt.Errorf("world-writable directory %s", dir)
+			}
+			if filepath.Dir(dir) == dir {
+				break
+			}
 		}
 	}
+	return nil
 }
 
 // verifyExecutable is verify_executable: path must be a regular file with the asset's size
 // and SHA-256 (nil asset: this machine's), both read through one open handle, in a location
 // that every user cannot write to. It returns the absolute path it verified, and the engine
-// runs from that path; a writer who can still replace the file there runs as this user or
-// administers that directory, so the pin defends against a corrupt or stale download rather
-// than that writer.
+// runs from that path; a writer who can still replace the file there runs as this user, owns a
+// directory on a path the operator chose to trust, or administers the machine, so the pin
+// defends against a corrupt or stale download rather than that writer.
 func verifyExecutable(path string, asset *asset) (string, error) {
 	if asset == nil {
 		a, err := hostAsset()
