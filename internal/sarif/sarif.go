@@ -167,6 +167,40 @@ func title(f map[string]any) string {
 	return s
 }
 
+// ruleName is the rule's identifier in the Pascal case SARIF asks of a reportingDescriptor name:
+// skill-xray/preproc-inline-bang becomes PreprocInlineBang.
+func ruleName(rid string) string {
+	var b strings.Builder
+	slug := rid[strings.LastIndexByte(rid, '/')+1:]
+	for _, part := range strings.FieldsFunc(slug, func(r rune) bool { return r == '-' || r == '_' || r == '.' }) {
+		b.WriteString(strings.ToUpper(part[:1]) + part[1:])
+	}
+	return b.String()
+}
+
+// describe is the finding's title followed by its vector, tier and CWE identifiers, so a reader
+// of the report has the whole classification in words without the vector registry.
+func describe(f map[string]any) string {
+	text := title(f)
+	var tags []string
+	if v, _ := f["vector"].(string); v != "" {
+		tags = append(tags, v)
+	}
+	if t, _ := f["tier"].(string); t != "" {
+		tags = append(tags, "tier "+t)
+	}
+	switch c := f["cwe"].(type) { // a decoded list or the finding's own slice; absent on a diagnostic
+	case []string:
+		tags = append(tags, c...)
+	case []any:
+		tags = append(tags, strs(c)...)
+	}
+	if len(tags) == 0 {
+		return text
+	}
+	return text + " (" + strings.Join(tags, ", ") + ")"
+}
+
 func category(f map[string]any) string {
 	if pytext.Truthy(f["vector"]) {
 		return "security-finding"
@@ -254,15 +288,19 @@ func Build(p *parse.Package, r *scan.ScanReport) (map[string]any, error) {
 	slices.SortStableFunc(links, byID)
 
 	entries, _ := correlation["results"].([]any)
-	titles := map[string][]string{}
+	titles, described := map[string][]string{}, map[string][]string{}
 	for _, e := range entries {
 		entry := e.(map[string]any)
 		rid := entry["rule_id"].(string)
-		titles[rid] = append(titles[rid], title(entry["finding"].(map[string]any)))
+		finding := entry["finding"].(map[string]any)
+		titles[rid] = append(titles[rid], title(finding))
+		described[rid] = append(described[rid], describe(finding))
 	}
 	rules, index := []any{}, map[string]int{}
 	for i, rid := range slices.Sorted(maps.Keys(titles)) {
-		rules = append(rules, map[string]any{"id": rid, "shortDescription": map[string]any{"text": slices.Min(titles[rid])}})
+		rules = append(rules, map[string]any{"id": rid, "name": ruleName(rid),
+			"shortDescription": map[string]any{"text": slices.Min(titles[rid])},
+			"fullDescription":  map[string]any{"text": slices.Min(described[rid])}})
 		index[rid] = i
 	}
 	cache := map[string][]string{}
