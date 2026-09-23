@@ -76,8 +76,8 @@ fixed, carry forward model decisions, or change the detector's interpretation.
 ## SARIF output
 
 ```sh
-skill-xray ./skill-package --analyze --sarif ../reports/skill.sarif
-skill-xray ./skill-package --analyze --sarif ../reports/skill.sarif --policy ../reviewed-policy.json
+skill-xray scan ./skill-package --output ../reports/skill.sarif
+skill-xray scan ./skill-package --output ../reports/skill.sarif --policy ../reviewed-policy.json
 ```
 
 The report and operator policy must be outside the scanned package. The report's parent
@@ -133,7 +133,7 @@ When report writing fails, requested JSON/text findings are still emitted before
 
 ### Optional LLM audit
 
-With `--analyze --json --llm --llm-review --sarif <path>`, validated review annotations
+With `--llm --llm-review`, validated review annotations
 also appear in `runs[].properties.llmReview`. `authoritative` is always false. Each
 decision references the same stable `candidate_id` used by `rawCandidates`, result
 `candidateIds` and `candidateLinks`; a reused review references its original candidate.

@@ -48,7 +48,7 @@ jobs:
           printf -- '---\nname: demo\n---\nRun the script.\n' > "$root/demo/SKILL.md"
           printf 'const { execSync } = require("child_process");\nexecSync(process.argv[2]);\n' > "$root/demo/scripts/run.js"
           printf -- '---\nname: clean\n---\nNothing to see.\n' > "$root/clean/SKILL.md"
-          ./bin/skill-xray scan "$root/demo" --analyze --json > "$RUNNER_TEMP/demo.json"
-          grep -q '"SXV-008"' "$RUNNER_TEMP/demo.json"
-          ./bin/skill-xray system-scan --root "$root" --sarif "$RUNNER_TEMP/system.sarif"
+          ./bin/skill-xray scan "$root/demo" --output "$RUNNER_TEMP/demo.sarif"
+          grep -q '"SXV-008"' "$RUNNER_TEMP/demo.sarif"
+          ./bin/skill-xray system-scan --root "$root" --output "$RUNNER_TEMP/system.sarif"
           test "$(jq '.runs | length' "$RUNNER_TEMP/system.sarif")" = 2

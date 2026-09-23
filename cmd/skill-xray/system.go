@@ -12,7 +12,6 @@ import (
 
 	"github.com/traceforce/skill-xray/internal/findings"
 	"github.com/traceforce/skill-xray/internal/ingest"
-	"github.com/traceforce/skill-xray/internal/opengrep"
 	"github.com/traceforce/skill-xray/internal/parse"
 	"github.com/traceforce/skill-xray/internal/pytext"
 	"github.com/traceforce/skill-xray/internal/sarif"
@@ -20,22 +19,20 @@ import (
 )
 
 type systemOptions struct {
-	json               bool
-	sarif, opengrepBin string
-	roots              []string
+	output, opengrepBin string
+	roots               []string
 }
 
 func (s *systemOptions) bind(c *cobra.Command) {
 	f := c.Flags()
-	f.BoolVar(&s.json, "json", false, "emit the results as JSON")
-	f.StringVar(&s.sarif, "sarif", "", "write one validated SARIF document outside every scanned package")
+	f.StringVarP(&s.output, "output", "o", defaultReport, "write one validated SARIF document here, with one run per package; the path must be outside every scanned package")
 	f.StringVar(&s.opengrepBin, "opengrep-bin", "", "explicit pinned OpenGrep binary")
 	f.StringArrayVar(&s.roots, "root", nil, "scan the packages under this directory instead of the known agent skill roots (repeatable)")
 }
 
 // headline is a package's one-word verdict: BLOCKING for a high or critical finding with a vector,
 // FINDINGS for any other finding with a vector or a gap at medium or above, CLEAN otherwise; a low
-// note stays in the ledger and the JSON without moving the verdict.
+// note stays in the ledger and the report without moving the verdict.
 func headline(fs []findings.Finding) string {
 	switch {
 	case slices.ContainsFunc(fs, func(f findings.Finding) bool {
@@ -48,21 +45,17 @@ func headline(fs []findings.Finding) string {
 	return "CLEAN"
 }
 
-// run is system-scan: every package under the roots, analyzed in turn as "scan --analyze" would.
-// The exit is 0 when every package was analyzed and discovery was complete, else 2.
+// run is system-scan: every package under the roots, analyzed in turn as "scan" would, into one
+// report with a run per package. The exit is 0 when every package was analyzed and discovery
+// was complete, else 2.
 func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer) (int, error) {
-	if changed("sarif") && s.sarif == "" {
-		return 2, errors.New("--sarif requires a non-empty path")
-	}
-	roots := s.roots
-	if roots == nil {
-		roots = ingest.KnownSkillRoots
+	if changed("output") && s.output == "" {
+		return 2, errors.New("--output requires a non-empty path")
 	}
 	d := ingest.Discover(s.roots)
 	rc := 0
 	var sarifErr error
 	var merged map[string]any
-	packages := make([]map[string]any, 0, len(d.Paths))
 	counts := map[string]int{}
 	for _, path := range d.Paths {
 		p := ingest.BuildPackage(path)
@@ -76,7 +69,7 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 		if incomplete(report, fs) {
 			rc = 2
 		}
-		if s.sarif != "" && sarifErr == nil {
+		if sarifErr == nil {
 			doc, err := buildSarif(parsed, report)
 			if err == nil {
 				err = sarif.Validate(doc)
@@ -90,39 +83,22 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 				merged["runs"] = append(merged["runs"].([]any), doc["runs"].([]any)...)
 			}
 		}
-		ledger := ingest.BuildLedger(p)
-		if s.json {
-			packages = append(packages, map[string]any{"package": p.Name, "path": path, "verdict": v, "ledger": ledger,
-				"analysis": map[string]any{"opengrepVersion": opengrep.Version}, "findings": findings.ToMaps(fs)})
-			continue
-		}
-		fmt.Fprintf(stdout, "%-8s  seen=%-3d analyzed=%-3d cov=%5.1f%%  %s\n",
-			v, ledger.ArtifactsSeen, ledger.ArtifactsAnalyzed, float64(ledger.CoveragePercent), display(path))
-		printFindings(stdout, p.Name, fs)
+		verdictLine(stdout, v, ingest.BuildLedger(p), display(path))
 	}
-	if s.sarif != "" {
-		if merged == nil {
-			merged = map[string]any{"version": "2.1.0", "$schema": sarif.SchemaID(), "runs": []any{}}
-		}
-		if sarifErr == nil {
-			sarifErr = writeRuns(merged, s.sarif, d.Paths)
-		}
-		if sarifErr != nil {
-			fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(sarifErr.Error()))
-			rc = 2
-		}
+	if merged == nil {
+		merged = map[string]any{"version": "2.1.0", "$schema": sarif.SchemaID(), "runs": []any{}}
 	}
-	if s.json {
-		doc := map[string]any{"schema_version": "system-scan-v1", "roots": roots,
-			"discovery": map[string]any{"paths": d.Paths, "ledgerExceptions": d.LedgerExceptions},
-			"packages":  packages,
-			"summary": map[string]any{"packages": len(d.Paths), "blocking": counts["BLOCKING"],
-				"withFindings": counts["FINDINGS"], "clean": counts["CLEAN"]}}
-		fmt.Fprint(stdout, pytext.Dumps(doc, 2)+"\n")
+	if sarifErr == nil {
+		sarifErr = writeRuns(merged, s.output, d.Paths)
+	}
+	if sarifErr != nil {
+		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(sarifErr.Error()))
+		rc = 2
 	} else {
-		fmt.Fprintf(stdout, "packages: %d, blocking: %d, with findings: %d, clean: %d, discovery exceptions: %d\n",
-			len(d.Paths), counts["BLOCKING"], counts["FINDINGS"], counts["CLEAN"], len(d.LedgerExceptions))
+		fmt.Fprintf(stdout, "report: %s\n", s.output) // the operator's own path, printed as given
 	}
+	fmt.Fprintf(stdout, "packages: %d, blocking: %d, with findings: %d, clean: %d, discovery exceptions: %d\n",
+		len(d.Paths), counts["BLOCKING"], counts["FINDINGS"], counts["CLEAN"], len(d.LedgerExceptions))
 	if reportGaps(stderr, d) {
 		rc = 2
 	}
