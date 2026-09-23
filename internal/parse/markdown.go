@@ -1144,7 +1144,7 @@ func (h *htmlInspector) startTag(tag string, norm [][2]string, start int) {
 			h.fully = false // an event handler or an active scheme is executable content
 		default:
 			h.unknown = true
-			if (!known && urlNamedHTMLAttrs[a[0]]) || attrCarriesContent(a[1]) {
+			if (!known && urlNamedHTMLAttrs[a[0]]) || (a[0] == "style" && styleCarriesContent(a[1])) || (a[0] != "style" && attrCarriesContent(a[1])) {
 				h.text = true // a reference or words the prose and link models never saw
 			}
 		}
@@ -1212,6 +1212,22 @@ func attrCarriesContent(v string) bool {
 		}
 	}
 	return words >= 2
+}
+
+// styleCarriesContent reads a style attribute as CSS: a URL in a declaration's value, or two
+// words of letters there, is content; a property name such as display or width is not, with or
+// without a space after its colon.
+func styleCarriesContent(v string) bool {
+	for _, decl := range strings.Split(v, ";") {
+		name, value, ok := strings.Cut(decl, ":")
+		if !ok {
+			value = name // no property at all: the whole declaration is the value
+		}
+		if attrCarriesContent(value) {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *htmlInspector) popAnchor() {
