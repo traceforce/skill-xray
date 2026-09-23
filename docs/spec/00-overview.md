@@ -1,6 +1,6 @@
 # Port overview: shared contract, dependencies, build order, parity
 
-Status: this specification was written for the port of the Python scanner to Go and is the binding description of the detection behaviour the Go binary implements. The Python implementation, its tests and the parity harness (`src/`, `tests/`, `tools/parity`) were removed once the port was proved identical to them; where this document refers to them, it describes the repository at the merge of pull request 42, which git history keeps.
+Status: this specification was written for the port of the Python scanner to Go and is the binding description of the detection behaviour the Go binary implements. The Python implementation, its tests, its benchmark harness, its dev tooling and the parity harness (`src/`, `tests/`, `benchmark/`, `dev/`, `tools/parity`) were removed once the port was proved identical to them; where this document refers to them, it describes the repository at the merge of pull request 42, which git history keeps.
 
 This file is the binding cross-group contract. Where a group spec (`core.md`, `parse.md`,
 `instruction.md`, `code.md`, `obfuscation.md`, `output-llm.md`) names a Go identifier or type

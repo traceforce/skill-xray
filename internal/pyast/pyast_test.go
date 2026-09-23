@@ -1,9 +1,6 @@
 package pyast
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,96 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// corpusDir is the captured ast.parse input set (git-ignored, see docs/spec/pyast-decision.md).
-const corpusDir = "../../corpus/pyast"
-
-// golden is the refused-input record gen_ast_goldens.py writes after its "error" line
-// (accepted inputs hold "ok" and the ast.dump text instead).
-type golden struct {
-	Class  string `json:"class"`
-	Msg    string `json:"msg"`
-	Lineno int    `json:"lineno"` // JSON null leaves the zero value
-	Offset int    `json:"offset"`
-}
-
-// dumpDiff returns a window around the first differing byte of two dumps.
-func dumpDiff(a, b string) string {
-	i := 0
-	for i < len(a) && i < len(b) && a[i] == b[i] {
-		i++
-	}
-	lo := max(0, i-60)
-	return "want ..." + a[lo:min(len(a), i+80)] + "\n got ..." + b[lo:min(len(b), i+80)]
-}
-
-// TestCorpusParity drives every captured input through Parse and compares the dump (or the
-// SyntaxError class, message, line and offset) with CPython 3.13.2's.
-func TestCorpusParity(t *testing.T) {
-	if _, err := os.Stat(filepath.Join(corpusDir, "expected")); err != nil {
-		t.Skip("corpus/pyast/expected absent: run tools/parity/gen_ast_goldens.py over corpus/pyast first")
-	}
-	var acceptedEqual, refusedEqual, missing int
-	var mismatches []string
-	for _, sub := range []string{"pytest", "msb"} {
-		entries, err := os.ReadDir(filepath.Join(corpusDir, sub))
-		require.NoError(t, err)
-		for _, e := range entries {
-			if !strings.HasSuffix(e.Name(), ".py") {
-				continue
-			}
-			sha := strings.TrimSuffix(e.Name(), ".py")
-			src, err := os.ReadFile(filepath.Join(corpusDir, sub, e.Name()))
-			require.NoError(t, err)
-			want, err := os.ReadFile(filepath.Join(corpusDir, "expected", sha+".txt"))
-			if err != nil {
-				missing++
-				continue
-			}
-			mod, perr := Parse(string(src))
-			header, body, _ := strings.Cut(string(want), "\n")
-			var got string
-			ok := false
-			if header == "error" {
-				var g golden
-				require.NoError(t, json.Unmarshal([]byte(body), &g), sha)
-				if perr != nil {
-					se := perr.(*SyntaxError)
-					got = se.Error()
-					ok = se.Kind == g.Class && se.Msg == g.Msg && se.Line == g.Lineno && se.Offset == g.Offset
-				} else {
-					d := dump(mod, true)
-					got = "accepted: " + d[:min(200, len(d))]
-				}
-				if ok {
-					refusedEqual++
-				} else {
-					mismatches = append(mismatches, sub+"/"+sha+"\n want "+body+"\n got  "+got)
-				}
-				continue
-			}
-			require.Equal(t, "ok", header, sha)
-			if perr != nil {
-				mismatches = append(mismatches, sub+"/"+sha+"\n want accepted\n got  "+perr.Error())
-				continue
-			}
-			got = dump(mod, true)
-			if got == body {
-				acceptedEqual++
-			} else {
-				mismatches = append(mismatches, sub+"/"+sha+"\n "+dumpDiff(body, got))
-			}
-		}
-	}
-	t.Logf("parity: accepted equal %d, refused equal %d, mismatches %d, goldens missing %d", acceptedEqual, refusedEqual, len(mismatches), missing)
-	for i, m := range mismatches {
-		if i == 10 {
-			break
-		}
-		t.Log(m)
-	}
-	assert.Empty(t, mismatches, "%d corpus inputs differ from CPython (first ten logged)", len(mismatches))
-}
 
 func mustParse(t *testing.T, src string) *Module {
 	t.Helper()

@@ -231,8 +231,8 @@ func Reach(p *Package, roots, targets map[string]bool, includeRoots bool) map[st
 // presenceOnly names the diagnostics whose detail the IR dump reduces to true (parse.md R6).
 var presenceOnly = map[string]bool{"config_parse_error": true, "shell_error_region": true, "parse_crash": true}
 
-// irDoc is the per-artifact record of the parity IR dump (00-overview §6), identical in shape to
-// tools/parity/py_dump_ir.py::artifact_doc. refs is the whole package's Refs; those from a.Rel are
+// irDoc is the per-artifact record of the IR dump (00-overview §6), in the shape the Python
+// scanner's dump had. refs is the whole package's Refs; those from a.Rel are
 // kept. A nil value is Python None; a typed nil slice or map renders as [] or {} through pytext.
 func irDoc(a *Artifact, refs []Ref) map[string]any {
 	var own []Ref

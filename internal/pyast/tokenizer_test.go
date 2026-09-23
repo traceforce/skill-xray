@@ -6,16 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// Goldens under ../../corpus/pyast/tokens and testdata/xid.json are written by
-// tools/parity/gen_ast_goldens.py from CPython 3.13.2; the inline expectations below were
-// read off the same interpreter (ast.parse error class, message, lineno, offset).
+// testdata/xid.json and the inline expectations below were recorded from CPython 3.13.2
+// (ast.parse error class, message, lineno, offset).
 
 func tokenizeAll(src string) ([]Token, *SyntaxError) {
 	t := newTokenizer(src, false)
@@ -30,182 +28,6 @@ func tokenizeAll(src string) ([]Token, *SyntaxError) {
 			return toks, nil
 		}
 	}
-}
-
-// doneErrors are the messages pegen builds from tok->done; the tokenize module reports them
-// with its own positions, so the corpus comparison checks their class and text only.
-var doneErrors = map[string]bool{
-	"unexpected EOF in multi-line statement":                 true,
-	"unindent does not match any outer indentation level":    true,
-	"inconsistent use of tabs and spaces in indentation":     true,
-	"too many levels of indentation":                         true,
-	"unexpected character after line continuation character": true,
-}
-
-func errorLine(class, msg string, line, offset int) string {
-	if doneErrors[msg] {
-		return fmt.Sprintf("ERROR %s %q", class, msg)
-	}
-	return fmt.Sprintf("ERROR %s %q %d:%d", class, msg, line, offset)
-}
-
-// tokenizeExtra renders the tokenize-module stream of src in the canonical form goldenLines
-// produces: character columns, ENDMARKER and trailing DEDENTs on the line after the last, an
-// empty string for the newline tokenize fakes at EOF, TokenError for plain SyntaxErrors.
-func tokenizeExtra(src string) []string {
-	t := newTokenizer(src, true)
-	lines := strings.SplitAfter(t.src, "\n")
-	implicitLine := 0
-	if translated := strings.ReplaceAll(strings.ReplaceAll(src, "\r\n", "\n"), "\r", "\n"); translated != t.src {
-		implicitLine = len(lines) - 1 // the last line had no newline; tokenize faked one
-	}
-	// Byte column to character column, advancing from the previous token on the same line so
-	// a long line stays linear.
-	lastLine, lastByte, lastChar := 0, 0, 0
-	col := func(n, b int) int {
-		if b < 0 { // ENDMARKER: replaced below
-			return 0
-		}
-		if n != lastLine || b < lastByte {
-			lastLine, lastByte, lastChar = n, 0, 0
-		}
-		lastChar += charOffset(lines[n-1][lastByte:], b-lastByte)
-		lastByte = b
-		return lastChar
-	}
-	var out []string
-	for {
-		tok, err := t.next()
-		if err != nil {
-			class, msg := "TokenError", err.Msg
-			switch {
-			case err.Kind == "IndentationError" || err.Kind == "TabError":
-				class = err.Kind
-			case strings.HasPrefix(msg, "unterminated triple-quoted string literal"):
-				msg = "EOF in multi-line string"
-			case strings.HasSuffix(msg, "was never closed") || msg == "unexpected EOF while parsing":
-				msg = "unexpected EOF in multi-line statement"
-			}
-			return append(out, errorLine(class, msg, err.Line, err.Offset))
-		}
-		sl, sc, el, ec, str := tok.Lineno, col(tok.Lineno, tok.Col), tok.EndLineno, col(tok.EndLineno, tok.EndCol), tok.Str
-		switch {
-		case tok.Kind == ENDMARKER || (tok.Kind == DEDENT && t.done == eEOF):
-			sl, sc, el, ec = tok.Lineno+1, 0, tok.Lineno+1, 0
-		case tok.Kind == NEWLINE:
-			str = "\n"
-			if tok.Lineno == implicitLine {
-				str = ""
-			}
-		case tok.Kind == NL && tok.Lineno == implicitLine:
-			str = ""
-		}
-		out = append(out, fmt.Sprintf("%s %d:%d-%d:%d %q", tok.Kind, sl, sc, el, ec, str))
-		if tok.Kind == ENDMARKER {
-			return out
-		}
-	}
-}
-
-// goldenLines canonicalises one tokens/<sha>.txt golden (TYPE\tsl\tsc\tel\tec\t<json string>,
-// or ERROR\tclass\t<json msg>\tlineno\toffset).
-func goldenLines(text string) ([]string, error) {
-	var out []string
-	for _, l := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
-		f := strings.SplitN(l, "\t", 6)
-		if f[0] == "ERROR" {
-			var msg string
-			if err := json.Unmarshal([]byte(f[2]), &msg); err != nil {
-				return nil, fmt.Errorf("%s: %w", l, err)
-			}
-			var line, offset int
-			fmt.Sscanf(f[3]+" "+f[4], "%d %d", &line, &offset)
-			out = append(out, errorLine(f[1], msg, line, offset))
-			continue
-		}
-		var s string
-		if len(f) < 6 {
-			return nil, fmt.Errorf("short golden line %q", l)
-		}
-		if err := json.Unmarshal([]byte(f[5]), &s); err != nil {
-			return nil, fmt.Errorf("%s: %w", l, err)
-		}
-		out = append(out, fmt.Sprintf("%s %s:%s-%s:%s %q", f[0], f[1], f[2], f[3], f[4], s))
-	}
-	return out, nil
-}
-
-// compareCorpusInput returns "" when the tokenize stream of the input equals its golden.
-func compareCorpusInput(root, path string) string {
-	sha := strings.TrimSuffix(filepath.Base(path), ".py")
-	src, err := os.ReadFile(path)
-	if err != nil {
-		return err.Error()
-	}
-	golden, err := os.ReadFile(filepath.Join(root, "tokens", sha+".txt"))
-	if err != nil {
-		return "golden missing, rerun tools/parity/gen_ast_goldens.py"
-	}
-	want, err := goldenLines(string(golden))
-	if err != nil {
-		return err.Error()
-	}
-	return firstDiff(want, tokenizeExtra(string(src)))
-}
-
-func TestTokenizerCorpus(t *testing.T) {
-	root := corpusDir
-	if _, err := os.Stat(filepath.Join(root, "tokens")); err != nil {
-		t.Skip("corpus/pyast/tokens absent: capture the corpus (docs/spec/pyast-decision.md) and run python tools/parity/gen_ast_goldens.py")
-	}
-	var files []string
-	for _, dir := range []string{"pytest", "msb"} {
-		matches, err := filepath.Glob(filepath.Join(root, dir, "*.py"))
-		require.NoError(t, err)
-		files = append(files, matches...)
-	}
-	// The two reads per input dominate on this filesystem; a pool keeps the run under a minute.
-	diffs := make([]string, len(files))
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 32)
-	for i, f := range files {
-		sem <- struct{}{}
-		wg.Go(func() {
-			defer func() { <-sem }()
-			diffs[i] = compareCorpusInput(root, f)
-		})
-	}
-	wg.Wait()
-	mismatched := 0
-	var report []string
-	for i, d := range diffs {
-		if d != "" {
-			mismatched++
-			if len(report) < 10 {
-				report = append(report, fmt.Sprintf("%s: %s", strings.TrimPrefix(files[i], root+string(filepath.Separator)), d))
-			}
-		}
-	}
-	t.Logf("tokenizer corpus: %d inputs, %d equal, %d mismatched", len(files), len(files)-mismatched, mismatched)
-	if mismatched > 0 {
-		t.Errorf("%d of %d inputs differ from CPython's tokenize; first %d:\n%s", mismatched, len(files), len(report), strings.Join(report, "\n"))
-	}
-}
-
-func firstDiff(want, got []string) string {
-	for i := 0; i < len(want) || i < len(got); i++ {
-		w, g := "<end>", "<end>"
-		if i < len(want) {
-			w = want[i]
-		}
-		if i < len(got) {
-			g = got[i]
-		}
-		if w != g {
-			return fmt.Sprintf("token %d: want %s, got %s", i, w, g)
-		}
-	}
-	return ""
 }
 
 func TestTokenizerErrors(t *testing.T) {
