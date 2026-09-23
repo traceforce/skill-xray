@@ -32,6 +32,31 @@ func TestDirNameKeepsEveryIDInItsOwnChild(t *testing.T) {
 	assert.True(t, strings.HasPrefix(dirName("ASB04_000018"), "ASB04_000018-"))
 }
 
+// The runner fans the records out to several workers and writes exactly one row per record.
+func TestRunWritesOneRowPerRecord(t *testing.T) {
+	dir := t.TempDir()
+	var ids, lines []string
+	for i := range 6 {
+		id := fmt.Sprintf("t/%d", i) // already in sorted order
+		ids = append(ids, id)
+		lines = append(lines, fmt.Sprintf(`{"benchmark_id":%q,"split":"tiny","label":%d,"source_name":"s","text":"---\nname: t\n---\nRead the guide.\n"}`, id, i%2))
+	}
+	sum := sha256.Sum256([]byte(strings.Join(ids, "\n")))
+	testutil.Swap(t, &pinnedSplits, map[string]string{"tiny": hex.EncodeToString(sum[:])})
+	data, out := filepath.Join(dir, "tiny.jsonl"), filepath.Join(dir, "rows.jsonl")
+	require.NoError(t, os.WriteFile(data, []byte(strings.Join(lines, "\n")+"\n"), 0o644))
+	require.NoError(t, cmdRun([]string{"--data", data, "--out", out, "--workers", "3", "--work", dir}))
+	rows, err := loadRows(out)
+	require.NoError(t, err)
+	var got []string
+	for _, r := range rows {
+		require.Nil(t, r.Error, r.BenchmarkID)
+		assert.Equal(t, 1, r.Analyzed, r.BenchmarkID)
+		got = append(got, r.BenchmarkID)
+	}
+	assert.ElementsMatch(t, ids, got)
+}
+
 func TestPinnedSplitIsTheSortedIDListDigest(t *testing.T) {
 	sum := sha256.Sum256([]byte("a\nb"))
 	testutil.Swap(t, &pinnedSplits, map[string]string{"tiny": hex.EncodeToString(sum[:])})
