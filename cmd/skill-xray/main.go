@@ -16,6 +16,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
@@ -307,13 +308,14 @@ func sameFile(a, b string) bool {
 	return ea == nil && eb == nil && os.SameFile(sa, sb)
 }
 
-// console is a path as the console prints it: every control character is shown as an escape,
-// so a name cannot rewrite or hide a line, and everything else, backslashes included, stays as
-// typed. Names inside a package still use the stricter pytext.UnicodeEscape.
+// console is a path as the console prints it: every Unicode control character (the C0 and C1
+// ranges and DEL) is shown as an escape, so a name cannot rewrite or hide a line, and everything
+// else, backslashes included, stays as typed. Names inside a package still use the stricter
+// pytext.UnicodeEscape.
 func console(p string) string {
 	var b strings.Builder
 	for _, r := range p {
-		if r < 0x20 || r == 0x7f {
+		if unicode.IsControl(r) {
 			fmt.Fprintf(&b, `\x%02x`, r)
 			continue
 		}

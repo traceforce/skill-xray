@@ -129,7 +129,8 @@ a failed check/context, existing material-incompleteness policy, or report valid
 failure. There is no severity-based exit gate. With LLM disabled, identical inputs and
 configuration produce byte-identical SARIF; scan-local IDs, engine fingerprints, timestamps
 and absolute installation roots are not canonical report identities.
-When report writing fails, requested JSON/text findings are still emitted before exit 2.
+When report validation or writing fails, the console still prints the verdict line, no
+`report:` line follows, any previous report is left untouched and the exit code is 2.
 
 ### Optional LLM audit
 

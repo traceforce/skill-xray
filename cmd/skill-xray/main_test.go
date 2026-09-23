@@ -130,6 +130,12 @@ func TestConsoleEscapesControlChars(t *testing.T) {
 	assert.NotContains(t, stdout, "\x1b")
 	assert.Contains(t, stdout, `\x1b`)
 	assert.Contains(t, stdout, filepath.Dir(root), "the operator's own path prints as typed, separators included")
+
+	root = renamed(t, map[string]string{"SKILL.md": manifest}, "ev\u0085il") // a C1 control
+	rc, stdout, _, _ = scanned(t, root)
+	assert.Equal(t, 0, rc)
+	assert.NotContains(t, stdout, "\u0085")
+	assert.Contains(t, stdout, `\x85`)
 }
 
 // Executable code the engine cannot analyze is a high gap in the report and exit 2, never CLEAN.
