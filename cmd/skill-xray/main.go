@@ -179,7 +179,7 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 	if err != nil {
 		// The package argument and the error text can carry attacker-controlled names (zip
 		// members, URLs); escape them like artifact paths.
-		fmt.Fprintf(stderr, "cannot ingest %s: %s\n", pytext.UnicodeEscape(pkg), pytext.UnicodeEscape(err.Error()))
+		fmt.Fprintf(stderr, "cannot ingest %s: %s\n", console(pkg), pytext.UnicodeEscape(err.Error()))
 		return 2, nil
 	}
 	defer cleanup()
@@ -205,7 +205,7 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
 		rc = 2
 	}
-	verdictLine(stdout, reportHeadline(report), ingest.BuildLedger(p), pytext.UnicodeEscape(pkg))
+	verdictLine(stdout, reportHeadline(report), ingest.BuildLedger(p), console(pkg))
 	if rc == 0 {
 		fmt.Fprintf(stdout, "report: %s\n", o.output) // the operator's own path, printed as given
 	}
@@ -307,15 +307,30 @@ func sameFile(a, b string) bool {
 	return ea == nil && eb == nil && os.SameFile(sa, sb)
 }
 
+// console is a path as the console prints it: every control character is shown as an escape,
+// so a name cannot rewrite or hide a line, and everything else, backslashes included, stays as
+// typed. Names inside a package still use the stricter pytext.UnicodeEscape.
+func console(p string) string {
+	var b strings.Builder
+	for _, r := range p {
+		if r < 0x20 || r == 0x7f {
+			fmt.Fprintf(&b, `\x%02x`, r)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 // display is a discovered package path as printed: under the home directory as "~/...", then
-// escaped like every attacker-controlled path. Plugin layouts reuse folder names
-// (access/configure), so the path, not the name, identifies a package. The prefix is guarded so
-// "/home/al" does not abbreviate "/home/alice/x".
+// with control characters escaped. Plugin layouts reuse folder names (access/configure), so the
+// path, not the name, identifies a package. The prefix is guarded so "/home/al" does not
+// abbreviate "/home/alice/x".
 func display(p string) string {
 	if home, _ := os.UserHomeDir(); home != "" && (p == home || strings.HasPrefix(p, home+string(os.PathSeparator))) {
 		p = "~" + p[len(home):]
 	}
-	return pytext.UnicodeEscape(p)
+	return console(p)
 }
 
 // reportGaps prints every traversal gap discovery hit and reports whether there was one.

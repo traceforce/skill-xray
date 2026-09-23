@@ -129,6 +129,7 @@ func TestConsoleEscapesControlChars(t *testing.T) {
 	assert.Equal(t, 0, rc)
 	assert.NotContains(t, stdout, "\x1b")
 	assert.Contains(t, stdout, `\x1b`)
+	assert.Contains(t, stdout, filepath.Dir(root), "the operator's own path prints as typed, separators included")
 }
 
 // Executable code the engine cannot analyze is a high gap in the report and exit 2, never CLEAN.

@@ -109,7 +109,7 @@ The report and the operator policy must be outside the scanned package, which is
 
 An operator policy is a JSON object of at most 512 KiB with `"version": "skill-xray/scoped-policy/v1"` and a `decisions` list. Each decision names one result by `rule_id`, `path`, `fingerprint` and `context_digest` and either suppresses it or demotes it to a lower `effective_severity`, with a `reason`. All four identity fields must match; there is no vector-wide ignore and no wildcard. [docs/reporting.md](docs/reporting.md) describes result identity, the decision format and the failure semantics.
 
-The console carries no findings: one line per package, `VERDICT  seen=N analyzed=N cov=P%  package`, then `report: <path>`, and for `system-scan` a summary line of the package, blocking, with-findings, clean and discovery-exception counts. Attacker-controlled names such as package paths are escaped before printing so a control character cannot hide a line.
+The console carries no findings: one line per package, `VERDICT  seen=N analyzed=N cov=P%  package`, then `report: <path>`, and for `system-scan` a summary line of the package, blocking, with-findings, clean and discovery-exception counts. Control characters in a printed path are shown as escapes so a name cannot hide a line; the rest of the path prints as typed.
 
 ## Examples
 
