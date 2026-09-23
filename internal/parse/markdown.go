@@ -825,6 +825,11 @@ var globalHTMLAttrs = map[string]bool{"class": true, "dir": true, "id": true, "l
 // urlHTMLAttrs are the modelled attributes whose value is a URL.
 var urlHTMLAttrs = map[string]bool{"href": true, "src": true, "cite": true}
 
+// urlNamedHTMLAttrs name a reference wherever they appear; on a tag outside the modelled set the
+// reference is content the link model never saw, whatever form the value takes.
+var urlNamedHTMLAttrs = map[string]bool{"href": true, "src": true, "srcset": true, "data": true, "poster": true,
+	"action": true, "formaction": true, "cite": true, "background": true, "longdesc": true, "xlink:href": true, "ping": true}
+
 var tagHTMLAttrs = map[string]map[string]bool{
 	"a":          {"href": true, "rel": true, "target": true},
 	"blockquote": {"cite": true}, "q": {"cite": true},
@@ -1138,8 +1143,8 @@ func (h *htmlInspector) startTag(tag string, norm [][2]string, start int) {
 			h.fully = false // an event handler or an active scheme is executable content
 		default:
 			h.unknown = true
-			if attrCarriesContent(a[1]) {
-				h.text = true // a URL or words the prose and link models never saw
+			if (!known && urlNamedHTMLAttrs[a[0]]) || attrCarriesContent(a[1]) {
+				h.text = true // a reference or words the prose and link models never saw
 			}
 		}
 	}
@@ -1191,7 +1196,7 @@ func attrCarriesContent(v string) bool {
 	}
 	words := 0
 	for _, f := range strings.Fields(v) {
-		if len(f) >= 2 && strings.IndexFunc(f, func(r rune) bool { return !unicode.IsLetter(r) }) < 0 {
+		if utf8.RuneCountInString(f) >= 2 && strings.IndexFunc(f, func(r rune) bool { return !unicode.IsLetter(r) }) < 0 {
 			words++
 		}
 	}

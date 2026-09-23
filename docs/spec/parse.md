@@ -243,8 +243,10 @@ link models never saw):
   `src` or `cite` whose `compact` value (below) has the scheme `data`, `javascript` or `vbscript`
   before the first `:` -> `fullyInspected = false`; any other attribute whose name starts with `on`
   or whose value has such a scheme -> `fullyInspected = false`; any other unmodelled attribute ->
-  `unknown = true`, and `text = true` when its value is a URL (`://`, a leading `//` or a scheme)
-  or holds at least two words of letters. An unknown tag stops here. `code`/`pre` push onto
+  `unknown = true`, and `text = true` when it names a reference on an unknown tag (`href`, `src`,
+  `srcset`, `data`, `poster`, `action`, `formaction`, `cite`, `background`, `longdesc`,
+  `xlink:href`, `ping`) or when its value is a URL (`://`, a leading `//` or a scheme) or holds at
+  least two words of letters (runes). An unknown tag stops here. `code`/`pre` push onto
   `codeStack`. `target = href` for `a`, else `src`; if non-empty: `compact = lower(removeAll(
   [\x00-\x20]+, target))`; for `img`/`source`, `compact` starting with `//` or matching
   `^[a-z][a-z0-9+.-]*:` -> `fullyInspected = false`; for `a`, push `{target, label, line + tagLine
