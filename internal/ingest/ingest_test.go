@@ -439,11 +439,23 @@ func TestDiscoverFindsPackagesUnderRoots(t *testing.T) {
 	assert.ElementsMatch(t, []string{"a", "b"}, names)
 }
 
-// test_discover_skips_missing_roots
-func TestDiscoverSkipsMissingRoots(t *testing.T) {
+// A missing known root is the normal case for an agent the user does not have and is skipped
+// in silence; a root the operator named is a discovery exception when it is missing or is not
+// a directory, so a mistyped --root cannot pass for an empty one.
+func TestDiscoverReportsAMissingNamedRoot(t *testing.T) {
 	found := Discover([]string{"/no/such/skills/root/xyz"})
 	assert.Equal(t, []string{}, found.Paths)
-	assert.Empty(t, found.LedgerExceptions)
+	require.Len(t, found.LedgerExceptions, 1)
+	assert.Equal(t, "walk_error:FileNotFoundError", found.LedgerExceptions[0].ReasonCode)
+	assert.Contains(t, found.LedgerExceptions[0].Path, "xyz")
+	file := filepath.Join(t.TempDir(), "SKILL.md")
+	require.NoError(t, os.WriteFile(file, []byte("---\nname: t\n---\n"), 0o644))
+	found = Discover([]string{file})
+	assert.Equal(t, []string{}, found.Paths)
+	require.Len(t, found.LedgerExceptions, 1)
+	assert.Equal(t, "root_not_directory", found.LedgerExceptions[0].ReasonCode)
+	testutil.Swap(t, &knownSkillRoots, []string{"/no/such/skills/root/xyz", file})
+	assert.Empty(t, Discover(nil).LedgerExceptions)
 }
 
 // test_discovery_directory_budget_is_exact_and_fail_visible

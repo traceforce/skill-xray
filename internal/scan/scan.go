@@ -187,7 +187,7 @@ func Report(p *parse.Package, o Options) (*ScanReport, error) {
 		name := attempt(func() error {
 			final, err := applyDispositions(p, correlation, triads, o.DispositionPolicy, errs)
 			if err != nil {
-				errs = append(errs, "disposition-policy-error: ValueError")
+				errs = append(errs, "disposition-policy-error: ValueError: "+err.Error())
 				if final, err = applyDispositions(p, correlation, triads, nil, errs); err != nil {
 					return err
 				}

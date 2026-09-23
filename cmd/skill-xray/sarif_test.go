@@ -216,6 +216,7 @@ func TestCLISchemaWriteAndContextFailures(t *testing.T) {
 				assert.NotContains(t, stdout, "report:")
 			} else {
 				assert.True(t, strings.HasPrefix(stdout, "BLOCKING"), stdout) // the preserved findings, not an empty correlation, set the verdict
+				assert.Contains(t, stderr, "analysis incomplete: ", "the context error is named on the console")
 			}
 			if _, err := os.Stat(target); err == nil {
 				invocations := at(sarifDoc(t, target), "runs", 0, "invocations").([]any)
@@ -223,6 +224,18 @@ func TestCLISchemaWriteAndContextFailures(t *testing.T) {
 				assert.Equal(t, false, at(invocations[0], "executionSuccessful"))
 			}
 		})
+	}
+}
+
+// A report directory that does not exist, or a directory named as the report, is refused before
+// the input is read, so no scan and no model call is spent on a report that cannot be written.
+func TestUnwritableReportTargetFailsBeforeIngest(t *testing.T) {
+	root := testutil.MakePackage(t, map[string]string{"SKILL.md": manifest})
+	for name, target := range map[string]string{"missing-directory": filepath.Join(t.TempDir(), "absent", "r.sarif"), "directory": t.TempDir()} {
+		noScan(t)
+		rc, _, stderr := cli(t, "scan", root, "--output", target)
+		assert.Equal(t, 2, rc, name)
+		assert.Contains(t, stderr, "cannot prepare SARIF: SARIF output ", name)
 	}
 }
 

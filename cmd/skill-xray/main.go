@@ -65,11 +65,19 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	var s systemOptions
 	rc := 0
 	root := &cobra.Command{
-		Use:           "skill-xray",
-		Short:         "Analyze agent skill packages and write SARIF reports.",
-		Version:       metadata.Version,
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Use:                "skill-xray",
+		Short:              "Analyze agent skill packages and write SARIF reports.",
+		Version:            metadata.Version,
+		SilenceUsage:       true,
+		SilenceErrors:      true,
+		Args:               cobra.ArbitraryArgs,                          // so the retired root form gets a pointer to scan, not a bare unknown command
+		FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true}, // its retired flags too
+		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return c.Help()
+			}
+			return fmt.Errorf("unknown command %q; to analyze a package run: skill-xray scan <package>", console(args[0]))
+		},
 	}
 	root.SetVersionTemplate("skill-xray {{.Version}}\n")
 	root.SetOut(stdout)
@@ -176,9 +184,29 @@ func install(stdout, stderr io.Writer) int {
 // incomplete is the exit-2 rule of an analysis: a context error, or a high or critical finding
 // without a vector (a check or engine that could not run). Findings with a vector never trigger it.
 func incomplete(report *scan.ScanReport) bool {
-	return len(report.ContextErrors) > 0 || slices.ContainsFunc(report.Findings, func(f findings.Finding) bool {
-		return f.Vector == "" && (f.Severity == "critical" || f.Severity == "high")
-	})
+	return len(report.ContextErrors) > 0 || slices.ContainsFunc(report.Findings, gap)
+}
+
+func gap(f findings.Finding) bool {
+	return f.Vector == "" && (f.Severity == "critical" || f.Severity == "high")
+}
+
+// explainIncomplete names on stderr what kept an analysis from completing, one line per cause,
+// so an exit 2 never arrives without a reason; it reports whether there was one.
+func explainIncomplete(w io.Writer, name string, report *scan.ScanReport) bool {
+	for _, e := range report.ContextErrors {
+		fmt.Fprintf(w, "analysis incomplete: %s: %s\n", name, pytext.UnicodeEscape(e))
+	}
+	for _, f := range report.Findings {
+		if gap(f) {
+			where := f.Rule
+			if f.Path != "" {
+				where += " " + pytext.UnicodeEscape(f.Path)
+			}
+			fmt.Fprintf(w, "analysis incomplete: %s: %s: %s\n", name, where, pytext.UnicodeEscape(f.Message))
+		}
+	}
+	return incomplete(report)
 }
 
 // llmSummary collects what the LLM lane did over the packages of one command for the one console
@@ -313,14 +341,18 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
 		rc = 2
 	}
-	verdictLine(stdout, reportHeadline(report), ingest.BuildLedger(p), console(pkg))
+	ledger := ingest.BuildLedger(p)
+	verdictLine(stdout, reportHeadline(report), ledger, console(pkg))
+	if ledger.ArtifactsSeen == 0 {
+		fmt.Fprintf(stderr, "note: no files found under %s\n", console(pkg))
+	}
 	var lane llmSummary
 	lane.add(report)
 	lane.line(stdout)
 	if rc == 0 {
 		fmt.Fprintf(stdout, "report: %s\n", console(o.output))
 	}
-	if incomplete(report) {
+	if explainIncomplete(stderr, console(pkg), report) {
 		rc = 2
 	}
 	return rc, nil
@@ -331,7 +363,7 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 // JSON object of at most 512 KiB outside the package path. A URL or git address is no local
 // path, so the comparisons against the source wait for contained on the unpacked root.
 func (o *options) preflight(pkg string) (map[string]any, error) {
-	report, err := resolvePath(o.output)
+	report, err := sarif.CheckTarget(o.output) // a missing directory or a special file fails here, before the scan
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +409,7 @@ func (o *options) preflight(pkg string) (map[string]any, error) {
 	}
 	var v any
 	if err := json.Unmarshal(contents, &v); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Operator policy is not valid JSON: %w", err)
 	}
 	doc, ok := v.(map[string]any)
 	if !ok {

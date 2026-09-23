@@ -811,6 +811,9 @@ func CheckTarget(target string, roots ...string) (string, error) {
 	if info, err := os.Stat(target); err == nil && !info.Mode().IsRegular() {
 		return "", errors.New("SARIF output must be a regular file")
 	}
+	if info, err := os.Stat(filepath.Dir(target)); err != nil || !info.IsDir() {
+		return "", errors.New("SARIF output directory does not exist: " + filepath.Dir(target))
+	}
 	return target, nil
 }
 

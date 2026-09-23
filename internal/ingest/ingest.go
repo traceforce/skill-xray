@@ -568,6 +568,7 @@ func discoveryError(err error, path string) LedgerEntry {
 // once found its subtree is pruned. A symlinked ROOT is followed, nested symlinks
 // are not, and hard directory and entry budgets bound the scan.
 func Discover(roots []string) Discovery {
+	explicit := roots != nil // a named root the operator mistyped must not pass for an empty one
 	if roots == nil {
 		roots = knownSkillRoots
 	}
@@ -583,12 +584,15 @@ func Discover(roots []string) Discovery {
 		}
 		rootStat, err := stat(base)
 		if err != nil {
-			if !errors.Is(err, fs.ErrNotExist) {
+			if explicit || !errors.Is(err, fs.ErrNotExist) {
 				exceptions = append(exceptions, discoveryError(err, base))
 			}
 			continue
 		}
 		if !rootStat.IsDir() {
+			if explicit {
+				exceptions = append(exceptions, discoveryEntry("root_not_directory", posix(base)))
+			}
 			continue
 		}
 		pending := []string{base}

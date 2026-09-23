@@ -120,6 +120,16 @@ func TestRootTakesNoPackage(t *testing.T) {
 	rc, _, stderr := cli(t, testutil.MakePackage(t, map[string]string{"SKILL.md": manifest}))
 	assert.Equal(t, 2, rc)
 	assert.Contains(t, stderr, "unknown command")
+	assert.Contains(t, stderr, "skill-xray scan <package>", "the retired root form points at scan")
+}
+
+// An empty directory is not called clean in silence: the verdict line shows seen=0 and stderr
+// says no files were found.
+func TestEmptyPackageIsNoted(t *testing.T) {
+	rc, stdout, stderr, _ := scanned(t, t.TempDir())
+	assert.Equal(t, 0, rc)
+	assert.Contains(t, stdout, "seen=0")
+	assert.Contains(t, stderr, "note: no files found under ")
 }
 
 // A control character in a package name must not forge or hide console lines: the argument is
@@ -146,10 +156,12 @@ func TestConsoleEscapesControlChars(t *testing.T) {
 // Executable code the engine cannot analyze is a high gap in the report and exit 2, never CLEAN.
 func TestAnalysisDoesNotCallUnsupportedCodeClean(t *testing.T) {
 	root := testutil.MakePackage(t, map[string]string{"run.ps1": "Invoke-Expression $args[0]\n"})
-	rc, stdout, _, doc := scanned(t, root)
+	rc, stdout, stderr, doc := scanned(t, root)
 	assert.Equal(t, 2, rc)
 	assert.Contains(t, stdout, "FINDINGS")
 	assert.Contains(t, property(doc, "category"), "analysis-diagnostic")
+	assert.Contains(t, stderr, "analysis incomplete: ", "the exit 2 is explained")
+	assert.Contains(t, stderr, "run.ps1")
 }
 
 func TestLLMRejectsInvalidConfiguration(t *testing.T) {

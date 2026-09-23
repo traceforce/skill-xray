@@ -102,7 +102,8 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 		}
 		v := reportHeadline(report)
 		counts[v]++
-		if incomplete(report) {
+		if explainIncomplete(stderr, display(path), report) {
+			counts["incomplete"]++
 			rc = 2
 		}
 		if sarifErr == nil {
@@ -135,8 +136,8 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 	} else {
 		fmt.Fprintf(stdout, "report: %s\n", console(s.output))
 	}
-	fmt.Fprintf(stdout, "packages: %d, blocking: %d, with findings: %d, clean: %d, discovery exceptions: %d\n",
-		len(d.Paths), counts["BLOCKING"], counts["FINDINGS"], counts["CLEAN"], len(d.LedgerExceptions))
+	fmt.Fprintf(stdout, "packages: %d, blocking: %d, with findings: %d, clean: %d, incomplete: %d, discovery exceptions: %d\n",
+		len(d.Paths), counts["BLOCKING"], counts["FINDINGS"], counts["CLEAN"], counts["incomplete"], len(d.LedgerExceptions))
 	if reportGaps(stderr, d) {
 		rc = 2
 	}

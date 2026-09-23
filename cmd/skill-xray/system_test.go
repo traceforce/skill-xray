@@ -69,7 +69,7 @@ func TestSystemScanConsoleAndReport(t *testing.T) {
 	assert.Contains(t, stdout, "CLEAN     seen=1   analyzed=1   cov=100.0%  ")
 	assert.Contains(t, stdout, "BLOCKING  seen=1   analyzed=1   cov=100.0%  ")
 	assert.Contains(t, stdout, "report: "+target+"\n")
-	assert.True(t, strings.HasSuffix(stdout, "packages: 2, blocking: 1, with findings: 0, clean: 1, discovery exceptions: 0\n"), stdout)
+	assert.True(t, strings.HasSuffix(stdout, "packages: 2, blocking: 1, with findings: 0, clean: 1, incomplete: 0, discovery exceptions: 0\n"), stdout)
 	doc := sarifDoc(t, target)
 	rs := runs(t, doc)
 	require.Len(t, rs, 2)
@@ -101,7 +101,7 @@ func TestSystemScanEmptyRoot(t *testing.T) {
 	rc, stdout, stderr := cli(t, "system-scan", "--root", t.TempDir(), "--output", target)
 	assert.Equal(t, 0, rc)
 	assert.Empty(t, stderr)
-	assert.True(t, strings.HasSuffix(stdout, "packages: 0, blocking: 0, with findings: 0, clean: 0, discovery exceptions: 0\n"), stdout)
+	assert.True(t, strings.HasSuffix(stdout, "packages: 0, blocking: 0, with findings: 0, clean: 0, incomplete: 0, discovery exceptions: 0\n"), stdout)
 	assert.Equal(t, []any{}, at(sarifDoc(t, target), "runs"))
 }
 
@@ -116,6 +116,35 @@ func TestSystemScanFailsVisibleWhenDiscoveryTruncates(t *testing.T) {
 	assert.Equal(t, 2, rc)
 	assert.Contains(t, stderr, "skill discovery incomplete (walk_truncated)")
 	assert.True(t, strings.HasSuffix(stdout, "discovery exceptions: 1\n"), stdout)
+}
+
+// A --root that does not exist or is not a directory is a discovery exception on stderr with
+// exit 2, never an empty clean run.
+func TestSystemScanNamedRootMustBeADirectory(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "SKILL.md")
+	require.NoError(t, os.WriteFile(file, []byte(manifest), 0o644))
+	for name, root := range map[string]string{"missing": filepath.Join(t.TempDir(), "typo"), "file": file} {
+		target := filepath.Join(t.TempDir(), "system.sarif")
+		rc, stdout, stderr := cli(t, "system-scan", "--root", root, "--output", target)
+		assert.Equal(t, 2, rc, name)
+		assert.Contains(t, stderr, "skill discovery incomplete (", name)
+		assert.True(t, strings.HasSuffix(stdout, "discovery exceptions: 1\n"), stdout)
+	}
+}
+
+// Every package whose analysis did not complete is explained on stderr and counted on the
+// summary line, so the exit 2 of a system scan names its causes.
+func TestSystemScanExplainsIncompletePackages(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "ruby"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "ruby", "SKILL.md"), []byte(manifest), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "ruby", "tool.rb"), []byte("puts 1\n"), 0o644))
+	target := filepath.Join(t.TempDir(), "system.sarif")
+	rc, stdout, stderr := cli(t, "system-scan", "--root", root, "--output", target)
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "analysis incomplete: ")
+	assert.Contains(t, stderr, "tool.rb")
+	assert.Contains(t, stdout, "incomplete: 1, discovery exceptions: 0\n")
 }
 
 func TestSystemScanRootRepeats(t *testing.T) {
