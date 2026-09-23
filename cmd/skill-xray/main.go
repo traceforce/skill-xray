@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -180,6 +181,83 @@ func incomplete(report *scan.ScanReport) bool {
 	})
 }
 
+// llmSummary collects what the LLM lane did over the packages of one command for the one console
+// line that says whether the model was reached: the calls made, whether the semantic pass ran,
+// and the reviews sent or held back with the reason, so a run that never called the model cannot
+// pass for one that did.
+type llmSummary struct {
+	configured, calls, failures, sent int
+	unavailable, advisoryOff          bool
+	held                              map[string]int
+}
+
+func (s *llmSummary) add(report *scan.ScanReport) {
+	u := report.LLMUsage
+	if u == nil || !pytext.Truthy(u["advisory_enabled"]) && !pytext.Truthy(u["judge_enabled"]) {
+		return // the lane was not requested
+	}
+	s.configured++
+	s.calls += count(u["calls"])
+	s.failures += count(u["failures"])
+	s.unavailable = s.unavailable || pytext.Truthy(u["unavailable"])
+	s.advisoryOff = s.advisoryOff || !pytext.Truthy(u["advisory_enabled"])
+	decisions := report.Shadow
+	if report.ReviewMode {
+		decisions = report.Dispositions
+	}
+	for _, d := range decisions {
+		switch {
+		case d.Status == "ineligible":
+		case d.RequestSHA256 != "": // a request left for the model
+			s.sent++
+		default:
+			if s.held == nil {
+				s.held = map[string]int{}
+			}
+			s.held[d.Status]++
+		}
+	}
+}
+
+func (s *llmSummary) line(w io.Writer) {
+	if s.configured == 0 {
+		return
+	}
+	fmt.Fprintf(w, "llm: %d model calls", s.calls)
+	if s.failures > 0 {
+		fmt.Fprintf(w, ", %d failed", s.failures)
+	}
+	if s.unavailable {
+		fmt.Fprint(w, ", provider unavailable")
+	}
+	if s.advisoryOff {
+		fmt.Fprint(w, "; semantic pass off under review, add --llm-additive to run it")
+	}
+	if s.sent > 0 || len(s.held) > 0 {
+		fmt.Fprintf(w, "; reviews sent %d", s.sent)
+		if len(s.held) > 0 {
+			parts, total := []string{}, 0
+			for _, k := range slices.Sorted(maps.Keys(s.held)) {
+				parts = append(parts, fmt.Sprintf("%s %d", k, s.held[k]))
+				total += s.held[k]
+			}
+			fmt.Fprintf(w, ", held %d (%s)", total, strings.Join(parts, ", "))
+		}
+	}
+	fmt.Fprintln(w)
+}
+
+// count reads a usage counter, which the session keeps as an int.
+func count(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case float64:
+		return int(n)
+	}
+	return 0
+}
+
 // verdictLine is the one console line per package: the verdict, the ledger counts and the name.
 func verdictLine(w io.Writer, verdict string, l ingest.Ledger, name string) {
 	fmt.Fprintf(w, "%-8s  seen=%-3d analyzed=%-3d cov=%5.1f%%  %s\n", verdict, l.ArtifactsSeen, l.ArtifactsAnalyzed, float64(l.CoveragePercent), name)
@@ -229,6 +307,9 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 		rc = 2
 	}
 	verdictLine(stdout, reportHeadline(report), ingest.BuildLedger(p), console(pkg))
+	var lane llmSummary
+	lane.add(report)
+	lane.line(stdout)
 	if rc == 0 {
 		fmt.Fprintf(stdout, "report: %s\n", console(o.output))
 	}

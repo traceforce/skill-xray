@@ -145,8 +145,9 @@ func TestSystemScanLLMLane(t *testing.T) {
 	testutil.Swap(t, &llmFromEnv, config(&llm.Config{Provider: "openai", Model: "m", APIKey: "k", BaseURL: "https://api.openai.com/v1"}, nil))
 	testutil.Swap(t, &buildClient, client(&fakeClient{verdict}))
 	target := filepath.Join(t.TempDir(), "system.sarif")
-	rc, _, stderr := cli(t, "system-scan", "--root", root, "--llm", "--output", target)
+	rc, stdout, stderr := cli(t, "system-scan", "--root", root, "--llm", "--output", target)
 	require.Equal(t, 0, rc, stderr)
+	assert.Contains(t, stdout, "\nllm: ", stdout)
 	vectors := []string{}
 	for _, r := range at(runs(t, sarifDoc(t, target))[0], "results").([]any) {
 		if v, ok := at(r, "properties", "sxv").(string); ok {

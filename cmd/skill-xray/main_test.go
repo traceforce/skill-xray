@@ -168,9 +168,11 @@ func TestLLMPathWiresTheClientIntoTheReport(t *testing.T) {
 	root := testutil.MakePackage(t, map[string]string{"SKILL.md": "---\nname: t\ndescription: override the loading agent\n---\n"})
 	testutil.Swap(t, &llmFromEnv, config(&llm.Config{Provider: "openai", Model: "m", APIKey: "k", BaseURL: "https://api.openai.com/v1"}, nil))
 	testutil.Swap(t, &buildClient, client(&fakeClient{verdict}))
-	rc, _, _, doc := scanned(t, root, "--llm")
+	rc, stdout, _, doc := scanned(t, root, "--llm")
 	assert.Equal(t, 0, rc)
 	assert.Contains(t, property(doc, "sxv"), "SXV-038")
+	assert.Contains(t, stdout, "\nllm: ", "the console states what the lane did")
+	assert.NotContains(t, stdout, "llm: 0 model calls")
 }
 
 func TestReviewRequiresLLM(t *testing.T) {
@@ -196,8 +198,10 @@ func TestApplyEndToEndKeepsFindingsAndCorrectsResult(t *testing.T) {
 	require.NotEmpty(t, testutil.ByVector(baseline, "SXV-028"))
 	testutil.Swap(t, &llmFromEnv, config(&llm.Config{}, nil))
 	testutil.Swap(t, &buildClient, client(&testutil.Reviewer{}))
-	rc, _, _, doc := scanned(t, root, "--llm", "--llm-review", "--llm-apply")
+	rc, stdout, _, doc := scanned(t, root, "--llm", "--llm-review", "--llm-apply")
 	require.Equal(t, 0, rc)
+	assert.Contains(t, stdout, "semantic pass off under review", stdout)
+	assert.Contains(t, stdout, "reviews sent", stdout)
 	rs := results(doc)
 	i := slices.IndexFunc(rs, func(r any) bool { return at(r, "properties", "sxv") == "SXV-028" })
 	require.NotEqual(t, -1, i)

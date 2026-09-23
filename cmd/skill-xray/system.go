@@ -92,6 +92,7 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 	var sarifErr error
 	var merged map[string]any
 	counts := map[string]int{}
+	var lane llmSummary
 	for _, path := range d.Paths {
 		p := ingest.BuildPackage(path)
 		parsed := parse.Parse(p)
@@ -119,7 +120,9 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 			}
 		}
 		verdictLine(stdout, v, ingest.BuildLedger(p), display(path))
+		lane.add(report)
 	}
+	lane.line(stdout)
 	if merged == nil {
 		merged = map[string]any{"version": "2.1.0", "$schema": sarif.SchemaID(), "runs": []any{}}
 	}
