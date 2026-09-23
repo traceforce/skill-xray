@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/yuin/goldmark/ast"
@@ -821,6 +822,9 @@ var presentationalHTML = map[string]bool{
 
 var globalHTMLAttrs = map[string]bool{"class": true, "dir": true, "id": true, "lang": true, "role": true, "title": true}
 
+// urlHTMLAttrs are the modelled attributes whose value is a URL.
+var urlHTMLAttrs = map[string]bool{"href": true, "src": true, "cite": true}
+
 var tagHTMLAttrs = map[string]map[string]bool{
 	"a":          {"href": true, "rel": true, "target": true},
 	"blockquote": {"cite": true}, "q": {"cite": true},
@@ -864,7 +868,8 @@ type htmlInspector struct {
 	codeStack    []string
 }
 
-// inspectHTML is parse._inspect_html.
+// inspectHTML is parse._inspect_html, graded by what the fragment hid (HTMLHidesContent) rather
+// than by one uninspectable state.
 func (d *mdDoc) inspectHTML(fragment string, line, column int) {
 	h := &htmlInspector{d: d, frag: fragment, line: line, column: column, fully: true}
 	h.fragLines = []int{0}
@@ -1119,20 +1124,27 @@ func (h *htmlInspector) startTag(tag string, norm [][2]string, start int) {
 	if len(values) != len(norm) { // a repeated attribute name
 		h.fully = false
 	}
-	for _, a := range norm { // active content in any attribute is never markup alone
-		if activeScheme(a[1]) {
-			h.fully = false
-		}
-	}
-	if !presentationalHTML[tag] && tag != "subject" {
+	known := presentationalHTML[tag] || tag == "subject"
+	if !known {
 		h.unknown = true
-		return
 	}
 	for _, a := range norm {
-		if !globalHTMLAttrs[a[0]] && !tagHTMLAttrs[tag][a[0]] {
+		switch {
+		case known && (globalHTMLAttrs[a[0]] || tagHTMLAttrs[tag][a[0]]):
+			if urlHTMLAttrs[a[0]] && activeScheme(a[1]) {
+				h.fully = false
+			}
+		case strings.HasPrefix(a[0], "on") || activeScheme(a[1]):
+			h.fully = false // an event handler or an active scheme is executable content
+		default:
 			h.unknown = true
-			return
+			if attrCarriesContent(a[1]) {
+				h.text = true // a URL or words the prose and link models never saw
+			}
 		}
+	}
+	if !known {
+		return
 	}
 	if tag == "code" || tag == "pre" {
 		h.codeStack = append(h.codeStack, tag)
@@ -1168,6 +1180,22 @@ func activeScheme(s string) bool {
 	compact := compactURL(s)
 	i := strings.IndexByte(compact, ':')
 	return i >= 0 && (compact[:i] == "data" || compact[:i] == "javascript" || compact[:i] == "vbscript")
+}
+
+// attrCarriesContent reports a value outside the modelled set that is more than a layout token:
+// a URL, or at least two words of letters.
+func attrCarriesContent(v string) bool {
+	compact := compactURL(v)
+	if strings.Contains(compact, "://") || strings.HasPrefix(compact, "//") || lowerSchemeRE.MatchString(compact) {
+		return true
+	}
+	words := 0
+	for _, f := range strings.Fields(v) {
+		if len(f) >= 2 && strings.IndexFunc(f, func(r rune) bool { return !unicode.IsLetter(r) }) < 0 {
+			words++
+		}
+	}
+	return words >= 2
 }
 
 func (h *htmlInspector) popAnchor() {
