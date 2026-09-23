@@ -74,6 +74,13 @@ func TestCleanupFailureIsRecorded(t *testing.T) {
 	assert.Contains(t, *r.Error, "cleanup")
 }
 
+// A vectorless critical finding is an analysis that did not complete, as the CLI's exit rule says.
+func TestVectorlessCriticalIsIncomplete(t *testing.T) {
+	r := row{Label: 0, Findings: []finding{{Rule: "check-error", Severity: "critical"}}}
+	assert.True(t, incomplete(r))
+	assert.Equal(t, [5]int{0, 0, 0, 0, 1}, counts(metrics([]row{r}, verdicts(false)[0].flagged)))
+}
+
 func TestPinnedSplitIsTheSortedIDListDigest(t *testing.T) {
 	sum := sha256.Sum256([]byte("a\nb"))
 	testutil.Swap(t, &pinnedSplits, map[string]string{"tiny": hex.EncodeToString(sum[:])})

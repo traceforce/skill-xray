@@ -65,7 +65,7 @@ func incomplete(r row) bool {
 		return true
 	}
 	return slices.ContainsFunc(r.Findings, func(f finding) bool {
-		return f.Vector == "" && (f.Severity == "high" || llmFailed[f.Rule])
+		return f.Vector == "" && (highOrCritical[f.Severity] || llmFailed[f.Rule]) // the CLI's exit rule
 	})
 }
 
