@@ -84,7 +84,13 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 		return 2, err
 	}
 	d := ingest.Discover(s.roots)
-	if _, err := sarif.CheckTarget(s.output, d.Paths...); err != nil { // before any package is read, so a report inside one is never scanned
+	protected := slices.Clone(d.Paths)
+	for _, root := range s.roots { // a file named as a root is a discovery exception, and the report must not replace it
+		if st, err := os.Stat(root); err == nil && !st.IsDir() {
+			protected = append(protected, root)
+		}
+	}
+	if _, err := sarif.CheckTarget(s.output, protected...); err != nil { // before any package is read, so a report inside one is never scanned
 		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
 		return 2, nil
 	}
@@ -128,7 +134,7 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 		merged = map[string]any{"version": "2.1.0", "$schema": sarif.SchemaID(), "runs": []any{}}
 	}
 	if sarifErr == nil {
-		sarifErr = writeRuns(merged, s.output, d.Paths)
+		sarifErr = writeRuns(merged, s.output, protected)
 	}
 	if sarifErr != nil {
 		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(sarifErr.Error()))

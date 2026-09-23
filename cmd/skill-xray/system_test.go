@@ -133,6 +133,12 @@ func TestSystemScanNamedRootMustBeADirectory(t *testing.T) {
 		assert.Contains(t, stderr, "skill discovery incomplete (", name)
 		assert.True(t, strings.HasSuffix(stdout, "discovery exceptions: 1\n"), stdout)
 	}
+	rc, _, stderr := cli(t, "system-scan", "--root", file, "--output", file) // the report must not replace the file named as a root
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "Report must be outside the scanned package")
+	kept, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Equal(t, manifest, string(kept))
 }
 
 // Every package whose analysis did not complete is explained on stderr and counted on the

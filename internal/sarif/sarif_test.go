@@ -647,7 +647,7 @@ func TestRuleNameAndDescription(t *testing.T) {
 	assert.Equal(t, "Load-time preprocessing execution (SXV-001, tier T2, CWE-94, CWE-829)", describe(map[string]any{
 		"title": "Load-time preprocessing execution", "vector": "SXV-001", "tier": "T2", "cwe": []string{"CWE-94", "CWE-829"}}))
 	assert.Equal(t, diagnosticText["analysis-incomplete"], describe(map[string]any{"rule": "analysis-incomplete"}))
-	assert.Equal(t, "some-gap", describe(map[string]any{"rule": "some-gap"}), "an unlisted diagnostic keeps its rule id")
+	assert.Contains(t, describe(map[string]any{"rule": "opengrep-timeout"}), "Not a security finding", "an unlisted diagnostic gets the generic text")
 }
 
 // test_directive_preserves_known_column (4 rows)

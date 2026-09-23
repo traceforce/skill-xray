@@ -47,7 +47,7 @@ Analyze one skill package and write its report.
 ./bin/skill-xray scan ./my-skill --output ../reports/my-skill.sarif --policy ../reviewed-policy.json
 ```
 
-The target may be a directory, a single file such as `SKILL.md`, a `.zip` archive, an `https://` URL, or a remote git repository (an `https://` or `ssh://` address ending in `.git`, or a `git@` or `git://` address); a local path is always scanned as a directory, whatever its name. Directory, file and zip inputs are fully offline. URL and git inputs are the only ones that use the network; each enforces size, count and SSRF limits and fails closed. Tar archives are refused; unpack them and scan the directory.
+The target may be a directory, a single file such as `SKILL.md`, a `.zip` archive, an `https://` URL, or a remote git repository (an `https://` or `ssh://` address ending in `.git`, or a `git@` or `git://` address); a local directory is always scanned as a directory, whatever its name, and a local file is a single-file input. Directory, file and zip inputs are fully offline. URL and git inputs are the only ones that use the network; each enforces size, count and SSRF limits and fails closed. Tar archives are refused; unpack them and scan the directory.
 
 | flag | effect |
 |---|---|
@@ -142,7 +142,7 @@ The LLM layer runs only when `--llm` is passed with `SKILLXRAY_LLM_PROVIDER` and
 |---|---|
 | `SKILLXRAY_LLM_PROVIDER` | `anthropic`, `openai` or `openai-compatible` |
 | `SKILLXRAY_LLM_API_KEY` | the API key; on a vendor's own default endpoint `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is the fallback, never on a custom base URL |
-| `SKILLXRAY_LLM_MODEL` | the model; defaults to `claude-haiku-4-5` for anthropic and `gpt-4.1-mini` for openai; required for openai-compatible. A failure reason of `HTTP 404` on the `llm:` line means the key cannot use the model (OpenAI serves some models, `gpt-5-mini` among them, only to verified organizations); set a model the key can call |
+| `SKILLXRAY_LLM_MODEL` | the model; defaults to `claude-haiku-4-5` for anthropic and `gpt-4.1-mini` for openai; required for openai-compatible. A failure reason of `HTTP 404` on the `llm:` line means the model or the endpoint was not found: on OpenAI's own endpoint the key cannot use the model (OpenAI serves some models, `gpt-5-mini` among them, only to verified organizations), so set a model the key can call; on a custom base URL check the path as well |
 | `SKILLXRAY_LLM_BASE_URL` | an https endpoint origin with no userinfo, query or fragment; defaults to the vendor endpoint; required for openai-compatible |
 | `SKILL_XRAY_OPENGREP_BIN` | an OpenGrep binary to use instead of the cache; it must still match the pinned size and SHA-256. Note the underscore after `SKILL`, unlike the `SKILLXRAY_LLM_*` variables |
 

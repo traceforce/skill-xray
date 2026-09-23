@@ -196,6 +196,7 @@ func describe(f map[string]any) string {
 		if rule, _ := f["rule"].(string); diagnosticText[rule] != "" {
 			return diagnosticText[rule]
 		}
+		return "A diagnostic about the analysis itself, not about the skill; the message states what did not complete. Not a security finding."
 	}
 	text := title(f)
 	var tags []string

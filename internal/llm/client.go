@@ -205,7 +205,7 @@ func (c *httpClient) readBounded(url string, headers map[string]string, data []b
 
 // httpHint tells the operator what the common refusals mean; the body is never read.
 var httpHint = map[int]string{401: " (API key rejected)", 403: " (access denied for this key)",
-	404: " (model not available to this key; set SKILLXRAY_LLM_MODEL)"}
+	404: " (model or endpoint not found; check SKILLXRAY_LLM_MODEL and SKILLXRAY_LLM_BASE_URL)"}
 
 func unreachable(err error) error {
 	why := "connection failed"
