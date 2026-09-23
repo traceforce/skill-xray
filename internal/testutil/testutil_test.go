@@ -83,40 +83,6 @@ func TestSymlinkOrSkip(t *testing.T) {
 	assert.NotZero(t, st.Mode()&os.ModeSymlink)
 }
 
-func TestLaneFailed(t *testing.T) {
-	for _, c := range []struct {
-		f    map[string]any
-		want bool
-	}{
-		{map[string]any{"vector": "", "rule": "opengrep-timeout"}, true},
-		{map[string]any{"vector": "", "rule": "opengrep-internal-error", "message": "x"}, true},
-		{map[string]any{"vector": "SXV-008", "rule": "opengrep-python-command-injection"}, false},
-		{map[string]any{"vector": "", "rule": "check-error"}, false},
-		{map[string]any{"rule": "opengrep-timeout"}, false},
-	} {
-		assert.Equal(t, c.want, LaneFailed(c.f), "%v", c.f)
-	}
-}
-
-func TestFirstDiff(t *testing.T) {
-	a := map[string]any{"k": []any{1, map[string]any{"x": "y"}}, "n": 1}
-	for _, c := range []struct {
-		b    any
-		want string
-	}{
-		{map[string]any{"k": []any{1, map[string]any{"x": "y"}}, "n": 1}, ""},
-		{map[string]any{"k": []any{1, map[string]any{"x": "z"}}, "n": 1}, "doc.k[1].x: y != z"},
-		{map[string]any{"k": []any{1}, "n": 1}, "doc.k: [1 map[x:y]] != [1]"},
-		{map[string]any{"k": []any{1, map[string]any{"x": "y"}}}, "doc.n: 1 != <nil>"},
-		{map[string]any{"k": []any{1, map[string]any{"x": "y"}}, "n": 1, "extra": true}, "doc.extra: <nil> != true"},
-		{[]any{}, "doc: map[k:[1 map[x:y]] n:1] != []"},
-	} {
-		assert.Equal(t, c.want, FirstDiff("doc", a, c.b))
-	}
-	assert.Equal(t, "", FirstDiff("", 1, 1))
-	assert.Equal(t, ": 1 != 1.5", FirstDiff("", 1, 1.5))
-}
-
 func TestReviewerDisputesEveryCandidate(t *testing.T) {
 	r := &Reviewer{Change: map[string]any{"confidence": "low"}}
 	reply, err := r.Complete("", `{"candidate": {"candidate_id": "c1"}}`)

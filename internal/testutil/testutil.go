@@ -1,17 +1,13 @@
 // Package testutil holds the helpers every package's tests share: throwaway skill packages, a
-// finding filter, a monkeypatch-style variable swap, the corpus-cache walkers and the fixture
+// finding filter, a monkeypatch-style variable swap, the symlink helper and the fixture
 // reviewer.
 package testutil
 
 import (
 	"encoding/json"
-	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
-	"reflect"
-	"slices"
-	"strings"
 	"testing"
 
 	"github.com/traceforce/skill-xray/internal/findings"
@@ -68,62 +64,6 @@ func SymlinkOrSkip(t testing.TB, target, link string) {
 	}
 }
 
-// LaneFailed reports a vector-less opengrep-* finding (its to_dict map): a timing-dependent engine
-// failure, compared by message prefix only, that leaves no comparable taint evidence on either side
-// (00-overview section 7).
-func LaneFailed(f map[string]any) bool {
-	rule, _ := f["rule"].(string)
-	return f["vector"] == any("") && strings.HasPrefix(rule, "opengrep-")
-}
-
-// PresenceOnlyDiagnostic reports a finding whose evidence.reason is a presence-only parse
-// diagnostic (parse.md R6): its detail text differs between the engines and feeds the artifact
-// context digests, which the harness compares by presence (known_divergences.json), so the
-// byte-for-byte gates skip the package.
-func PresenceOnlyDiagnostic(f map[string]any) bool {
-	ev, _ := f["evidence"].(map[string]any)
-	reason, _ := ev["reason"].(string)
-	return slices.Contains([]string{"config_parse_error", "shell_error_region", "parse_crash", "frontmatter_parse_error"}, reason)
-}
-
-// MessagePrefix is a failure-path message or context error up to its last ": ", the part before
-// the Python exception class name the two sides never share (00-overview section 7).
-func MessagePrefix(s string) string {
-	if i := strings.LastIndex(s, ": "); i >= 0 {
-		return s[:i]
-	}
-	return s
-}
-
-// FirstDiff is the first differing JSON path between two generic documents, or "".
-func FirstDiff(path string, a, b any) string {
-	switch x := a.(type) {
-	case map[string]any:
-		if y, ok := b.(map[string]any); ok {
-			keys := maps.Clone(x)
-			maps.Copy(keys, y)
-			for _, k := range slices.Sorted(maps.Keys(keys)) {
-				if d := FirstDiff(path+"."+k, x[k], y[k]); d != "" {
-					return d
-				}
-			}
-			return ""
-		}
-	case []any:
-		if y, ok := b.([]any); ok && len(x) == len(y) {
-			for i := range x {
-				if d := FirstDiff(fmt.Sprintf("%s[%d]", path, i), x[i], y[i]); d != "" {
-					return d
-				}
-			}
-			return ""
-		}
-	}
-	if !reflect.DeepEqual(a, b) {
-		return fmt.Sprintf("%s: %.200s != %.200s", path, fmt.Sprint(a), fmt.Sprint(b))
-	}
-	return ""
-}
 
 // Reviewer is tests/test_llm_apply.py::Reviewer: an LLM client that disputes every candidate it is
 // shown (per-field overrides in Change) and answers an advisory request benignly; every parsed
