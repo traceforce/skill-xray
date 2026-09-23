@@ -822,9 +822,6 @@ var presentationalHTML = map[string]bool{
 
 var globalHTMLAttrs = map[string]bool{"class": true, "dir": true, "id": true, "lang": true, "role": true, "title": true}
 
-// urlHTMLAttrs are the modelled attributes whose value is a URL.
-var urlHTMLAttrs = map[string]bool{"href": true, "src": true, "cite": true}
-
 // urlNamedHTMLAttrs name a reference wherever they appear; on a tag outside the modelled set the
 // reference is content the link model never saw, whatever form the value takes.
 var urlNamedHTMLAttrs = map[string]bool{"href": true, "src": true, "srcset": true, "data": true, "poster": true,
@@ -1137,7 +1134,7 @@ func (h *htmlInspector) startTag(tag string, norm [][2]string, start int) {
 	for _, a := range norm {
 		switch {
 		case known && (globalHTMLAttrs[a[0]] || tagHTMLAttrs[tag][a[0]]):
-			if urlHTMLAttrs[a[0]] && activeScheme(a[1]) {
+			if urlNamedHTMLAttrs[a[0]] && activeScheme(a[1]) {
 				h.fully = false
 			}
 		case strings.HasPrefix(a[0], "on") || activeScheme(a[1]):
@@ -1194,9 +1191,14 @@ func activeScheme(s string) bool {
 	return false
 }
 
+// spacelessScripts are the scripts written without word spacing, so a run of their letters is
+// text the space count never sees.
+var spacelessScripts = []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul, unicode.Thai}
+
 // attrCarriesContent reports a value outside the modelled set that is more than a layout token:
 // a URL among its comma-separated candidates, or at least two words of letters, whatever
-// punctuation surrounds them.
+// punctuation surrounds them. A token of four or more letters in a script without word spacing
+// counts as two words, while a hyphen or underscore joined identifier stays one token.
 func attrCarriesContent(v string) bool {
 	for _, c := range strings.Split(v, ",") {
 		compact := compactURL(c)
@@ -1207,7 +1209,16 @@ func attrCarriesContent(v string) bool {
 	words := 0
 	for _, f := range pytext.Fields(v) { // the Python whitespace set, so U+001C to U+001F separate words too
 		f = strings.TrimFunc(f, unicode.IsPunct) // sentence punctuation around a word; a digit still makes it a token
-		if utf8.RuneCountInString(f) >= 2 && strings.IndexFunc(f, func(r rune) bool { return !unicode.IsLetter(r) }) < 0 {
+		spaceless := 0
+		for _, r := range f {
+			if unicode.In(r, spacelessScripts...) {
+				spaceless++
+			}
+		}
+		switch {
+		case spaceless >= 4:
+			words += 2
+		case utf8.RuneCountInString(f) >= 2 && strings.IndexFunc(f, func(r rune) bool { return !unicode.IsLetter(r) }) < 0:
 			words++
 		}
 	}
@@ -1235,6 +1246,9 @@ func cssUnescape(v string) string {
 		return m[1:]
 	})
 }
+
+// cssStringRE captures a quoted CSS string, which functions such as image-set carry a URL in.
+var cssStringRE = regexp.MustCompile(`"([^"]*)"|'([^']*)'`)
 
 // cssURLRE captures the argument of a CSS url(), quoted or bare, up to its closing quote or paren.
 var cssURLRE = regexp.MustCompile(`(?i)url\(\s*['"]?([^'")]*)`)
@@ -1283,8 +1297,14 @@ func withoutURLIgnored(s string) string {
 // url() arguments are read from the decoded whole value first, since a data URL carries its own
 // `;`; the declarations are split on the raw value so escapes keep their meaning, then decoded.
 func styleCarriesContent(v string) bool {
-	for _, m := range cssURLRE.FindAllStringSubmatch(cssUnescape(v), -1) {
+	decoded := cssUnescape(v)
+	for _, m := range cssURLRE.FindAllStringSubmatch(decoded, -1) {
 		if arg := strings.TrimSpace(m[1]); attrCarriesContent(arg) || activeScheme(arg) {
+			return true
+		}
+	}
+	for _, m := range cssStringRE.FindAllStringSubmatch(decoded, -1) { // a URL in any quoted string, image-set included
+		if arg := strings.TrimSpace(m[1] + m[2]); attrCarriesContent(arg) || activeScheme(arg) {
 			return true
 		}
 	}

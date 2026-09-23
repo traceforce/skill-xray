@@ -248,9 +248,11 @@ link models never saw):
   `xlink:href`, `ping`) or when its value is a URL (`://`, a leading `//` or a scheme followed
   directly by its payload, which a CSS `name: value` declaration is not) or holds at
   least two words of letters (runes, split on Python's whitespace set, with the punctuation around a
-  token trimmed first); the ASCII tab, newline and carriage return, which URL parsing ignores, are
+  token trimmed first; a token holding four or more Han, Hiragana, Katakana, Hangul or Thai letters,
+  scripts written without word spacing, counts as two words, and a hyphen or underscore joined
+  identifier such as `nav-menu` stays one token); the ASCII tab, newline and carriage return, which URL parsing ignores, are
   removed before the scheme test while spaces stay. The scheme and URL tests run on every comma-separated
-  candidate of the value, since `srcset` names several; a `style` value has every `url()` argument of its
+  candidate of the value, since `srcset` names several; a `style` value has every `url()` argument and every quoted string of its
   decoded form (line continuations removed, escapes resolved) tested as a URL, then is split per `;` on the raw value (a `;` inside a quoted string,
   or after a backslash, does not split) and each declaration's value, decoded, is read with the
   property name before its `:` ignored. An unknown tag stops here. `code`/`pre` push onto
