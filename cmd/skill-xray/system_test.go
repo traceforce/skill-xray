@@ -47,7 +47,7 @@ func TestSubcommandsKeepUsageErrors(t *testing.T) {
 		{"scan", "accepts 1 arg"},
 		{"scan a b", "accepts 1 arg"},
 		{"scan pkg --output ", "non-empty path"},
-		{"system-scan extra", "unknown command"},
+		{"system-scan extra", "skill-xray system-scan --root <dir>"},
 		{"system-scan --output ", "non-empty path"},
 		{"pkg --analyze", "unknown command"},
 		{"--json", "unknown flags --json"},
@@ -69,8 +69,8 @@ func TestSystemScanConsoleAndReport(t *testing.T) {
 	rc, stdout, stderr := cli(t, "system-scan", "--root", systemRoot(t), "--output", target)
 	require.Equal(t, 0, rc, stderr)
 	assert.Empty(t, stderr)
-	assert.Contains(t, stdout, "CLEAN     seen=1   analyzed=1   cov=100.0%  ")
-	assert.Contains(t, stdout, "BLOCKING  seen=1   analyzed=1   cov=100.0%  ")
+	assert.Contains(t, stdout, "CLEAN     seen=1   read=1   cov=100.0%  ")
+	assert.Contains(t, stdout, "BLOCKING  seen=1   read=1   cov=100.0%  ")
 	assert.Contains(t, stdout, "report: "+target+"\n")
 	assert.True(t, strings.HasSuffix(stdout, "packages: 2, blocking: 1, with findings: 0, clean: 1, incomplete: 0, discovery exceptions: 0\n"), stdout)
 	doc := sarifDoc(t, target)
@@ -103,7 +103,7 @@ func TestSystemScanEmptyRoot(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "system.sarif")
 	rc, stdout, stderr := cli(t, "system-scan", "--root", t.TempDir(), "--output", target)
 	assert.Equal(t, 0, rc)
-	assert.Empty(t, stderr)
+	assert.Contains(t, stderr, "note: no skill packages found under ")
 	assert.True(t, strings.HasSuffix(stdout, "packages: 0, blocking: 0, with findings: 0, clean: 0, incomplete: 0, discovery exceptions: 0\n"), stdout)
 	assert.Equal(t, []any{}, at(sarifDoc(t, target), "runs"))
 }

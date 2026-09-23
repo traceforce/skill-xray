@@ -180,7 +180,23 @@ func ruleName(rid string) string {
 
 // describe is the finding's title followed by its vector, tier and CWE identifiers, so a reader
 // of the report has the whole classification in words without the vector registry.
+// diagnosticText describes the vectorless rules, which report on the analysis itself.
+var diagnosticText = map[string]string{
+	"analysis-incomplete":     "A file or code block the scanner read but could not analyse; the message states the reason. Not a security finding.",
+	"coverage-note":           "A file the scanner skipped or could not model, with the reason. Informational, not a security finding.",
+	"opengrep-analysis-error": "The OpenGrep engine could not fully analyse a selected code block; the message carries the engine's error. Not a security finding.",
+	"opengrep-unavailable":    "Shipped code was selected for the code lane but no usable OpenGrep engine was found; run skill-xray install-opengrep. Not a security finding.",
+	"opengrep-unverified":     "The OpenGrep executable named for the code lane did not match the pinned release, so shipped code was not analysed. Not a security finding.",
+	"findings-capped":         "The analyzer reached its cap on emitted findings; further findings of that kind were not recorded.",
+	"llm-unavailable":         "The LLM lane did not complete; the deterministic findings stand. Not a security finding.",
+}
+
 func describe(f map[string]any) string {
+	if v, _ := f["vector"].(string); v == "" {
+		if rule, _ := f["rule"].(string); diagnosticText[rule] != "" {
+			return diagnosticText[rule]
+		}
+	}
 	text := title(f)
 	var tags []string
 	if v, _ := f["vector"].(string); v != "" {
@@ -793,7 +809,7 @@ func IsWithinSource(path, root string) bool {
 // package is never scanned as part of it.
 func CheckTarget(target string, roots ...string) (string, error) {
 	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return "", errors.New("SARIF output must be outside the scanned package")
+		return "", errors.New("Report must be outside the scanned package")
 	}
 	target, err := Resolve(target)
 	if err != nil {
@@ -805,14 +821,14 @@ func CheckTarget(target string, roots ...string) (string, error) {
 			return "", err
 		}
 		if IsWithinSource(target, root) {
-			return "", errors.New("SARIF output must be outside the scanned package")
+			return "", errors.New("Report must be outside the scanned package")
 		}
 	}
 	if info, err := os.Stat(target); err == nil && !info.Mode().IsRegular() {
-		return "", errors.New("SARIF output must be a regular file")
+		return "", errors.New("Report must be a regular file")
 	}
 	if info, err := os.Stat(filepath.Dir(target)); err != nil || !info.IsDir() {
-		return "", errors.New("SARIF output directory is missing or not a directory: " + filepath.ToSlash(filepath.Dir(target)))
+		return "", errors.New("Report directory is missing or not a directory: " + filepath.ToSlash(filepath.Dir(target)))
 	}
 	return target, nil
 }

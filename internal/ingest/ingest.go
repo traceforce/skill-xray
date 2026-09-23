@@ -584,7 +584,10 @@ func Discover(roots []string) Discovery {
 		}
 		rootStat, err := stat(base)
 		if err != nil {
-			if explicit || !errors.Is(err, fs.ErrNotExist) {
+			switch {
+			case explicit && errors.Is(err, fs.ErrNotExist):
+				exceptions = append(exceptions, discoveryEntry("root_missing", posix(base)))
+			case explicit || !errors.Is(err, fs.ErrNotExist):
 				exceptions = append(exceptions, discoveryError(err, base))
 			}
 			continue

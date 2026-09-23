@@ -15,12 +15,14 @@ import (
 	"io"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"unicode"
 
 	"github.com/spf13/cobra"
 
+	"github.com/traceforce/skill-xray/internal/correlate"
 	"github.com/traceforce/skill-xray/internal/findings"
 	"github.com/traceforce/skill-xray/internal/ingest"
 	"github.com/traceforce/skill-xray/internal/llm"
@@ -86,6 +88,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		},
 	}
 	root.SetVersionTemplate("skill-xray {{.Version}}\n")
+	root.CompletionOptions.DisableDefaultCmd = true // the README documents four subcommands; shell completion is not one of them
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.SetArgs(append([]string{}, argv...))
@@ -102,7 +105,12 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	system := &cobra.Command{
 		Use:   "system-scan",
 		Short: "Analyze every skill package under the known agent skill roots into one SARIF report.",
-		Args:  cobra.NoArgs,
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return errors.New("system-scan takes no positional argument; to scan the packages under a directory run: skill-xray system-scan --root <dir>")
+			}
+			return nil
+		},
 		RunE: func(c *cobra.Command, _ []string) (err error) {
 			rc, err = s.run(c.Flags().Changed, stdout, stderr)
 			return err
@@ -124,9 +132,9 @@ func run(argv []string, stdout, stderr io.Writer) int {
 // bind registers the scan flags.
 func (o *options) bind(c *cobra.Command) {
 	f := c.Flags()
-	f.StringVarP(&o.output, "output", "o", defaultReport, "write the validated SARIF report here; the path must be outside the scanned package")
-	f.StringVar(&o.policy, "policy", "", "explicit scoped operator policy applied to the report's dispositions")
-	f.StringVar(&o.opengrepBin, "opengrep-bin", "", "explicit pinned OpenGrep binary")
+	f.StringVarP(&o.output, "output", "o", defaultReport, "write the validated SARIF report here; the path must be outside the scanned package and its directory must exist")
+	f.StringVar(&o.policy, "policy", "", "scoped operator policy JSON (version skill-xray/scoped-policy/v1) that suppresses or demotes named results; a regular file outside the scanned package")
+	f.StringVar(&o.opengrepBin, "opengrep-bin", "", "OpenGrep 1.29.0 executable for the code lane; it must match the pinned size and SHA-256, with no fallback to the cache")
 	o.llmFlags.bind(c)
 }
 
@@ -136,9 +144,9 @@ func (l *llmFlags) bind(c *cobra.Command) {
 	f.BoolVar(&l.llm, "llm", false, "also run the opt-in LLM adjudication pass (semantic prompt injection). "+
 		"SENDS THE TEXT of the scanned skill files to the configured third-party LLM provider, so do not use "+
 		"it on confidential packages. Requires SKILLXRAY_LLM_PROVIDER and an API key in the environment")
-	f.BoolVar(&l.llmShadow, "llm-shadow", false, "review static candidates only, without additive SXV-038 detection; requires --llm")
-	f.BoolVar(&l.llmReview, "llm-review", false, "annotate disputed findings without removing or downgrading them; requires --llm")
-	f.BoolVar(&l.llmAdditive, "llm-additive", false, "also run SXV-038 after LLM review, using the remaining shared budget")
+	f.BoolVar(&l.llmShadow, "llm-shadow", false, "review the static text-pattern candidates (SXV-028 to SXV-031) as shadow proposals only; requires --llm, excludes --llm-review, and turns the semantic SXV-038 check off unless --llm-additive is given")
+	f.BoolVar(&l.llmReview, "llm-review", false, "review the static text-pattern candidates and annotate a validated dispute as llm-disputed without removing or downgrading it; requires --llm, excludes --llm-shadow, and turns the semantic SXV-038 check off unless --llm-additive is given")
+	f.BoolVar(&l.llmAdditive, "llm-additive", false, "also run the semantic SXV-038 check after the review, within the same shared budget; requires --llm-shadow or --llm-review")
 	f.BoolVar(&l.llmApply, "llm-apply", false, "let a validated llm-disputed review demote that text-pattern finding to low "+
 		"in the correlated results (audited as corrected, never removed); requires --llm-review")
 }
@@ -165,7 +173,7 @@ func (l *llmFlags) client() (llm.Completer, error) {
 		return nil, err
 	}
 	if cfg == nil {
-		return nil, errors.New("--llm needs SKILLXRAY_LLM_PROVIDER and an API key in the environment")
+		return nil, errors.New("--llm needs SKILLXRAY_LLM_PROVIDER and SKILLXRAY_LLM_API_KEY (or the vendor's own key variable) in the environment")
 	}
 	return buildClient(*cfg), nil
 }
@@ -220,10 +228,11 @@ func explainIncomplete(w io.Writer, name string, report *scan.ScanReport) bool {
 // and the reviews sent or held back with the reason, so a run that never called the model cannot
 // pass for one that did.
 type llmSummary struct {
-	configured, calls, failures, sent int
-	unavailable, advisoryOff          bool
-	reason                            string // the first failure's reason seen
-	held                              map[string]int
+	configured, calls, failures, sent    int
+	unavailable, advisoryOn, advisoryOff bool
+	judgeOn                              bool
+	reason                               string // the first failure's reason seen
+	held                                 map[string]int
 }
 
 func (s *llmSummary) add(report *scan.ScanReport) {
@@ -238,7 +247,9 @@ func (s *llmSummary) add(report *scan.ScanReport) {
 		s.reason = r
 	}
 	s.unavailable = s.unavailable || pytext.Truthy(u["unavailable"])
+	s.advisoryOn = s.advisoryOn || pytext.Truthy(u["advisory_enabled"])
 	s.advisoryOff = s.advisoryOff || !pytext.Truthy(u["advisory_enabled"])
+	s.judgeOn = s.judgeOn || pytext.Truthy(u["judge_enabled"])
 	decisions := report.Shadow
 	if report.ReviewMode {
 		decisions = report.Dispositions
@@ -261,7 +272,7 @@ func (s *llmSummary) line(w io.Writer) {
 	if s.configured == 0 {
 		return
 	}
-	fmt.Fprintf(w, "llm: %d model calls", s.calls)
+	fmt.Fprintf(w, "llm: %d model call%s", s.calls, plural(s.calls))
 	if s.failures > 0 {
 		fmt.Fprintf(w, ", %d failed", s.failures)
 		if s.reason != "" {
@@ -271,11 +282,17 @@ func (s *llmSummary) line(w io.Writer) {
 	if s.unavailable {
 		fmt.Fprint(w, ", provider unavailable")
 	}
-	if s.advisoryOff {
-		fmt.Fprint(w, "; semantic pass off under review, add --llm-additive to run it")
+	switch {
+	case s.advisoryOff:
+		fmt.Fprint(w, "; semantic check (SXV-038) skipped in review mode, add --llm-additive to run it")
+	case s.advisoryOn && !s.unavailable:
+		fmt.Fprint(w, "; semantic check (SXV-038) ran")
 	}
-	if s.sent > 0 || len(s.held) > 0 {
+	if s.judgeOn {
 		fmt.Fprintf(w, "; reviews sent %d", s.sent)
+		if s.sent == 0 && len(s.held) == 0 {
+			fmt.Fprint(w, " (no eligible text-pattern candidates)")
+		}
 		if len(s.held) > 0 {
 			parts, total := []string{}, 0
 			for _, k := range slices.Sorted(maps.Keys(s.held)) {
@@ -286,6 +303,13 @@ func (s *llmSummary) line(w io.Writer) {
 		}
 	}
 	fmt.Fprintln(w)
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // count reads a usage counter, which the session keeps as an int.
@@ -301,7 +325,7 @@ func count(v any) int {
 
 // verdictLine is the one console line per package: the verdict, the ledger counts and the name.
 func verdictLine(w io.Writer, verdict string, l ingest.Ledger, name string) {
-	fmt.Fprintf(w, "%-8s  seen=%-3d analyzed=%-3d cov=%5.1f%%  %s\n", verdict, l.ArtifactsSeen, l.ArtifactsAnalyzed, float64(l.CoveragePercent), name)
+	fmt.Fprintf(w, "%-8s  seen=%-3d read=%-3d cov=%5.1f%%  %s\n", verdict, l.ArtifactsSeen, l.ArtifactsAnalyzed, float64(l.CoveragePercent), name)
 }
 
 // main is "scan" after argument parsing; a returned error is a usage error.
@@ -349,8 +373,25 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 	}
 	ledger := ingest.BuildLedger(p)
 	verdictLine(stdout, reportHeadline(report), ledger, console(pkg))
-	if ledger.ArtifactsSeen == 0 {
+	switch {
+	case ledger.ArtifactsSeen == 0:
 		fmt.Fprintf(stderr, "note: no files found under %s\n", console(pkg))
+	case !slices.ContainsFunc(parsed.Artifacts, func(a *parse.Artifact) bool { return strings.EqualFold(filepath.Base(a.Rel), "SKILL.md") }):
+		fmt.Fprintf(stderr, "note: no SKILL.md found under %s; nothing was evaluated as a skill manifest\n", console(pkg))
+	}
+	if o.policy != "" && report.Correlation != nil { // a CLEAN produced by a suppression is visible as such
+		suppressed, demoted := 0, 0
+		for _, r := range report.Correlation.Results {
+			if r.Decision != nil && r.DecisionProvenance == "operator-policy" {
+				switch r.Disposition {
+				case "suppressed":
+					suppressed++
+				case "corrected":
+					demoted++
+				}
+			}
+		}
+		fmt.Fprintf(stdout, "policy: %d suppressed, %d demoted\n", suppressed, demoted)
 	}
 	var lane llmSummary
 	lane.add(report)
@@ -401,7 +442,11 @@ func (o *options) preflight(pkg string) (map[string]any, error) {
 	if source != "" && (policy == source || sameFile(policy, source) || sarif.IsWithinSource(policy, source)) {
 		return nil, errors.New("Operator policy must be outside the scanned package")
 	}
-	if st, err := os.Stat(policy); err != nil || !st.Mode().IsRegular() {
+	st, err := os.Stat(policy)
+	if err != nil {
+		return nil, errors.New("Operator policy not found: " + filepath.ToSlash(o.policy))
+	}
+	if !st.Mode().IsRegular() {
 		return nil, errors.New("Operator policy must be a regular file")
 	}
 	f, err := os.Open(policy) // #nosec G304 -- the operator's policy path, checked by preflight before this read
@@ -423,6 +468,9 @@ func (o *options) preflight(pkg string) (map[string]any, error) {
 	doc, ok := v.(map[string]any)
 	if !ok {
 		return nil, errors.New("Operator policy must be an object")
+	}
+	if version, _ := doc["version"].(string); version != correlate.PolicyVersion { // before the scan, not as a context error after it
+		return nil, fmt.Errorf("Operator policy version %q is not supported; expected %s", version, correlate.PolicyVersion)
 	}
 	return doc, nil
 }

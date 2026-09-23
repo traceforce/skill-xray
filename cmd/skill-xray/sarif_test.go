@@ -244,7 +244,27 @@ func TestUnwritableReportTargetFailsBeforeIngest(t *testing.T) {
 		noIngest(t)
 		rc, _, stderr := cli(t, "scan", root, "--output", target)
 		assert.Equal(t, 2, rc, name)
-		assert.Contains(t, stderr, "cannot prepare SARIF: SARIF output ", name)
+		assert.Contains(t, stderr, "cannot prepare SARIF: Report ", name)
+	}
+}
+
+// A policy with an unsupported version, or a policy path that does not exist, is refused before the
+// input is read, with the value and the expectation named.
+func TestPolicyVersionAndPresenceAreCheckedBeforeIngest(t *testing.T) {
+	root := testutil.MakePackage(t, map[string]string{"SKILL.md": manifest})
+	target := filepath.Join(t.TempDir(), "r.sarif")
+	old := filepath.Join(t.TempDir(), "old.json")
+	require.NoError(t, os.WriteFile(old, []byte(`{"version":"skill-xray/scoped-policy/v0","decisions":[]}`), 0o644))
+	for name, policy := range map[string]string{"version": old, "missing": filepath.Join(t.TempDir(), "absent.json")} {
+		noScan(t)
+		noIngest(t)
+		rc, _, stderr := cli(t, "scan", root, "--output", target, "--policy", policy)
+		assert.Equal(t, 2, rc, name)
+		if name == "version" {
+			assert.Contains(t, stderr, `Operator policy version "skill-xray/scoped-policy/v0" is not supported; expected skill-xray/scoped-policy/v1`, stderr)
+		} else {
+			assert.Contains(t, stderr, "Operator policy not found: ", stderr)
+		}
 	}
 }
 

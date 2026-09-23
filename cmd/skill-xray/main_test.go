@@ -124,12 +124,17 @@ func TestRootTakesNoPackage(t *testing.T) {
 }
 
 // An empty directory is not called clean in silence: the verdict line shows seen=0 and stderr
-// says no files were found.
+// says no files were found; a directory with files but no SKILL.md says nothing was evaluated
+// as a manifest.
 func TestEmptyPackageIsNoted(t *testing.T) {
 	rc, stdout, stderr, _ := scanned(t, t.TempDir())
 	assert.Equal(t, 0, rc)
 	assert.Contains(t, stdout, "seen=0")
 	assert.Contains(t, stderr, "note: no files found under ")
+	_, _, stderr, _ = scanned(t, testutil.MakePackage(t, map[string]string{"notes.txt": "just notes\n"}))
+	assert.Contains(t, stderr, "note: no SKILL.md found under ")
+	_, _, stderr, _ = scanned(t, testutil.MakePackage(t, map[string]string{"SKILL.md": manifest}))
+	assert.NotContains(t, stderr, "note:")
 }
 
 // A control character in a package name must not forge or hide console lines: the argument is
@@ -192,7 +197,8 @@ func TestLLMPathWiresTheClientIntoTheReport(t *testing.T) {
 	assert.Equal(t, true, usage["advisoryEnabled"])
 	assert.GreaterOrEqual(t, usage["calls"].(float64), 1.0)
 	assert.Contains(t, stdout, "\nllm: ", "the console states what the lane did")
-	assert.NotContains(t, stdout, "llm: 0 model calls")
+	assert.NotContains(t, stdout, "llm: 0 model call")
+	assert.Contains(t, stdout, "semantic check (SXV-038) ran")
 }
 
 // A failing provider is named on the console and in the report with its sanitised reason, so a
@@ -233,7 +239,7 @@ func TestApplyEndToEndKeepsFindingsAndCorrectsResult(t *testing.T) {
 	testutil.Swap(t, &buildClient, client(&testutil.Reviewer{}))
 	rc, stdout, _, doc := scanned(t, root, "--llm", "--llm-review", "--llm-apply")
 	require.Equal(t, 0, rc)
-	assert.Contains(t, stdout, "semantic pass off under review", stdout)
+	assert.Contains(t, stdout, "semantic check (SXV-038) skipped in review mode", stdout)
 	assert.Contains(t, stdout, "reviews sent", stdout)
 	rs := results(doc)
 	i := slices.IndexFunc(rs, func(r any) bool { return at(r, "properties", "sxv") == "SXV-028" })

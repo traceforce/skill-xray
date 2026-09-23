@@ -27,9 +27,9 @@ type systemOptions struct {
 
 func (s *systemOptions) bind(c *cobra.Command) {
 	f := c.Flags()
-	f.StringVarP(&s.output, "output", "o", defaultReport, "write one validated SARIF document here, with one run per package; the path must be outside every scanned package")
+	f.StringVarP(&s.output, "output", "o", defaultReport, "write one validated SARIF document here, with one run per package; the path must be outside every scanned package and its directory must exist")
 	f.StringVar(&s.opengrepBin, "opengrep-bin", "", "explicit pinned OpenGrep binary")
-	f.StringArrayVar(&s.roots, "root", nil, "scan the packages under this directory instead of the known agent skill roots (repeatable)")
+	f.StringArrayVar(&s.roots, "root", nil, "scan the packages under this directory instead of the known agent skill roots (repeatable); it must exist and be a directory")
 	s.llmFlags.bind(c)
 }
 
@@ -136,6 +136,13 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 	} else {
 		fmt.Fprintf(stdout, "report: %s\n", console(s.output))
 	}
+	if len(d.Paths) == 0 {
+		where := "the known agent skill roots"
+		if s.roots != nil {
+			where = console(strings.Join(s.roots, ", "))
+		}
+		fmt.Fprintf(stderr, "note: no skill packages found under %s\n", where)
+	}
 	fmt.Fprintf(stdout, "packages: %d, blocking: %d, with findings: %d, clean: %d, incomplete: %d, discovery exceptions: %d\n",
 		len(d.Paths), counts["BLOCKING"], counts["FINDINGS"], counts["CLEAN"], counts["incomplete"], len(d.LedgerExceptions))
 	if reportGaps(stderr, d) {
@@ -180,12 +187,7 @@ func writeRuns(doc map[string]any, target string, packageRoots []string) error {
 // with control characters escaped. Plugin layouts reuse folder names (access/configure), so the
 // path, not the name, identifies a package. The prefix is guarded so "/home/al" does not
 // abbreviate "/home/alice/x".
-func display(p string) string {
-	if home, _ := os.UserHomeDir(); home != "" && (p == home || strings.HasPrefix(p, home+string(os.PathSeparator))) {
-		p = "~" + p[len(home):]
-	}
-	return console(p)
-}
+func display(p string) string { return console(p) } // the discovered path as it is, so it pastes into scan
 
 // reportGaps prints every traversal gap discovery hit and reports whether there was one.
 func reportGaps(stderr io.Writer, d ingest.Discovery) bool {

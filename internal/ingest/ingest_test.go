@@ -446,7 +446,7 @@ func TestDiscoverReportsAMissingNamedRoot(t *testing.T) {
 	found := Discover([]string{"/no/such/skills/root/xyz"})
 	assert.Equal(t, []string{}, found.Paths)
 	require.Len(t, found.LedgerExceptions, 1)
-	assert.Equal(t, "walk_error:FileNotFoundError", found.LedgerExceptions[0].ReasonCode)
+	assert.Equal(t, "root_missing", found.LedgerExceptions[0].ReasonCode)
 	assert.Contains(t, found.LedgerExceptions[0].Path, "xyz")
 	file := filepath.Join(t.TempDir(), "SKILL.md")
 	require.NoError(t, os.WriteFile(file, []byte("---\nname: t\n---\n"), 0o644))

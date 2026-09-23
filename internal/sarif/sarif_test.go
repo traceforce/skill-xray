@@ -632,12 +632,22 @@ func TestNativeRuleTitleUsesExistingRegistryTitle(t *testing.T) {
 
 // A rule is named in Pascal case and described with its vector, tier and CWE identifiers in
 // words, so the report reads without the registry.
+// A diagnostic rule tells a reader without the registry that it reports on the analysis, not on
+// the skill.
+func TestDiagnosticRulesDescribeThemselves(t *testing.T) {
+	for rule := range diagnosticText {
+		assert.Contains(t, describe(map[string]any{"rule": rule, "vector": ""}), ".", rule)
+	}
+	assert.Contains(t, describe(map[string]any{"rule": "analysis-incomplete", "vector": ""}), "Not a security finding")
+}
+
 func TestRuleNameAndDescription(t *testing.T) {
 	assert.Equal(t, "PreprocInlineBang", ruleName("skill-xray/preproc-inline-bang"))
 	assert.Equal(t, "AnalysisIncomplete", ruleName("skill-xray/analysis-incomplete"))
 	assert.Equal(t, "Load-time preprocessing execution (SXV-001, tier T2, CWE-94, CWE-829)", describe(map[string]any{
 		"title": "Load-time preprocessing execution", "vector": "SXV-001", "tier": "T2", "cwe": []string{"CWE-94", "CWE-829"}}))
-	assert.Equal(t, "analysis-incomplete", describe(map[string]any{"rule": "analysis-incomplete"}))
+	assert.Equal(t, diagnosticText["analysis-incomplete"], describe(map[string]any{"rule": "analysis-incomplete"}))
+	assert.Equal(t, "some-gap", describe(map[string]any{"rule": "some-gap"}), "an unlisted diagnostic keeps its rule id")
 }
 
 // test_directive_preserves_known_column (4 rows)
