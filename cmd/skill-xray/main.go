@@ -252,8 +252,11 @@ func (s *llmSummary) add(report *scan.ScanReport) {
 	s.configured++
 	s.calls += count(u["calls"])
 	for _, f := range report.Findings {
-		if f.Rule == "llm-truncated" || f.Rule == "llm-budget" {
+		switch f.Rule {
+		case "llm-truncated":
 			s.partial++
+		case "llm-budget": // one note stands for this file and every later one
+			s.partial += max(1, count(f.Evidence["unchecked"]))
 		}
 	}
 	s.failures += count(u["failures"])

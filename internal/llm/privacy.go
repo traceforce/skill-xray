@@ -20,7 +20,7 @@ var (
 	pemRE = regexp.MustCompile(`(?s)-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----.*?` +
 		`(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|\z)`)
 	// Python's Unicode \b becomes a captured boundary character that the replacement re-emits.
-	keyRE  = regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{16,}`) // vendor API keys by shape, whatever surrounds them
+	keyRE  = regexp.MustCompile(`(^|[^A-Za-z0-9])sk-[A-Za-z0-9_-]{16,}`) // vendor API keys by shape, after any non-alphanumeric, an underscore included
 	authRE = regexp.MustCompile(`(?i)(^|[^\pL\pN_])((?:Bearer|Basic)[ \t]+[A-Za-z0-9._~+/=-]+)`)
 	urlRE  = regexp.MustCompile(`(?i)(^|[^a-z0-9+.-])([a-z][a-z0-9+.-]*://[^<>"'` + pytext.SpaceBody + `]+)`)
 	// regexp2: the lookbehind must see the char before the search start; three lookaheads.
@@ -38,7 +38,7 @@ func Redact(text string) string {
 	})
 	text = supplychain.ReplaceSecrets(text, func(string) string { return "[REDACTED]" })
 	text = authRE.ReplaceAllString(text, "${1}[REDACTED]")
-	text = keyRE.ReplaceAllString(text, "[REDACTED]")
+	text = keyRE.ReplaceAllString(text, "${1}[REDACTED]")
 	text = redactNamed(text)
 	var b strings.Builder
 	last := 0

@@ -271,7 +271,7 @@ func Build(p *parse.Package, r *scan.ScanReport) (map[string]any, error) {
 	doc := r.ToMap()
 	correlation, _ := doc["correlation"].(map[string]any)
 	if errs, _ := correlation["errors"].([]any); len(errs) > 0 {
-		return nil, errors.New("Cannot emit final SARIF after correlation failure; raw report retained")
+		return nil, errors.New("Cannot emit SARIF after a correlation failure")
 	}
 	identities := map[string]string{}
 	links, _ := correlation["links"].([]any)
