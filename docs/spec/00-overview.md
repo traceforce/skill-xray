@@ -516,7 +516,7 @@ func run(argv []string, stdout, stderr io.Writer) int
 | `golang.org/x/net` | v0.55.0 (cached, go 1.25) | parse (`html` tokenizer with `Raw()` offsets replacing `html.parser`) | New. Rung 3 fails (no stdlib HTML tokenizer); rung 5: x/net is the maintained tokenizer with byte-accurate `Raw()`; hand-writing a tolerant tokenizer is ~300 lines with its own edge cases. |
 
 Vendored source (not a module): `internal/uba` = x/text `unicode/bidi/core.go` + `bracket.go`
-(BSD-3; add the x/text LICENSE to `THIRD_PARTY_NOTICES`), because the public `Paragraph.Order()`
+(BSD-3; the x/text LICENSE is in `NOTICE`), because the public `Paragraph.Order()`
 cannot force base level 0 nor apply L2 (obfuscation §4.2).
 
 Removed from `go.mod` (`go mod tidy` will drop them): `github.com/owenrumney/go-sarif/v2` (the
