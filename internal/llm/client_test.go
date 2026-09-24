@@ -325,7 +325,7 @@ func TestDeadlineCoversBodyRead(t *testing.T) {
 	assert.Less(t, time.Since(start), 5*time.Second)
 }
 
-// The Python retry delay: Retry-After in 0..60 wins, else min(0.5 * 2**attempt, 8).
+// The retry delay: Retry-After in 0..10 wins, else min(0.5 * 2**attempt, 8).
 func TestRetryDelay(t *testing.T) {
 	assert.Equal(t, 5*time.Second, retryDelay("5", 0))
 	assert.Equal(t, 500*time.Millisecond, retryDelay("61", 0))
