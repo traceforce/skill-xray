@@ -784,10 +784,10 @@ func Resolve(path string) (string, error) {
 	}
 }
 
-// IsWithinSource is is_within_source over resolved paths: lexically under root, or an existing
-// ancestor with the filesystem identity of root or of a directory inside it (case and Unicode
-// aliases the lexical test misses, and a Windows junction, which the resolver does not follow,
-// pointing into the package).
+// IsWithinSource is is_within_source over resolved paths: lexically under root, an existing
+// ancestor with root's filesystem identity (case and Unicode aliases the lexical test misses),
+// or a link on the path that the resolver did not follow, a Windows junction, leading to a
+// directory inside root; only such a link makes the directories under root be read.
 func IsWithinSource(path, root string) bool {
 	if rel, err := filepath.Rel(root, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return true
@@ -796,18 +796,21 @@ func IsWithinSource(path, root string) bool {
 	if err != nil {
 		return false
 	}
-	var inside []os.FileInfo // the identities of every directory under root, read once, on the first miss
+	var inside []os.FileInfo // the identities of every directory under root, read once, at the first link
+	walked := false
 	for p := path; ; p = filepath.Dir(p) {
 		if info, err := os.Stat(p); err == nil && info.IsDir() {
 			if os.SameFile(info, rootInfo) {
 				return true
 			}
-			if inside == nil {
-				inside = directoriesUnder(root)
-			}
-			for _, d := range inside {
-				if os.SameFile(info, d) {
-					return true
+			if l, err := os.Lstat(p); err == nil && l.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+				if !walked {
+					inside, walked = directoriesUnder(root), true
+				}
+				for _, d := range inside {
+					if os.SameFile(info, d) {
+						return true
+					}
 				}
 			}
 		}
