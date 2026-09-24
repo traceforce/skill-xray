@@ -583,7 +583,7 @@ func dialTLSDefault(ctx context.Context, ip netip.Addr, port int, host string) (
 	if err != nil {
 		return nil, err
 	}
-	tc := tls.Client(raw, &tls.Config{ServerName: host})
+	tc := tls.Client(raw, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
 	if err := tc.HandshakeContext(ctx); err != nil {
 		raw.Close()
 		return nil, err
