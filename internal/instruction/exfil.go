@@ -1055,7 +1055,7 @@ func exfilFindings(a *parse.Artifact, manifestByDir map[string]*parse.Artifact) 
 	kinds := slices.Sorted(maps.Keys(kindSet))
 	sorted := append([]credHit(nil), credHits...)
 	slices.SortStableFunc(sorted, func(a, b credHit) int { return cmp.Or(cmp.Compare(a.line, b.line), cmp.Compare(a.col, b.col)) })
-	tokens := make([]any, len(sorted)) // D7: evidence lists are []any
+	tokens := make([]any, len(sorted)) // evidence lists are []any with integral numbers as int
 	for i, h := range sorted {
 		tokens[i] = map[string]any{"kind": h.kind, "line": h.line, "text": h.text}
 	}

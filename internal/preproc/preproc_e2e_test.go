@@ -15,8 +15,8 @@ import (
 )
 
 // The tests/test_preproc.py literals run through the real pipeline, as _findings and
-// _package_findings do there. The fallback-path cases (_MD.parse monkeypatch) are parse's
-//; test_preprocessing_check_is_registered is ported in internal/checks.
+// _package_findings do there. The fallback-path cases (_MD.parse monkeypatch) belong to the
+// parse package's tests; test_preprocessing_check_is_registered is ported in internal/checks.
 
 const fm = "---\nname: demo\n---\n"
 

@@ -433,8 +433,8 @@ func TestIntify(t *testing.T) {
 	}
 }
 
-// JSONView is the to_dict shape: structs and typed slices become generic maps and lists with D7
-// numbers, and the view never aliases its input.
+// JSONView is the to_dict shape: structs and typed slices become generic maps and lists with
+// integral numbers as int, and the view never aliases its input.
 func TestJSONView(t *testing.T) {
 	type row struct {
 		Line *int     `json:"line"`

@@ -237,7 +237,7 @@ internal/
   scan                   run every check over a parsed package
   metadata               the tool version
   pytext, pyast, pep508, uba
-                         Python, CPython AST, PEP 508 and Unicode bidi semantics the port reproduces
+                         Python text, CPython AST, PEP 508 and Unicode bidi semantics reproduced in Go
   testutil               helpers shared by every package's tests
 tools/bench/             the benchmark runner and scorer
 docs/reporting.md        result identity, operator decisions and SARIF semantics

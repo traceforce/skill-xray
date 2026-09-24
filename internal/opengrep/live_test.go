@@ -323,7 +323,7 @@ func TestLiveNativeArgumentPropagationClosesCommonWrapperBypasses(t *testing.T) 
 }
 
 // tests/test_opengrep_parity.py::test_live_opengrep_keeps_four_incomplete_analysis_contracts_visible
-// (the OpenGrep half; the analysis-incomplete reasons come from checks.Coverage, core.md §1.6).
+// (the OpenGrep half; the analysis-incomplete reasons come from checks.Coverage).
 func TestLiveOpengrepKeepsFourIncompleteAnalysisContractsVisible(t *testing.T) {
 	fs := live(t, map[string]string{
 		"deep.py":     "import os, sys\ncmd = sys.argv[1]" + strings.Repeat(" + 'a'", 300) + "\nos.system(cmd)\n",

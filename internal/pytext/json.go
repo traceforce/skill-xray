@@ -34,7 +34,7 @@ func Dumps(v any, indent int) string {
 	return b.String()
 }
 
-// Intify is the D7 normalisation of a UseNumber-decoded tree, in place: a json.Number becomes
+// Intify normalises a UseNumber-decoded tree in place: a json.Number becomes
 // int when integral and within int64, else float64.
 func Intify(v any) any {
 	switch x := v.(type) {
@@ -56,7 +56,7 @@ func Intify(v any) any {
 	return v
 }
 
-// JSONView is json.loads(json.dumps(v)) with D7 numbers: the generic, deep-copied view of a
+// JSONView is json.loads(json.dumps(v)) with integral numbers as int: the generic, deep-copied view of a
 // JSON-encodable value (the to_dict shape); it panics where Marshal fails.
 func JSONView(v any) any {
 	raw, err := json.Marshal(v)

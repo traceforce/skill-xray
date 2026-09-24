@@ -97,7 +97,8 @@ var mdParser = func() parser.Parser {
 // mdMaxMarkers bounds what goldmark parses quadratically on one line: nested container markers
 // ('>' and list bullets, each opening a container) and link openers with unclosed destinations.
 // 600k leading '>' never finish where markdown-it-py takes 4 s, so a line past the bound is
-// refused as markdown_too_complex: a documented divergence no real skill reaches.
+// refused as markdown_too_complex; the bound is an accepted difference from the Python scanner
+// that no real skill reaches.
 const mdMaxMarkers = 10000
 
 // markdownTooComplex returns the count of the first line over mdMaxMarkers, else 0.

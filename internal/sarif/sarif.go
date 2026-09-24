@@ -457,7 +457,7 @@ func strs(v any) []string {
 	return out
 }
 
-// toInt is the integer a JSON number carries, decoded as int (D7) or as a plain json.Unmarshal float64.
+// toInt is the integer a JSON number carries, decoded as int or as a plain json.Unmarshal float64.
 func toInt(v any) int {
 	switch x := v.(type) {
 	case int:

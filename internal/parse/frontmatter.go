@@ -105,7 +105,7 @@ func fmLoad(a *Artifact, block string) (code string) {
 	// scanner takes chr(code). The error names only the line the scalar starts on, so each
 	// surrogate escape is probed as \z, which yaml.v3 rejects only inside a double-quoted scalar,
 	// and the one it rejected is rewritten in place (columns move, lines do not): a high+low pair
-	// to its code point, a lone half to U+FFFD, the accepted divergence of parse.md §5.
+	// to its code point, a lone half to U+FFFD, an accepted difference from Python's YAML loader.
 	for from := 0; err != nil && strings.Contains(err.Error(), invalidEscape); {
 		m := surrogateEscRE.FindStringSubmatchIndex(block[from:])
 		if m == nil {

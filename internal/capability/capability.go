@@ -235,7 +235,7 @@ func (t *Triad) declarations(m *parse.Artifact) {
 }
 
 // Build is build_triads: one triad per governing manifest, plus "" for observations no
-// manifest governs, keyed by manifest rel. Observations are the engines' records (D9);
+// manifest governs, keyed by manifest rel. Observations are the engines' records;
 // coverage is the raw finding list, whose preprocessing hits become execution observations and
 // whose vector-less gaps become limitations of the manifests they touch.
 func Build(p *parse.Package, observations []map[string]any, coverage []findings.Finding) map[string]*Triad {
