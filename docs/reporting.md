@@ -50,7 +50,7 @@ Start from the exact identity fields in a reviewed result:
 }
 ```
 
-All four scope fields must match. No vector-wide ignore, wildcard identity, implicit
+All four scope fields must match. In the SARIF report a result's `rule_id` is its `ruleId`, its `path` is the first location's `artifactLocation.uri`, its `fingerprint` is the value under `partialFingerprints["skill-xray/evidence/v1"]` and its `context_digest` is `properties.contextDigest`; the console line `policy: N suppressed, N demoted, N of N decisions matched no result` says whether each decision found its result. No vector-wide ignore, wildcard identity, implicit
 acceptance or previous LLM rejection is supported. For `action: "demote"`, supply a lower
 `effective_severity`; this produces an audited `corrected` result without removing it.
 

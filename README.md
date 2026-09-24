@@ -47,7 +47,7 @@ Analyze one skill package and write its report.
 ./bin/skill-xray scan ./my-skill --output ../reports/my-skill.sarif --policy ../reviewed-policy.json
 ```
 
-The target may be a directory, a single file such as `SKILL.md`, a `.zip` archive, an `https://` URL, or a remote git repository (an `https://` or `ssh://` address ending in `.git`, or a `git@` or `git://` address); a local directory is always scanned as a directory, whatever its name, and a local file is a single-file input. Directory, file and zip inputs are fully offline. URL and git inputs are the only ones that use the network; each enforces size, count and SSRF limits and fails closed. Tar archives are refused; unpack them and scan the directory.
+The target may be a directory, a single file such as `SKILL.md`, a `.zip` archive, an `https://` URL, or a remote git repository, an `https://` address ending in `.git`; `ssh://`, `git@` and `git://` addresses and plain `http://` URLs are refused. A local directory is always scanned as a directory, whatever its name, and a local file is a single-file input. Directory, file and zip inputs are fully offline. URL and git inputs are the only ones that use the network; each enforces size, count and SSRF limits and fails closed. Tar archives are refused; unpack them and scan the directory.
 
 | flag | effect |
 |---|---|
@@ -189,7 +189,8 @@ The walker reads a package it does not trust, so:
 - it does not follow a symlink or an NTFS junction out of the package directory;
 - it does not open a FIFO, device, or socket (a `read()` on a FIFO never returns);
 - it inventories shipped compiled and native code (`.pyc`/`.pyo`/`.pyd`, `.so`/`.dylib`/`.dll`/`.exe`/`.wasm`, `.jar`/`.class`/`.node`, and versioned `.so.N`) instead of dropping it, as one `analysis-incomplete` result per file with the reason `shipped_compiled`, so a full text-coverage number can never hide unreviewable executable code;
-- it surfaces active or opaque content (`.svg`, `.pdf`, nested archives) as a `coverage-note` result per file with the reason `unreviewable_content` and counts it against coverage;
+- it surfaces opaque content with the reason `unreviewable_content` and counts it against coverage: an `.svg` is a low `coverage-note`, since an agent never reads it as instructions and its bytes still pass the forensics lane, while a `.pdf` or a nested archive is a high `analysis-incomplete` gap that exits 2, since an agent may be told to read or unpack it;
+- raw HTML in a Markdown file that the prose model cannot project is a high `analysis-incomplete` gap with the reason `raw_html` when it carries text or a link label, since an agent reads that text while the scanner could not; markup alone, such as a centred image block, is a low note;
 - it records every file it does not read, with a reason, and a skipped file lowers the reported coverage unless it is an inert asset, compiled code, or an excluded cache directory (a bundled `node_modules`/`dist`/`build` does lower it).
 
 Every SARIF run carries the ledger's coverage status under `coverage`, `no-reported-gap` or `incomplete`, and each analysis gap is a result of its own, so a report can never look complete while files went unread.
