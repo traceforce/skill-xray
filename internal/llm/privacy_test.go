@@ -132,5 +132,5 @@ func TestEverySecretShapeIsRedacted(t *testing.T) {
 func TestKeyShapesAndControlCharactersDoNotReachTheReport(t *testing.T) {
 	assert.Equal(t, "token [REDACTED] end", Redact("token sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123 end"))
 	assert.Equal(t, "token [REDACTED] end", Redact("token sk-proj-abcdefghijklmnop end"))
-	assert.Equal(t, "a b c d", printable("a‮bc​d"))
+	assert.Equal(t, "a b c d", printable("a\u202eb\x01c\u200bd"))
 }
