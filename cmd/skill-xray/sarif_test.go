@@ -164,6 +164,14 @@ func TestCLIExactOperatorPolicySuppressesOnlyInAudit(t *testing.T) {
 	require.Len(t, results, 1)
 	assert.Equal(t, "suppressed", at(results[0], "properties", "disposition"))
 	assert.NotEmpty(t, at(results[0], "suppressions"))
+	assert.Contains(t, stdout, "policy: 1 suppressed, 0 demoted, 0 of 1 decisions matched no result\n", stdout)
+	stale := policyFor(report.Correlation.Results[0])
+	stale["decisions"].([]any)[0].(map[string]any)["context_digest"] = strings.Repeat("0", 64) // the package changed since the decision
+	doc, _ = json.Marshal(stale)
+	require.NoError(t, os.WriteFile(policy, doc, 0o644))
+	_, stdout, _ = cli(t, "scan", root, "--output", target, "--policy", policy)
+	assert.True(t, strings.HasPrefix(stdout, "BLOCKING"), stdout)
+	assert.Contains(t, stdout, "policy: 0 suppressed, 0 demoted, 1 of 1 decisions matched no result\n", stdout)
 }
 
 func TestCLIBadPathsAndPolicyFailWithoutOverwrite(t *testing.T) {
