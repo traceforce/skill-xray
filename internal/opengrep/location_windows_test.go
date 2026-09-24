@@ -55,3 +55,10 @@ func TestLinkOnWindowsPathIsJudgedByItsOwnRights(t *testing.T) {
 	require.NoError(t, err)
 	assert.NoError(t, trustedComponent(target, dirInfo))
 }
+
+// A UNC engine path reaches the system under the UNC device, not as an invalid extended path.
+func TestExtendedPathKeepsUNCShares(t *testing.T) {
+	assert.Equal(t, `\\?\UNC\server\share\opengrep.exe`, extendedPath(`\\server\share\opengrep.exe`))
+	assert.Equal(t, `\\?\C:\Tools\opengrep.exe`, extendedPath(`C:\Tools\opengrep.exe`))
+	assert.Equal(t, `\\?\UNC\server\share`, extendedPath(`\\?\UNC\server\share`))
+}

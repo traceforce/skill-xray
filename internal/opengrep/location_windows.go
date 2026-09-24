@@ -100,10 +100,7 @@ func trustedComponent(path string, info os.FileInfo) error {
 // through a handle opened without following it; addressed by name, the system would describe
 // the link's target instead.
 func securityOf(path string) (*windows.SECURITY_DESCRIPTOR, error) {
-	if !strings.HasPrefix(path, `\\?\`) {
-		path = `\\?\` + path
-	}
-	name, err := windows.UTF16PtrFromString(path)
+	name, err := windows.UTF16PtrFromString(extendedPath(path))
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +111,18 @@ func securityOf(path string) (*windows.SECURITY_DESCRIPTOR, error) {
 	}
 	defer windows.CloseHandle(h)
 	return windows.GetSecurityInfo(h, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+}
+
+// extendedPath is the path in the extended-length form the system takes without parsing it;
+// a UNC path keeps its server and share under the UNC device.
+func extendedPath(path string) string {
+	switch {
+	case strings.HasPrefix(path, `\\?\`) || strings.HasPrefix(path, `\\.\`):
+		return path
+	case strings.HasPrefix(path, `\\`):
+		return `\\?\UNC\` + path[2:]
+	}
+	return `\\?\` + path
 }
 
 // currentUser is the SID of this process's user.
