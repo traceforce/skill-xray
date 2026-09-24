@@ -1,4 +1,7 @@
-Third-party notices
+skill-xray
+Copyright 2026 Traceforce
+
+This product includes software developed by The Go Authors, as described below.
 
 internal/uba/core.go and internal/uba/bracket.go are copied from golang.org/x/text v0.42.0
 (unicode/bidi/core.go, unicode/bidi/bracket.go), with only the package clause and one lint directive changed. They are

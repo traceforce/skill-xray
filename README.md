@@ -12,9 +12,13 @@ Every verdict comes from deterministic rules whose behaviour is pinned by the te
 
 ### Prerequisites
 
-- [Go 1.26](https://go.dev/dl/); the module pins the `go1.26.6` toolchain and fetches it when needed
+- [Go 1.26](https://go.dev/dl/), only to build from source; the module pins the `go1.26.6` toolchain and fetches it when needed
 - `git` on the PATH, only when scanning a git repository target
 - OpenGrep 1.29.0, only for the code lane; `skill-xray install-opengrep` fetches the pinned build
+
+### Download a release
+
+Each tag `v<version>` publishes archives for Linux (amd64, arm64), macOS (amd64, arm64) and Windows (amd64) with their SHA-256 sums on the [Releases](https://github.com/traceforce/skill-xray/releases) page. Verify the archive against `SHA256SUMS`, unpack it and put the binary on the PATH; `skill-xray install-opengrep` then fetches the pinned engine for the code lane, which `scan` and `system-scan` run over bundled Python, shell, JavaScript and TypeScript.
 
 ### Build from Source
 
@@ -205,7 +209,7 @@ make fuzz      # every fuzz target for FUZZTIME (default 30s); a crasher lands i
 make clean     # remove bin/
 ```
 
-CI runs the Go job on Linux, macOS and Windows. Each OS exercises a different part: the symlink tests run on Linux and macOS, the NTFS junction test runs on Windows, and macOS is where filenames arrive in a different Unicode form (NFD instead of NFC).
+A pushed tag `v<version>` runs the release workflow: it checks that the tag names the version in `internal/metadata`, runs the CI matrix on the tagged commit on Linux, macOS and Windows, and only then builds the five platform archives and publishes them with their checksums. CI runs the Go job on Linux, macOS and Windows. Each OS exercises a different part: the symlink tests run on Linux and macOS, the NTFS junction test runs on Windows, and macOS is where filenames arrive in a different Unicode form (NFD instead of NFC).
 
 ### Benchmark
 

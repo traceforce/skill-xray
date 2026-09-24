@@ -18,11 +18,9 @@ const (
 	FSTRING_START
 	FSTRING_MIDDLE
 	FSTRING_END
-	COMMENT // tokenize-module stream only (extra tokens)
-	NL
 )
 
-var kindNames = [...]string{"ENDMARKER", "NAME", "NUMBER", "STRING", "NEWLINE", "INDENT", "DEDENT", "OP", "FSTRING_START", "FSTRING_MIDDLE", "FSTRING_END", "COMMENT", "NL"}
+var kindNames = [...]string{"ENDMARKER", "NAME", "NUMBER", "STRING", "NEWLINE", "INDENT", "DEDENT", "OP", "FSTRING_START", "FSTRING_MIDDLE", "FSTRING_END"}
 
 func (k TokenKind) String() string { return kindNames[k] }
 

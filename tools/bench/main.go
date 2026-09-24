@@ -114,11 +114,11 @@ func usage() {
 	os.Exit(2)
 }
 
-func cmdRun(args []string) error {
+func cmdRun(args []string) (err error) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	data := fs.String("data", "", "the split export, one JSON record per line")
 	out := fs.String("out", "", "where to write one JSON row per record")
-	workers := fs.Int("workers", max(4, runtime.NumCPU()-1), "concurrent scans")
+	workers := fs.Int("workers", min(8, max(4, runtime.NumCPU()-1)), "concurrent scans; each may start an engine process holding up to half a gigabyte, so the default stops at eight")
 	work := fs.String("work", "", "parent of the scratch directory (default: the system temp dir)")
 	opengrepBin := fs.String("opengrep-bin", "", "an explicit OpenGrep binary (default: the pinned one)")
 	fs.Parse(args)
@@ -140,7 +140,11 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { // a staged text left on disk is a failed run, whatever the rows say
+		if e := os.RemoveAll(dir); e != nil {
+			err = errors.Join(err, fmt.Errorf("scratch directory %s was not removed: %w", dir, e))
+		}
+	}()
 	if err := os.MkdirAll(filepath.Dir(*out), 0o755); err != nil {
 		return err
 	}
@@ -180,6 +184,9 @@ func cmdRun(args []string) error {
 	}
 feed:
 	for _, rec := range records {
+		if ctx.Err() != nil {
+			break // a ready send must not win the select over a finished context
+		}
 		select {
 		case next <- rec:
 		case <-ctx.Done():
@@ -213,8 +220,8 @@ func loadRecords(path string) ([]record, error) {
 		if err := dec.Decode(&rec); err != nil {
 			return err
 		}
-		if rec.Label == nil || (*rec.Label != 0 && *rec.Label != 1) {
-			return fmt.Errorf("benchmark_id %q: label must be 0 or 1", rec.BenchmarkID)
+		if err := checkLabel(rec.BenchmarkID, rec.Label); err != nil {
+			return err
 		}
 		rec.record.Label = *rec.Label
 		out = append(out, rec.record)
@@ -223,17 +230,39 @@ func loadRecords(path string) ([]record, error) {
 	return out, err
 }
 
+// loadRows reads the rows a run wrote, or rows an LLM review rewrote, with the same label check
+// as loadRecords: a row without a label of 0 or 1 is refused, never counted as benign, and so is
+// a repeated identity, which a score would count twice and a comparison only once.
 func loadRows(path string) ([]row, error) {
 	var out []row
+	seen := map[string]bool{}
 	err := decodeLines(path, func(dec *json.Decoder) error {
-		var r row
+		var r struct {
+			row
+			Label *int `json:"label"`
+		}
 		if err := dec.Decode(&r); err != nil {
 			return err
 		}
-		out = append(out, r)
+		if err := checkLabel(r.BenchmarkID, r.Label); err != nil {
+			return err
+		}
+		if seen[r.BenchmarkID] {
+			return fmt.Errorf("benchmark_id %q appears twice", r.BenchmarkID)
+		}
+		seen[r.BenchmarkID] = true
+		r.row.Label = *r.Label
+		out = append(out, r.row)
 		return nil
 	})
 	return out, err
+}
+
+func checkLabel(id string, label *int) error {
+	if label == nil || (*label != 0 && *label != 1) {
+		return fmt.Errorf("benchmark_id %q: label must be 0 or 1", id)
+	}
+	return nil
 }
 
 // decodeLines calls decode once per JSON value in the file, up to a clean end of input; any
@@ -301,7 +330,7 @@ func scanOne(work string, rec record, opengrepExe string) (r row) {
 		r.AttackCategories = []string{}
 	}
 	if rec.Text == "" {
-		r.Error = ptr("record has no skill_text")
+		r.Error = ptr("record has no text")
 		return r
 	}
 	root := filepath.Join(work, dirName(rec.BenchmarkID))
@@ -311,7 +340,13 @@ func scanOne(work string, rec record, opengrepExe string) (r row) {
 			r.Error = ptr(fmt.Sprintf("%T: %.200v", p, p))
 		}
 		r.ElapsedMs = time.Since(start).Milliseconds()
-		os.RemoveAll(root)
+		if err := os.RemoveAll(root); err != nil { // the text stayed on disk, so the row is not a clean one
+			msg := "cleanup: " + err.Error()
+			if r.Error != nil {
+				msg = *r.Error + "; " + msg
+			}
+			r.Error = ptr(msg)
+		}
 	}()
 	fail := func(err error) row {
 		r.Error = ptr(err.Error())
@@ -323,13 +358,26 @@ func scanOne(work string, rec record, opengrepExe string) (r row) {
 	if err := os.WriteFile(filepath.Join(root, "SKILL.md"), []byte(rec.Text), 0o644); err != nil {
 		return fail(err)
 	}
+	if err := scanRoot(root, opengrepExe, &r); err != nil {
+		return fail(err)
+	}
+	return r
+}
+
+// scanRoot scans the one-file package staged at root into r. Nothing read and nothing skipped
+// means the file vanished after it was written, as an antivirus quarantine removes it; that is
+// an error, not a clean scan.
+func scanRoot(root, opengrepExe string, r *row) error {
 	p := ingest.BuildPackage(root)
 	ledger := ingest.BuildLedger(p)
 	r.LedgerSkipped, r.Analyzed = ledger.ArtifactsSkipped, ledger.ArtifactsAnalyzed
+	if r.Analyzed == 0 && r.LedgerSkipped == 0 {
+		return errors.New("empty package: SKILL.md was not found")
+	}
 	for _, f := range scan.Scan(parse.Parse(p), nil, opengrepExe) {
 		r.Findings = append(r.Findings, findingRow(f))
 	}
-	return r
+	return nil
 }
 
 func findingRow(f findings.Finding) finding {
