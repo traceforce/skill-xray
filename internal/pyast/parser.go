@@ -22,7 +22,7 @@ func Parse(src string) (*Module, error) {
 	if strings.IndexByte(src, 0) >= 0 {
 		return nil, &SyntaxError{Kind: "SyntaxError", Msg: "source code string cannot contain null bytes"}
 	}
-	p := &parser{t: newTokenizer(src, false), memo: map[memoKey]memoEntry{}}
+	p := &parser{t: newTokenizer(src), memo: map[memoKey]memoEntry{}}
 	m, err := p.run()
 	if err != nil {
 		return nil, err

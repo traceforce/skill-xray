@@ -61,11 +61,11 @@ func verdicts(effective bool) []verdict {
 // a verified true negative: an error, an oversize or skipped file, a high-severity note without
 // a vector, or an LLM lane that gave no verdict.
 func incomplete(r row) bool {
-	if r.Error != nil && *r.Error != "" || r.Oversize || r.LedgerSkipped != 0 {
+	if r.Error != nil || r.Oversize || r.LedgerSkipped != 0 { // any recorded error, even an empty one, is a scan that did not complete
 		return true
 	}
 	return slices.ContainsFunc(r.Findings, func(f finding) bool {
-		return f.Vector == "" && (f.Severity == "high" || llmFailed[f.Rule])
+		return f.Vector == "" && (highOrCritical[f.Severity] || llmFailed[f.Rule]) // the CLI's exit rule
 	})
 }
 
@@ -110,22 +110,18 @@ func ratio(a, b int) float64 {
 // counter counts keys and lists them by count, ties by key, so a report does not depend on the
 // order the rows were written in.
 type counter struct {
-	order []string
-	n     map[string]int
+	n map[string]int
 }
 
 func (c *counter) add(k string) {
 	if c.n == nil {
 		c.n = map[string]int{}
 	}
-	if _, seen := c.n[k]; !seen {
-		c.order = append(c.order, k)
-	}
 	c.n[k]++
 }
 
 func (c *counter) mostCommon(limit int) []string {
-	keys := slices.Clone(c.order)
+	keys := slices.Collect(maps.Keys(c.n))
 	slices.SortFunc(keys, func(a, b string) int { return cmp.Or(cmp.Compare(c.n[b], c.n[a]), cmp.Compare(a, b)) })
 	if limit > 0 && len(keys) > limit {
 		keys = keys[:limit]
@@ -201,6 +197,17 @@ func hot(fs []finding, effective bool) map[string]bool {
 	return out
 }
 
+// errKind is the label an error is counted under: the text before the first colon, as our own
+// "kind: detail" messages are written. A filesystem error puts its operation and a scratch path
+// there, and the path differs on every row, so only the operation is kept.
+func errKind(msg string) string {
+	kind, _, _ := strings.Cut(msg, ": ")
+	if op, _, ok := strings.Cut(kind, " "); ok && strings.ContainsAny(kind, `/\`) {
+		return op
+	}
+	return kind
+}
+
 func report(rows []row, title string, effective bool) string {
 	var b strings.Builder
 	line := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
@@ -223,8 +230,7 @@ func report(rows []row, title string, effective bool) string {
 		}
 		if r.Error != nil {
 			errs++
-			kind, _, _ := strings.Cut(*r.Error, ":")
-			errKinds.add(kind)
+			errKinds.add(errKind(*r.Error))
 		}
 		if r.Oversize {
 			oversize++
@@ -234,18 +240,16 @@ func report(rows []row, title string, effective bool) string {
 	line("")
 	line("records: %d  (malicious %d / benign %d)  errors: %d  oversize: %d", len(rows), malicious, benign, errs, oversize)
 	line("")
-	line("| verdict | TP | FP | TN | FN | precision | recall | F1 | FPR |")
-	line("|---|---|---|---|---|---|---|---|---|")
+	line("| verdict | TP | FP | TN | FN | unanalyzed | precision | recall | F1 | FPR |")
+	line("|---|---|---|---|---|---|---|---|---|---|")
 	vs := verdicts(effective)
 	for _, v := range vs {
 		m := metrics(rows, v.flagged)
-		line("| %s | %d | %d | %d | %d | %.2f%% | %.2f%% | %.2f%% | %.2f%% |", v.name, m.TP, m.FP, m.TN, m.FN,
+		line("| %s | %d | %d | %d | %d | %d | %.2f%% | %.2f%% | %.2f%% | %.2f%% |", v.name, m.TP, m.FP, m.TN, m.FN, m.Unanalyzed,
 			100*m.Precision, 100*m.Recall, 100*m.F1, 100*m.FPR)
 	}
-	if u := metrics(rows, vs[3].flagged).Unanalyzed; u > 0 {
-		line("")
-		line("benign records whose scan did not complete and that carry no finding, excluded from TN and FPR: %d", u)
-	}
+	line("")
+	line("unanalyzed: benign records whose scan did not complete and that carry no finding under that verdict, excluded from TN and FPR")
 	a := analyze(rows, vs[0].flagged, effective)
 	line("")
 	line("## Where the blocking false positives come from")
@@ -292,7 +296,7 @@ func report(rows []row, title string, effective bool) string {
 	for _, v := range slices.Sorted(maps.Keys(hits)) {
 		line("| %s | %s | %d | %d |", v, tiers[v], hits[v][1], hits[v][0])
 	}
-	if len(errKinds.order) > 0 {
+	if len(errKinds.n) > 0 {
 		line("")
 		line("## Errors")
 		line("")
@@ -388,8 +392,13 @@ func compare(rows, base []row, effective bool) (string, error) {
 		line("| %s | %d | %d |", v, fb[v], fa[v])
 	}
 	var newTP, lostTP, newFP, fixedFP []row
+	oneSided := 0
 	for i := range order {
 		a, bf := after[i], before[i]
+		if incomplete(a) != incomplete(bf) { // a finding that appeared or vanished with the scan itself is not a detection change
+			oneSided++
+			continue
+		}
 		wasHit, isHit := blocking(bf.Findings), blocking(a.Findings)
 		switch {
 		case a.Label == 1 && isHit && !wasHit:
@@ -405,6 +414,9 @@ func compare(rows, base []row, effective bool) (string, error) {
 	line("")
 	line("newly caught malicious: %d | malicious lost: %d | benign FPs fixed: %d | new benign FPs: %d",
 		len(newTP), len(lostTP), len(fixedFP), len(newFP))
+	if oneSided > 0 {
+		line("records whose scan completed on one side only, left out of these transitions: %d", oneSided)
+	}
 	var carrier, cats counter
 	for _, a := range newTP {
 		for _, v := range slices.Sorted(maps.Keys(hot(a.Findings, effective))) {

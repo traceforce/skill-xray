@@ -7,8 +7,11 @@ import (
 	"github.com/traceforce/skill-xray/internal/testutil"
 )
 
-// fuzzPackage writes body at rel under root, ingests and parses the package, and fails on the
-// swallowed-panic diagnostic parse_crash (the only way a parser panic can surface).
+// fuzzPackage writes body at rel under root, ingests and parses the package, fails on the
+// swallowed-panic diagnostic parse_crash (the only way a parser panic can surface), then walks
+// the result the way the checks do: every artifact is indexed by its rel, every ref joins two
+// indexed artifacts, a governing manifest is a skill manifest, and a lifted target is a doc or
+// other artifact.
 func fuzzPackage(t *testing.T, root, rel, body string) {
 	testutil.FuzzFiles(t, root, []string{rel}, []byte(body))
 	out := Parse(ingest.BuildPackage(root))
@@ -17,7 +20,23 @@ func fuzzPackage(t *testing.T, root, rel, body string) {
 			t.Fatalf("parse_crash on %s: %s", e.Path, *e.Detail)
 		}
 	}
-	DumpIR(out)
+	index, lifted := ManifestIndex(out), LiftedTargets(out)
+	for _, a := range out.Artifacts {
+		if out.ByRel[a.Rel] != a {
+			t.Fatalf("ByRel does not index %s", a.Rel)
+		}
+		if m := GoverningManifest(index, a.Rel); m != nil && m.Kind != "skill_manifest" {
+			t.Fatalf("%s is governed by %s of kind %s", a.Rel, m.Rel, m.Kind)
+		}
+		if lifted[a.Rel] && a.Kind != "doc" && a.Kind != "other" {
+			t.Fatalf("%s of kind %s was lifted", a.Rel, a.Kind)
+		}
+	}
+	for _, r := range out.Refs {
+		if out.ByRel[r.From] == nil || out.ByRel[r.To] == nil {
+			t.Fatalf("ref from %s to %s names an artifact the package does not index", r.From, r.To)
+		}
+	}
 }
 
 // FuzzParsePackage exercises frontmatter, markdown and fenced code together through SKILL.md.
