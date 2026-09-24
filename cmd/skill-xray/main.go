@@ -229,6 +229,7 @@ func explainIncomplete(w io.Writer, name string, report *scan.ScanReport) bool {
 // pass for one that did.
 type llmSummary struct {
 	configured, calls, failures, sent    int
+	partial                              int // llm-truncated and llm-budget notes: files the model did not read whole
 	unavailable, advisoryOn, advisoryOff bool
 	judgeOn                              bool
 	reason                               string // the first failure's reason seen
@@ -242,6 +243,11 @@ func (s *llmSummary) add(report *scan.ScanReport) {
 	}
 	s.configured++
 	s.calls += count(u["calls"])
+	for _, f := range report.Findings {
+		if f.Rule == "llm-truncated" || f.Rule == "llm-budget" {
+			s.partial++
+		}
+	}
 	s.failures += count(u["failures"])
 	if r, _ := u["failure_reason"].(string); r != "" && s.reason == "" {
 		s.reason = r
@@ -287,6 +293,9 @@ func (s *llmSummary) line(w io.Writer) {
 		fmt.Fprint(w, "; semantic check (SXV-038) skipped in review mode, add --llm-additive to run it")
 	case s.advisoryOn && !s.unavailable:
 		fmt.Fprint(w, "; semantic check (SXV-038) ran")
+	}
+	if s.partial > 0 {
+		fmt.Fprintf(w, "; %d file%s not read whole by the model (size or budget), see the report", s.partial, plural(s.partial))
 	}
 	if s.judgeOn {
 		fmt.Fprintf(w, "; reviews sent %d", s.sent)

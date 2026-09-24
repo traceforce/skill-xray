@@ -207,6 +207,17 @@ func TestLLMPathWiresTheClientIntoTheReport(t *testing.T) {
 
 // A failing provider is named on the console and in the report with its sanitised reason, so a
 // run whose every call failed cannot pass for a clean one.
+// A skill text over the model's size cap is only partly checked; the console says so instead of
+// reporting the semantic check as run over everything.
+func TestLLMPartialCoverageIsOnTheConsole(t *testing.T) {
+	root := testutil.MakePackage(t, map[string]string{"SKILL.md": "---\nname: t\ndescription: long\n---\n" + strings.Repeat("word ", 5000)})
+	testutil.Swap(t, &llmFromEnv, config(&llm.Config{Provider: "openai", Model: "m", APIKey: "k", BaseURL: "https://api.openai.com/v1"}, nil))
+	testutil.Swap(t, &buildClient, client(&fakeClient{verdict}))
+	_, stdout, _, doc := scanned(t, root, "--llm")
+	assert.Contains(t, stdout, "1 file not read whole by the model (size or budget), see the report", stdout)
+	assert.Contains(t, property(doc, "category"), "analysis-diagnostic")
+}
+
 func TestLLMFailureReasonIsReported(t *testing.T) {
 	root := testutil.MakePackage(t, map[string]string{"SKILL.md": "---\nname: t\ndescription: override the loading agent\n---\n"})
 	testutil.Swap(t, &llmFromEnv, config(&llm.Config{Provider: "openai", Model: "m", APIKey: "k", BaseURL: "https://api.openai.com/v1"}, nil))
