@@ -31,3 +31,27 @@ func TestUntrustedWindowsLocationIsRefused(t *testing.T) {
 	_, err = verifyExecutable(candidate, a)
 	require.NoError(t, err)
 }
+
+// A link on the engine's path is judged by the rights that let its target be rewritten: a
+// junction that grants Users only the add-file right is refused, since that same bit rewrites a
+// reparse point, while a real directory with the same grant is accepted, since adding an entry
+// leaves the engine alone. Users is named by SID so icacls reads it in every locale.
+func TestLinkOnWindowsPathIsJudgedByItsOwnRights(t *testing.T) {
+	base := t.TempDir()
+	target := filepath.Join(base, "target")
+	require.NoError(t, os.Mkdir(target, 0o755))
+	link := filepath.Join(base, "link")
+	run := func(name string, args ...string) {
+		out, err := exec.Command(name, args...).CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	run("cmd", "/c", "mklink", "/J", link, target)
+	run("icacls", link, "/L", "/grant", "*S-1-5-32-545:(WD)") // the link itself: the right that re-points it
+	run("icacls", target, "/grant", "*S-1-5-32-545:(WD)")     // the directory: adding an entry leaves the engine alone
+	linkInfo, err := os.Lstat(link)
+	require.NoError(t, err)
+	assert.ErrorContains(t, trustedComponent(link, linkInfo), "is writable by S-1-5-32-545")
+	dirInfo, err := os.Stat(target)
+	require.NoError(t, err)
+	assert.NoError(t, trustedComponent(target, dirInfo))
+}
