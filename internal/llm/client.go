@@ -219,7 +219,7 @@ func unreachable(err error) error {
 
 // retryDelay is _retry_delay: a sane Retry-After (0..60 s) wins, else capped exponential backoff.
 func retryDelay(retryAfter string, attempt int) time.Duration {
-	if secs, err := strconv.Atoi(strings.TrimSpace(retryAfter)); err == nil && 0 <= secs && secs <= 60 {
+	if secs, err := strconv.Atoi(strings.TrimSpace(retryAfter)); err == nil && 0 <= secs && secs <= 10 { // a longer wait falls back to the backoff
 		return time.Duration(secs) * time.Second
 	}
 	return min(time.Second/2<<attempt, maxBackoff)

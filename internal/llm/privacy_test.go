@@ -126,3 +126,11 @@ func TestEverySecretShapeIsRedacted(t *testing.T) {
 		assert.Contains(t, redacted, text, secret)
 	}
 }
+
+// A vendor key of the sk- shape is redacted wherever it stands, and the model's free text loses its
+// control and format characters before it reaches the report.
+func TestKeyShapesAndControlCharactersDoNotReachTheReport(t *testing.T) {
+	assert.Equal(t, "token [REDACTED] end", Redact("token sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123 end"))
+	assert.Equal(t, "token [REDACTED] end", Redact("token sk-proj-abcdefghijklmnop end"))
+	assert.Equal(t, "a b c d", printable("a‮bc​d"))
+}

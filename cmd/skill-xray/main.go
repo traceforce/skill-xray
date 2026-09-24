@@ -208,8 +208,15 @@ func gap(f findings.Finding) bool {
 // explainIncomplete names on stderr what kept an analysis from completing, one line per cause,
 // so an exit 2 never arrives without a reason; it reports whether there was one.
 func explainIncomplete(w io.Writer, name string, report *scan.ScanReport) bool {
+	seen := map[string]bool{}
+	say := func(line string) {
+		if !seen[line] {
+			seen[line] = true
+			fmt.Fprintln(w, line)
+		}
+	}
 	for _, e := range report.ContextErrors {
-		fmt.Fprintf(w, "analysis incomplete: %s: %s\n", name, pytext.UnicodeEscape(e))
+		say("analysis incomplete: " + name + ": " + pytext.UnicodeEscape(e))
 	}
 	for _, f := range report.Findings {
 		if gap(f) {
@@ -217,7 +224,8 @@ func explainIncomplete(w io.Writer, name string, report *scan.ScanReport) bool {
 			if f.Path != "" {
 				where += " " + pytext.UnicodeEscape(f.Path)
 			}
-			fmt.Fprintf(w, "analysis incomplete: %s: %s: %s\n", name, where, pytext.UnicodeEscape(f.Message))
+			msg, _, _ := strings.Cut(f.Message, "\n") // the first line; an engine error can quote the source below it
+			say("analysis incomplete: " + name + ": " + where + ": " + pytext.UnicodeEscape(pytext.Head(msg, 200)))
 		}
 	}
 	return incomplete(report)
@@ -390,7 +398,10 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 	}
 	if o.policy != "" && report.Correlation != nil { // a CLEAN produced by a suppression is visible as such
 		suppressed, demoted := 0, 0
+		identities := map[[4]string]bool{}
 		for _, r := range report.Correlation.Results {
+			path, _ := r.Finding["path"].(string)
+			identities[[4]string{r.RuleID, path, r.Fingerprint, r.ContextDigest}] = true
 			if r.Decision != nil && r.DecisionProvenance == "operator-policy" {
 				switch r.Disposition {
 				case "suppressed":
@@ -400,7 +411,19 @@ func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.
 				}
 			}
 		}
-		fmt.Fprintf(stdout, "policy: %d suppressed, %d demoted\n", suppressed, demoted)
+		decisions, _ := policy["decisions"].([]any)
+		unmatched := 0
+		for _, d := range decisions { // a decision that names no result of this report did nothing
+			m, _ := d.(map[string]any)
+			key := [4]string{}
+			for i, f := range []string{"rule_id", "path", "fingerprint", "context_digest"} {
+				key[i], _ = m[f].(string)
+			}
+			if !identities[key] {
+				unmatched++
+			}
+		}
+		fmt.Fprintf(stdout, "policy: %d suppressed, %d demoted, %d of %d decisions matched no result\n", suppressed, demoted, unmatched, len(decisions))
 	}
 	var lane llmSummary
 	lane.add(report)

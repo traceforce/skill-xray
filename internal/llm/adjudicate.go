@@ -291,7 +291,7 @@ func Adjudicate(p *parse.Package, c Completer, maxFiles int) []findings.Finding 
 		verified := pytext.Strip(strings.ReplaceAll(quote, "[REDACTED]", "")) != "" &&
 			strings.Contains(pytext.Head(redacted, maxChars), quote) && strings.Contains(t.text, quote)
 		if s, ok := verdict["reason"].(string); ok {
-			reason = pytext.Head(Redact(s), 200)
+			reason = pytext.Head(printable(Redact(s)), 200)
 		}
 		if s, ok := verdict["severity"].(string); ok && strings.ToLower(s) == "low" {
 			severity = "low" // advisory cap: an LLM call with no mechanical anchor never exceeds medium
