@@ -813,7 +813,7 @@ func IsWithinSource(path, root string) bool {
 			}
 			l, err := os.Lstat(p)
 			link := err == nil && l.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0
-			if info.IsDir() && (link || otherVolume) {
+			if rootInfo.IsDir() && info.IsDir() && (link || otherVolume) { // a file named as a root has no directories to compare
 				if !walked {
 					inside, complete = directoriesUnder(root)
 					walked = true

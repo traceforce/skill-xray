@@ -26,9 +26,14 @@ import (
 	"github.com/traceforce/skill-xray/internal/pytext"
 )
 
-// exfilWindow bounds the preceding prose (code points) searched for the acquisition, and the
-// text before a delivery verb read for its negation, contrast and framing.
+// exfilWindow bounds the preceding prose (code points) searched for the acquisition.
 const exfilWindow = 4000
+
+// exfilWholeSentence is the longest sentence (bytes) whose text up to a delivery verb is read
+// whole for the negation, contrast, disclosure, second-person and framing checks; a run-on
+// sentence past it reads the last exfilWindow code points, so a block with no sentence end
+// stays bounded. Prose never reaches it.
+const exfilWholeSentence = 16384
 
 // exfilMaxChain bounds the addresses one connector's recipient chain collects, placeholders
 // included: a real recipient list is a few dozen at most, and a chain of thousands is a block
@@ -261,12 +266,13 @@ type recipientInfo struct {
 // each address's recipient and the sender-mark test between consecutive spans, read on demand,
 // so a block of thousands of deliveries never rereads them for every verb.
 type sentenceContext struct {
-	sentence string
-	x        *runeIndex
-	spans    [][]int
-	rcps     map[string]*recipientInfo
-	marks    []int8 // per span, a sender mark between the previous span and it: 0 unread, 1 yes, 2 no
-	capped   bool   // a chain reached exfilMaxChain with another address in reach
+	sentence  string
+	x         *runeIndex
+	spans     [][]int
+	rcps      map[string]*recipientInfo
+	marks     []int8 // per span, a sender mark between the previous span and it: 0 unread, 1 yes, 2 no
+	capped    bool   // a chain reached exfilMaxChain with another address in reach
+	truncated bool   // more delivery verbs than exfilMaxVerbs were left unread
 }
 
 func newSentenceContext(sentence string, x *runeIndex) *sentenceContext {
@@ -353,6 +359,9 @@ func exfilDeliveries(sc *sentenceContext) []delivery {
 		// context, so the last six bytes decide it; the whole prefix per verb was O(n²).
 		return pytext.WordBoundary(sentence, m[0]) && !exfilArticleRE.MatchString(sentence[max(0, m[0]-6):m[0]])
 	})
+	if len(verbs) > exfilMaxVerbs { // nothing past the budget is analysed, so nothing past it is read
+		verbs, sc.truncated = verbs[:exfilMaxVerbs], true
+	}
 	for _, v := range verbs {
 		vEnd := v[1]
 		limit := x.byte(x.rune(vEnd) + 120)
@@ -364,7 +373,12 @@ func exfilDeliveries(sc *sentenceContext) []delivery {
 			}
 		}
 	}
+	ditransitive := 0
 	for m, _ := exfilDitransRE.FindStringMatch(sentence); m != nil; m, _ = exfilDitransRE.FindNextMatch(m) {
+		if ditransitive++; ditransitive > exfilMaxVerbs {
+			sc.truncated = true
+			break
+		}
 		gap := m.GroupByName("gap").String()
 		out = append(out, delivery{m.Index, m.Index + m.Length, m.GroupByName("verb").String(),
 			&gap, "recipient-first delivery", m.GroupByName("addr").String(), m.Index + m.Length})
@@ -374,6 +388,9 @@ func exfilDeliveries(sc *sentenceContext) []delivery {
 		prev, _ := utf8.DecodeLastRuneInString(sentence[:m[0]])
 		return pytext.WordBoundary(sentence, m[0]) && (m[0] == 0 || !strings.ContainsRune("?&/;", prev))
 	})
+	if len(params) > exfilMaxVerbs {
+		params, sc.truncated = params[:exfilMaxVerbs], true
+	}
 	for _, m := range params {
 		out = append(out, delivery{x.rune(m[0]), x.rune(m[1]), "", nil,
 			"recipient parameter", sentence[m[2*addr]:m[2*addr+1]], x.rune(m[1])})
@@ -475,7 +492,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 			x, tx := indexRunes(sentence), indexRunes(s.text)
 			sc := newSentenceContext(sentence, x)
 			deliveries := exfilDeliveries(sc)
-			chainCapped = chainCapped || sc.capped
+			chainCapped, exhausted = chainCapped || sc.capped, exhausted || sc.truncated
 			verbs := map[[2]int]*verbContext{}
 			var wholeDisclosure, wholeTelemetry, wholePossessive *bool // the whole sentence, read once when a verb has no acquisition
 			once := func(cell **bool, re *regexp.Regexp) bool {
@@ -523,7 +540,14 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 					// Negation is judged sentence by sentence: an acquisition counts unless its own
 					// sentence negates it, and the delivery sentence must not negate or contrast it.
 					v.acquired, v.anyAcquisition = firstAcquisition(v.window)
-					v.sentenceBefore, v.throughVerb = lastRunes(x.cut(d.start), exfilWindow), lastRunes(x.cut(d.end), exfilWindow)
+					// The negation, contrast, disclosure, second-person and framing checks read the
+					// sentence up to the verb whole, once per verb; only a run-on sentence past
+					// exfilWholeSentence reads the last window, so a block with no sentence end stays
+					// bounded.
+					v.sentenceBefore, v.throughVerb = x.cut(d.start), x.cut(d.end)
+					if len(sentence) > exfilWholeSentence {
+						v.sentenceBefore, v.throughVerb = lastRunes(v.sentenceBefore, exfilWindow), lastRunes(v.throughVerb, exfilWindow)
+					}
 					if v.acquired != nil {
 						v.acqSentence = cutRunes(v.window, v.acquired.end)
 						if i := strings.LastIndex(v.acqSentence, ". "); i >= 0 {
