@@ -43,7 +43,7 @@ jobs:
         run: ./bin/skill-xray install-opengrep
         shell: bash
       - name: Format
-        run: test -z "$(gofmt -l ./cmd ./internal)"
+        run: test -z "$(gofmt -l ./cmd ./internal ./tools)"
         shell: bash
       - name: Lint
         if: runner.os == 'Linux'

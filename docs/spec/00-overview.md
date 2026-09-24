@@ -580,11 +580,11 @@ of this file.
    still valid inputs: both CLIs run them with production limits.
 2. `corpus/msb-test/<benchmark_id>/SKILL.md`: `msb_materialize.py --data <snapshot dir>
    --split test`. Reads `primary.parquet` (`benchmark_id`, `text`) and
-   `splits/source_disjoint.parquet` exactly as `benchmark/msb_run.py` does, checks the snapshot
+   `splits/source_disjoint.parquet` exactly as the Python runner did (`tools/bench run` reads only the JSONL export named by `--data`), checks the snapshot
    against `benchmark-reports/frozen-dataset/MSB_FROZEN.json` (`id_list_sha256.test` =
    `3cf59383…0b7bb`, 1,384 ids from `msb_frozen_ids.json`), writes each text with
    `encoding="utf-8", errors="surrogatepass", newline=""` into a directory named like
-   `msb_run.scan_one` does (`<sanitized id>-<sha1[:10]>`). `--split dev` (8,348) and `all`
+   `tools/bench` does (`<sanitized id>-<sha1[:10]>`). `--split dev` (8,348) and `all`
    (9,740) are the full-corpus modes the obfuscation and parse groups asked for. The snapshot is
    external (HF `ProtectSkills/MaliciousSkillBench` @ `d4b42ce…`); when `--data` is absent the
    MSB stage is reported as skipped, never as passed.
@@ -660,7 +660,7 @@ split), the harness reports, per source and per group:
   `test_final.jsonl` (records with `error != null` or `oversize` are excluded; the split has 0 of
   either). The Python-vs-frozen comparison validates the materialisation before the Go side is
   trusted; the Go-vs-frozen comparison is the published-figure check (P/R/FPR in
-  `test_final_score.md` must be reproduced by `benchmark/msb_score.py` fed with the Go output).
+  `test_final_score.md` must be reproduced by `tools/bench score` fed with the Go output).
 
 Output: `corpus/parity-report.md` (tables above, then every failed package with its first
 differing JSON path, the attributed group and both values) and `corpus/parity.jsonl` (one record

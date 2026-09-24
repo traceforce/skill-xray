@@ -242,6 +242,18 @@ make clean     # remove bin/
 
 CI runs the Go job on Linux, macOS and Windows. Each OS exercises a different part: the symlink tests run on Linux and macOS, the NTFS junction test runs on Windows, and macOS is where filenames arrive in a different Unicode form (NFD instead of NFC).
 
+### Benchmark
+
+`tools/bench` runs the scanner over an export of [MaliciousSkillBench](https://huggingface.co/datasets/ProtectSkills/MaliciousSkillBench) (revision `d4b42ce5766a`) and scores the rows. The headline verdict is a T1 or T2 vector at high or critical severity; the HIGH+, MEDIUM+ and any-finding views are reported alongside, and a benign record whose scan did not complete is never counted as a true negative.
+
+```bash
+go run ./tools/bench run --data msb/test.jsonl --out out/test.jsonl
+go run ./tools/bench score --md out/test.md out/test.jsonl
+go run ./tools/bench score --compare out/before.jsonl out/after.jsonl
+```
+
+The export is one JSON object per record of the source-disjoint split with `benchmark_id`, `split`, `label`, `source_name`, `attack_categories` and `text` (`skill_text`, else `public_skill_text`); `run` refuses a file whose id list is not the pinned test or dev split. Each record is scanned as a one-file package in a scratch directory and removed; nothing is executed.
+
 ## Layout
 
 ```
@@ -263,6 +275,7 @@ internal/
   pytext, pyast, pep508, uba
                          Python, CPython AST, PEP 508 and Unicode bidi semantics the port reproduces
   testutil               helpers shared by every package's tests
+tools/bench/             the benchmark runner and scorer
 docs/spec/               the detection specification, one file per group; 00-overview.md is the binding contract
 docs/reporting.md        result identity, operator decisions and SARIF semantics
 Makefile                 all, build, install-opengrep, test, lint, vuln, ci, fuzz, clean, help
