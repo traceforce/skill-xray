@@ -10,4 +10,4 @@ You will get an acknowledgement within five working days. Fixes ship as a new re
 
 ## Scope
 
-In scope: anything that makes the scanner execute, fetch or write something it should not while scanning a package; a crafted package that hides a finding the rules document; a report that leaks data from outside the scanned package. Out of scope: findings the rules do not claim to detect, which are welcome as ordinary issues.
+In scope: anything that makes the scanner execute, fetch or write something it should not while scanning a package; a crafted package that hides a finding a rule claims to detect; a report that leaks data from outside the scanned package. Out of scope: findings the rules do not claim to detect, which are welcome as ordinary issues.

@@ -48,7 +48,7 @@ type Artifact struct {
 	Preprocessing       []Preproc
 	PreprocessingCounts PreprocCounts
 	PyTree              *pyast.Module // nil == None
-	ShellTree           *syntax.File  // nil == None (and nil on a parse error: mvdan/sh keeps no partial tree)
+	ShellTree           *syntax.File  // nil == None, and nil on a parse error: mvdan/sh keeps no partial tree
 	Config              any           // map[string]any | []any | scalar; nil == None
 	ManifestKind        string        // "" == None
 	Deps                []Dep         // nil == None

@@ -49,7 +49,8 @@ func (c strCase) in(t *testing.T) string {
 	return c.Input
 }
 
-// Unicode 15.1 (CPython) assigned these; Go 1.26's tables are 15.0. They are the only accepted property divergence.
+// Unicode 15.1 (CPython) assigned these; Go 1.26's tables are 15.0. They are the only accepted
+// property divergence.
 var unicode151 = [][2]rune{{0x2FFC, 0x2FFF}, {0x31EF, 0x31EF}, {0x2EBF0, 0x2EE5D}}
 
 func skipRune(r rune) bool { return 0xD800 <= r && r <= 0xDFFF || inRanges(unicode151, r) }

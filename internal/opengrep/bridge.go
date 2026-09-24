@@ -264,7 +264,7 @@ func observe(target Selected, name, capability string, line, col int, p *parse.P
 }
 
 // FindingsFromReport is findings_from_report: translate OpenGrep's stable JSON result shape
-// into native findings. observations, when non-nil, collects the capability observations
+// into native findings. observations, when non-nil, collects the capability observations;
 // redactions are replaced by "<local>" in engine error messages.
 func FindingsFromReport(report map[string]any, targets map[string]Selected, p *parse.Package, redactions []string, observations *[]map[string]any) []findings.Finding {
 	out := []findings.Finding{}

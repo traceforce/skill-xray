@@ -1,7 +1,7 @@
 # Correlation and operator decisions
 
-`scan(parsed)` still returns the existing `Finding` list. Use `scan_report(parsed)`
-for additional context. Its `correlation` member contains:
+Every scan correlates its findings before the report is written. The correlation, carried in
+the SARIF run properties, contains:
 
 - `raw_candidates`: emitted check results, with their original evidence and provenance;
 - `results`: equivalent occurrences consolidated without losing distinct evidence;
@@ -32,8 +32,8 @@ evidence with a limitation, not a guessed connection between unrelated findings.
 
 ## Explicit scoped decisions
 
-Without a policy, everything is reported. An operator may pass `disposition_policy`
-to `scan_report`; no policy is read from a scanned manifest or discovered automatically.
+Without a policy, everything is reported. An operator may pass a policy file with `--policy`;
+no policy is read from a scanned manifest or discovered automatically.
 Start from the exact identity fields in a reviewed result:
 
 ```json
@@ -167,8 +167,4 @@ an explicit mapping limitation. Original generated positions/traces remain in ev
 they are not emitted as if they were verified original-source flows.
 
 Downstream consumers must preserve `effectiveSeverity` (SARIF `error` covers both high
-and critical), native `suppressions`, fingerprints, flows and coverage. The existing MCP
-pentest SARIF reader does not implement that contract and must not be reused unchanged.
-This exporter does not modify the MCP repository or provide an Atlas ingestion adapter.
-
-SARIF emission does not enable an LLM, baseline diff/store, Atlas upload or any new detector.
+and critical), native `suppressions`, fingerprints, flows and coverage.

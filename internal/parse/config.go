@@ -165,8 +165,8 @@ func tableKeys(md toml.MetaData, table map[string]any, path ...string) []string 
 	return keys
 }
 
-// jsonValue normalises a UseNumber tree to the report's number shape: int when the literal fits int64,
-// float64 otherwise, with CPython's 4300-digit integer limit kept as the ValueError it raises.
+// jsonValue normalises a UseNumber tree to the report's number shape: int when the literal fits
+// int64, float64 otherwise, with CPython's 4300-digit integer limit kept as the ValueError it raises.
 func jsonValue(v any) (any, error) {
 	switch x := v.(type) {
 	case json.Number:

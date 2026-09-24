@@ -848,7 +848,7 @@ func negatedRunOf(raw string, m []int) bool {
 	if negatedOverrideRE.MatchString(clause) {
 		return true
 	}
-	// ponytail: compiled per call; cache by script if the parity run shows it in a profile.
+	// ponytail: compiled per call; cache by script if a profile shows it.
 	re := regexp2.MustCompile(negRunPrefix+regexp2.Escape(pytext.Strip(raw[m[0]:m[1]])), regexp2.IgnoreCase)
 	ok, _ := re.MatchString(clause)
 	return ok

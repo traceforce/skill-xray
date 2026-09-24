@@ -56,8 +56,8 @@ func Intify(v any) any {
 	return v
 }
 
-// JSONView is json.loads(json.dumps(v)) with integral numbers as int: the generic, deep-copied view of a
-// JSON-encodable value (the to_dict shape); it panics where Marshal fails.
+// JSONView is json.loads(json.dumps(v)) with integral numbers as int: the generic, deep-copied
+// view of a JSON-encodable value (the to_dict shape); it panics where Marshal fails.
 func JSONView(v any) any {
 	raw, err := json.Marshal(v)
 	if err != nil {

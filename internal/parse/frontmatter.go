@@ -129,7 +129,7 @@ func fmLoad(a *Artifact, block string) (code string) {
 	if err != nil && err != io.EOF {
 		// ruamel walks the event stream and sees an anchor or alias emitted before the error;
 		// yaml.v3 gives up on the syntax error, so the properties are read off the text up to
-		// the error line.
+		// the error line (a quoted `: *x` before a later error is misread as an alias).
 		upTo := block
 		m := yamlLineRE.FindStringSubmatch(err.Error())
 		if m != nil {
