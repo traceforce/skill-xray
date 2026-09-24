@@ -96,6 +96,7 @@ type Markdown struct {
     Preproc []Preproc; PreprocCounts struct{ Inline, Fenced int }
     HTMLComments []HTMLComment; HTMLTags []HTMLTag; HTMLProse []HTMLProse; HTMLUninspectable []HTMLFragment
     HasHTML, HasUninspectableHTML bool
+    HTMLHidesContent bool  // an uninspectable fragment carried text, or a construct the inspector could not resolve
 }
 type YamlTag struct { Tag string; Line, Column int }
 type Grant struct { Tool string; Pattern *string; Raw string; Allowed, Broad, Parsed bool }
@@ -228,34 +229,59 @@ keeps the pre-span line (verified: `[](empty) `x\ny` [after](z)` puts `after` on
 ### 2.4 HTML inspection (`_InspectableHTML`, `_inspect_html`, `_project_html`)
 
 `inspectHTML(fragment, line, md, column)` runs a tolerant HTML tokenizer over the fragment and, in
-token order:
+token order, keeps three flags: `fullyInspected` (false once a construct could not be resolved),
+`unknown` (a tag or attribute outside the presentational set) and `text` (content the prose and
+link models never saw):
 
 - start tag: `sawMarkup = true`; name lowercased; attrs `(name.lower(), value or "")` in source order
   with duplicates kept; `HTMLTags += {tag, line + tagLine - 1, sourceColumn, false, attrs}` where
   `tagLine` is the 1-based line of `<` within the fragment and `sourceColumn = col0 + (column if
   tagLine == 1 else 1)` (col0 = 0-based code-point column of `<`). Duplicate attribute names ->
-  `fullyInspected = false`. If the tag is not in `_PRESENTATIONAL_HTML` (the 66-name set in the
-  source) nor `subject`, or any attribute name is outside `_GLOBAL_HTML_ATTRS` (class, dir, id,
-  lang, role, title) plus `_TAG_HTML_ATTRS[tag]` -> `fullyInspected = false`, stop this tag.
-  `code`/`pre` push onto `codeStack`. `target = href` for `a`, else `src`; if non-empty:
-  `compact = lower(removeAll([\x00-\x20]+, target))`; a scheme before the first `:` equal to `data`,
-  `javascript` or `vbscript` -> not inspected; for `img`/`source`, `compact` starting with `//` or
-  matching `^[a-z][a-z0-9+.-]*:` -> not inspected; for `a`, push `{target, label, line + tagLine - 1}`
-  on `anchors`.
+  `fullyInspected = false`. A tag outside `_PRESENTATIONAL_HTML` (the 66-name set in the source)
+  and `subject` -> `unknown = true`. Then per attribute: a modelled attribute (`_GLOBAL_HTML_ATTRS`:
+  class, dir, id, lang, role, title, plus `_TAG_HTML_ATTRS[tag]`, on a known tag) named `href`,
+  `src` or `cite` whose `compact` value (below) has the scheme `data`, `javascript` or `vbscript`
+  before the first `:` -> `fullyInspected = false`; any other attribute whose name starts with `on`
+  or whose value has such a scheme -> `fullyInspected = false`; any other unmodelled attribute ->
+  `unknown = true`, and `text = true` when it names a reference on an unknown tag (`href`, `src`,
+  `srcset`, `data`, `poster`, `action`, `formaction`, `cite`, `background`, `longdesc`,
+  `xlink:href`, `ping`) or when its value is a URL (`://`, a leading `//` or a scheme followed
+  directly by its payload, which a CSS `name: value` declaration is not) or holds at
+  least two words of letters (runes, split on Python's whitespace set, with the punctuation around a
+  token trimmed first; a token holding four or more Han, Hiragana, Katakana, Hangul or Thai letters,
+  scripts written without word spacing, counts as two words, and a hyphen or underscore joined
+  identifier such as `nav-menu` stays one token); the ASCII tab, newline and carriage return, which URL parsing ignores, are
+  removed before the scheme test while spaces stay. The scheme and URL tests run on every comma-separated
+  candidate of the value, since `srcset` names several; a `style` value has every `url()` argument of its
+  decoded form (line continuations removed, escapes resolved) tested as a URL, and every quoted string of the
+  raw value (a backslash escaping the character after it, so an escaped quote stays inside its string), decoded,
+  tested as a URL or as two words of letters; then it is split per `;` on the raw value (a `;` inside a quoted string,
+  or after a backslash, does not split) and each declaration's value, decoded, is read with the
+  property name before its `:` ignored, as a URL or as four words of letters, since two or three keywords
+  are how a shorthand value reads (`1px solid black`, `bold italic`, `Times New Roman`) where a clause such as
+  `Ignore all previous instructions` is content. An unknown tag stops here. `code`/`pre` push onto
+  `codeStack`. `target = href` for `a`, else `src`; if non-empty: `compact = lower(removeAll(
+  [\x00-\x20]+, target))`; for `img`/`source`, `compact` starting with `//` or matching
+  `^[a-z][a-z0-9+.-]*:` -> `fullyInspected = false`; for `a`, push `{target, label, line + tagLine
+  - 1}` on `anchors`.
 - self-closing tag `<x .../>`: as a start tag; then pop `codeStack` if `code`/`pre`; if `a`, pop the
   anchor and append `Link{target, strip(join(label)), line}`.
 - end tag: `sawMarkup`; `HTMLTags += {tag, line + tagLine - 1, sourceColumn, true, ()}`; a
-  non-presentational tag other than `subject` -> not inspected; `code`/`pre` must equal the stack
-  top (else not inspected) and pop; `a` pops the anchor into `Links` (label `strip()`ped).
-- text: appended to every open anchor's label (all nested anchors receive it).
+  non-presentational tag other than `subject` -> `unknown = true`; `code`/`pre` must equal the
+  stack top (else `fullyInspected = false`) and pop; `a` pops the anchor into `Links` (label
+  `strip()`ped).
+- text: appended to every open anchor's label (all nested anchors receive it); a token that is not
+  whitespace (Python's set, `pytext.Strip`) sets `text = true`.
 - comment: `sawMarkup`; `HTMLComments += {data, line + cLine - 1, sourceColumn}`. A bogus comment
   `<!foo>` is a comment with data `foo` (both Python's html.parser and x/net/html agree).
 - doctype (`<!DOCTYPE`), processing instruction (`<?...>`), marked section (`<![...`): `sawMarkup`
   and not inspected.
 
-After feeding: unclosed anchors or code tags -> not inspected; a tokenizer panic -> not inspected.
-If `!sawMarkup || !fullyInspected`: `HasUninspectableHTML = true`, `HTMLUninspectable += {fragment,
-line, column}`; else `HTMLProse += {projectHTML(fragment), line}`.
+After feeding: unclosed anchors or code tags -> `fullyInspected = false`; a tokenizer panic ->
+`fullyInspected = false`. If `!sawMarkup || !fullyInspected || unknown`: `HasUninspectableHTML =
+true`, `HTMLUninspectable += {fragment, line, column}`, and `HTMLHidesContent = true` when
+`!sawMarkup || !fullyInspected || text` (unknown tags or attributes alone, with nothing hidden,
+leave it unchanged); else `HTMLProse += {projectHTML(fragment), line}`.
 
 `projectHTML(fragment)`: iterate matches of regex 3; text between matches is kept verbatim, or
 blanked (`blankSource`: every non-`\n` code point -> space) while `codeDepth > 0`; a tag token whose
@@ -267,8 +293,8 @@ tail is kept or blanked by `codeDepth`.
 Pins: `test_presentational_html_link_is_parsed` (`("refs/x.md","sub",4)`),
 `test_unquoted_html_link_preserves_label`, `test_html_media_source_is_not_a_document_link`,
 `test_inert_prompt_placeholder_tag_is_source_mapped` (`("subject",4,1,False,())`,
-`("subject",4,18,True,())`), `test_behavioral_or_unknown_html_remains_incomplete` (18 cases ->
-`raw_html`), `test_markdown_html_comment_is_source_mapped` (`(" ignore all prior ",4,1)`),
+`("subject",4,18,True,())`), `test_behavioral_or_unknown_html_remains_incomplete` (every case ->
+`HasUninspectableHTML`), `test_markdown_html_comment_is_source_mapped` (`(" ignore all prior ",4,1)`),
 `test_blockquoted_html_comment_preserves_source_column` (column 3),
 `test_blockquoted_inline_html_preserves_source_column` (column 10).
 
@@ -540,7 +566,9 @@ on `kind` (kinds come from `ingest._classify` and `_classify_shebang`):
   separately in list order. `Preprocessing = inline + fenced`; `PreprocessingCounts = {inlineTotal,
   fencedTotal}`; when `Markdown != nil`, its `Preproc` and `PreprocCounts` are overwritten with
   copies. `mderr != ""` -> `("markdown_parse_error", mderr)`; else `HasUninspectableHTML` ->
-  `("raw_html", nil)`.
+  `("raw_html", nil)` when `HTMLHidesContent` (an uninspectable fragment carried text, or a
+  construct the inspector could not resolve), else `("raw_html_markup", nil)` (unknown tags or
+  attributes alone).
   Pins: `test_inline_preprocessing_in_frontmatter_uses_raw_file_location` (3,18),
   `test_frontmatter_and_body_share_one_inline_cap` (25 kept, all `front-`, note `25 more SXV-001`),
   `test_frontmatter_decoys_cannot_crowd_out_live_body_preprocessing`,
@@ -887,8 +915,8 @@ counterparts:
 - `findings[]` with `rule == "coverage-note"` or `"analysis-incomplete"` whose
   `evidence.phase == "parse"`: one per distinct `(parse, reasonCode, path)` from
   `checks/coverage.py`; severity `low` for `config_parse_error, dep_manifest_unparsed,
-  frontmatter_parse_error, grants_unparsed_shape, markdown_parse_error, requirement_unparsed,
-  unmodeled_content, unsupported_markup`, `high` otherwise; message `"parse analysis coverage is
+  frontmatter_parse_error, grants_unparsed_shape, markdown_parse_error, raw_html_markup,
+  requirement_unparsed, unmodeled_content, unsupported_markup`, `high` otherwise; message `"parse analysis coverage is
   incomplete (<reasonCode>)."`. The ledger `detail` is **not** in the finding, so detail-text
   differences (TOML/JSON error messages, shell span lists) do not reach findings, only the ledger.
 - `ledger.exceptions[]` entries with `phase == "parse"`: `reasonCode`, `detail`, `path` (sorted by

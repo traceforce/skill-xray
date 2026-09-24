@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/yuin/goldmark/ast"
@@ -821,6 +822,11 @@ var presentationalHTML = map[string]bool{
 
 var globalHTMLAttrs = map[string]bool{"class": true, "dir": true, "id": true, "lang": true, "role": true, "title": true}
 
+// urlNamedHTMLAttrs name a reference wherever they appear; on a tag outside the modelled set the
+// reference is content the link model never saw, whatever form the value takes.
+var urlNamedHTMLAttrs = map[string]bool{"href": true, "src": true, "srcset": true, "data": true, "poster": true,
+	"action": true, "formaction": true, "cite": true, "background": true, "longdesc": true, "xlink:href": true, "ping": true}
+
 var tagHTMLAttrs = map[string]map[string]bool{
 	"a":          {"href": true, "rel": true, "target": true},
 	"blockquote": {"cite": true}, "q": {"cite": true},
@@ -834,11 +840,12 @@ var tagHTMLAttrs = map[string]map[string]bool{
 }
 
 var (
-	lowerSchemeRE  = regexp.MustCompile(`^[a-z][a-z0-9+.-]*:`)
-	commentCloseRE = regexp.MustCompile(`--` + pytext.Space + `*>`)                        // _markupbase._commentclose
-	markedCloseRE  = regexp.MustCompile(`\]` + pytext.Space + `*\]` + pytext.Space + `*>`) // _markedsectionclose
-	msMarkedRE     = regexp.MustCompile(`\]` + pytext.Space + `*>`)                        // _msmarkedsectionclose
-	declNameRE     = regexp.MustCompile(`^[a-zA-Z][-_.a-zA-Z0-9]*`)
+	lowerSchemeRE   = regexp.MustCompile(`^[a-z][a-z0-9+.-]*:`)
+	schemePayloadRE = regexp.MustCompile(`^[a-z][a-z0-9+.-]*:\S`)                           // a scheme with its payload; a CSS `name: value` is not one
+	commentCloseRE  = regexp.MustCompile(`--` + pytext.Space + `*>`)                        // _markupbase._commentclose
+	markedCloseRE   = regexp.MustCompile(`\]` + pytext.Space + `*\]` + pytext.Space + `*>`) // _markedsectionclose
+	msMarkedRE      = regexp.MustCompile(`\]` + pytext.Space + `*>`)                        // _msmarkedsectionclose
+	declNameRE      = regexp.MustCompile(`^[a-zA-Z][-_.a-zA-Z0-9]*`)
 )
 
 // htmlCrash marks input on which Python raises past parse_markdown (html.parser's
@@ -858,11 +865,14 @@ type htmlInspector struct {
 	fragLines    []int
 	line, column int
 	fully, saw   bool
+	unknown      bool // a tag or attribute outside the presentational set
+	text         bool // a text token that is not whitespace
 	anchors      []*htmlAnchor
 	codeStack    []string
 }
 
-// inspectHTML is parse._inspect_html.
+// inspectHTML is parse._inspect_html, graded by what the fragment hid (HTMLHidesContent) rather
+// than by one uninspectable state.
 func (d *mdDoc) inspectHTML(fragment string, line, column int) {
 	h := &htmlInspector{d: d, frag: fragment, line: line, column: column, fully: true}
 	h.fragLines = []int{0}
@@ -885,8 +895,9 @@ func (d *mdDoc) inspectHTML(fragment string, line, column int) {
 	if len(h.anchors) > 0 || len(h.codeStack) > 0 {
 		h.fully = false
 	}
-	if !h.saw || !h.fully {
+	if !h.saw || !h.fully || h.unknown {
 		d.md.HasUninspectableHTML = true
+		d.md.HTMLHidesContent = d.md.HTMLHidesContent || !h.saw || !h.fully || h.text
 		d.md.HTMLUninspectable = append(d.md.HTMLUninspectable, HTMLFragment{Text: fragment, Line: line, Column: column})
 	} else {
 		d.md.HTMLProse = append(d.md.HTMLProse, HTMLProse{Text: projectHTML(fragment), Line: line})
@@ -1036,6 +1047,9 @@ func (h *htmlInspector) sourceColumn(l, col int) int {
 }
 
 func (h *htmlInspector) data(s string) {
+	if pytext.Strip(s) != "" { // the Python whitespace set, so a separator-only token is not text
+		h.text = true
+	}
 	for _, a := range h.anchors {
 		a.label = append(a.label, s)
 	}
@@ -1113,15 +1127,27 @@ func (h *htmlInspector) startTag(tag string, norm [][2]string, start int) {
 	if len(values) != len(norm) { // a repeated attribute name
 		h.fully = false
 	}
-	if !presentationalHTML[tag] && tag != "subject" {
-		h.fully = false
-		return
+	known := presentationalHTML[tag] || tag == "subject"
+	if !known {
+		h.unknown = true
 	}
 	for _, a := range norm {
-		if !globalHTMLAttrs[a[0]] && !tagHTMLAttrs[tag][a[0]] {
-			h.fully = false
-			return
+		switch {
+		case known && (globalHTMLAttrs[a[0]] || tagHTMLAttrs[tag][a[0]]):
+			if urlNamedHTMLAttrs[a[0]] && activeScheme(a[1]) {
+				h.fully = false
+			}
+		case strings.HasPrefix(a[0], "on") || activeScheme(a[1]):
+			h.fully = false // an event handler or an active scheme is executable content
+		default:
+			h.unknown = true
+			if (!known && urlNamedHTMLAttrs[a[0]]) || (a[0] == "style" && styleCarriesContent(a[1])) || (a[0] != "style" && attrCarriesContent(a[1])) {
+				h.text = true // a reference or words the prose and link models never saw
+			}
 		}
+	}
+	if !known {
+		return
 	}
 	if tag == "code" || tag == "pre" {
 		h.codeStack = append(h.codeStack, tag)
@@ -1133,24 +1159,181 @@ func (h *htmlInspector) startTag(tag string, norm [][2]string, start int) {
 	if target == "" {
 		return
 	}
-	compact := pytext.Lower(strings.Map(func(r rune) rune {
-		if r <= 0x20 {
-			return -1
-		}
-		return r
-	}, target))
-	if i := strings.IndexByte(compact, ':'); i >= 0 {
-		switch compact[:i] {
-		case "data", "javascript", "vbscript":
-			h.fully = false
-		}
-	}
+	compact := compactURL(target)
 	if (tag == "img" || tag == "source") && (strings.HasPrefix(compact, "//") || lowerSchemeRE.MatchString(compact)) {
 		h.fully = false
 	}
 	if tag == "a" {
 		h.anchors = append(h.anchors, &htmlAnchor{target: target, line: line})
 	}
+}
+
+// compactURL lowers a URL and drops the control and space characters a browser ignores.
+func compactURL(s string) string {
+	return pytext.Lower(strings.Map(func(r rune) rune {
+		if r <= 0x20 {
+			return -1
+		}
+		return r
+	}, s))
+}
+
+// activeScheme reports a data, javascript or vbscript URL among the comma-separated candidates
+// of a value: srcset names several, and a later one hides as well as the first.
+func activeScheme(s string) bool {
+	for _, c := range strings.Split(s, ",") {
+		compact := compactURL(c)
+		i := strings.IndexByte(compact, ':')
+		if i >= 0 && (compact[:i] == "data" || compact[:i] == "javascript" || compact[:i] == "vbscript") {
+			return true
+		}
+	}
+	return false
+}
+
+// spacelessScripts are the scripts written without word spacing, so a run of their letters is
+// text the space count never sees.
+var spacelessScripts = []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul, unicode.Thai}
+
+// attrCarriesContent reports a value outside the modelled set that is more than a layout token:
+// a URL among its comma-separated candidates, or at least two words of letters.
+func attrCarriesContent(v string) bool {
+	return attrHoldsURL(v) || wordCount(v) >= 2
+}
+
+// attrHoldsURL reports a URL among the comma-separated candidates of a value: `://`, a leading
+// `//`, or a scheme followed directly by its payload, which a CSS `name: value` declaration is not.
+func attrHoldsURL(v string) bool {
+	for _, c := range strings.Split(v, ",") {
+		compact := compactURL(c)
+		if strings.Contains(compact, "://") || strings.HasPrefix(compact, "//") || schemePayloadRE.MatchString(pytext.Lower(pytext.Strip(withoutURLIgnored(c)))) {
+			return true
+		}
+	}
+	return false
+}
+
+// wordCount counts the words of letters in a value, whatever punctuation surrounds them. A token
+// of four or more letters in a script without word spacing counts as two words, while a hyphen or
+// underscore joined identifier stays one token.
+func wordCount(v string) int {
+	words := 0
+	for _, f := range pytext.Fields(v) { // the Python whitespace set, so U+001C to U+001F separate words too
+		f = strings.TrimFunc(f, unicode.IsPunct) // sentence punctuation around a word; a digit still makes it a token
+		spaceless := 0
+		for _, r := range f {
+			if unicode.In(r, spacelessScripts...) {
+				spaceless++
+			}
+		}
+		switch {
+		case spaceless >= 4:
+			words += 2
+		case utf8.RuneCountInString(f) >= 2 && strings.IndexFunc(f, func(r rune) bool { return !unicode.IsLetter(r) }) < 0:
+			words++
+		}
+	}
+	return words
+}
+
+// cssEscapeRE is a CSS escape: a backslash with up to six hex digits and one optional whitespace
+// character, which CSS consumes with the escape whatever it is, or with any other character.
+var cssEscapeRE = regexp.MustCompile(`\\(?:[0-9a-fA-F]{1,6}[ \t\r\n\f]?|.)`)
+
+// cssContinuation is a backslash before a line break inside a CSS string, which CSS removes.
+var cssContinuation = strings.NewReplacer("\\\r\n", "", "\\\n", "", "\\\r", "", "\\\f", "")
+
+// cssUnescape decodes CSS escapes, which a browser resolves before it reads a URL or a word, so
+// `https\3a\2f\2f evil` is `https://evil`; a line continuation vanishes first.
+func cssUnescape(v string) string {
+	if !strings.Contains(v, `\`) {
+		return v
+	}
+	v = cssContinuation.Replace(v)
+	return cssEscapeRE.ReplaceAllStringFunc(v, func(m string) string {
+		if n, err := strconv.ParseUint(strings.TrimSpace(m[1:]), 16, 32); err == nil && n <= unicode.MaxRune {
+			return string(rune(n)) // #nosec G115 -- bounded by MaxRune on the line above
+		}
+		return m[1:]
+	})
+}
+
+// cssStringRE captures a quoted CSS string on the raw value, a backslash escaping the character
+// after it, so an escaped quote stays inside its string; functions such as image-set carry a URL in
+// one, and each string is decoded after it is captured.
+var cssStringRE = regexp.MustCompile(`(?s)"((?:[^"\x5c]|\x5c.)*)"|'((?:[^'\x5c]|\x5c.)*)'`)
+
+// cssURLRE captures the argument of a CSS url(), quoted or bare, up to its closing quote or paren.
+var cssURLRE = regexp.MustCompile(`(?i)url\(\s*['"]?([^'")]*)`)
+
+// cssDeclarations splits the raw style value on the semicolons outside quoted strings, with a
+// backslash escaping the character after it, so content:'Ignore; execute' and an escaped quote
+// inside a string both stay one declaration; each value is decoded afterwards.
+func cssDeclarations(v string) []string {
+	var out []string
+	var quote rune
+	start, escaped := 0, false
+	for i, r := range v {
+		switch {
+		case escaped:
+			escaped = false
+		case r == '\\':
+			escaped = true
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '\'' || r == '"':
+			quote = r
+		case r == ';':
+			out = append(out, v[start:i])
+			start = i + 1
+		}
+	}
+	return append(out, v[start:])
+}
+
+// withoutURLIgnored drops the ASCII tab, newline and carriage return, which URL parsing ignores,
+// and keeps ordinary spaces, so a CSS `name: value` declaration is still not a scheme.
+func withoutURLIgnored(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// styleCarriesContent reads a style attribute as CSS: a URL or active scheme in any url()
+// argument, a URL or two words of letters in any quoted string, or a URL or four words of letters
+// in a declaration's value, is content; a property name such as display or width is not, with or
+// without a space after its colon, and neither are the two or three keywords a shorthand value is
+// made of (`1px solid black`, `bold italic`, `Times New Roman`), where a clause such as `Ignore
+// all previous instructions` is. The url() arguments are read from the decoded whole value first,
+// since a data URL carries its own `;`; the declarations are split on the raw value so escapes
+// keep their meaning, then decoded.
+func styleCarriesContent(v string) bool {
+	decoded := cssUnescape(v)
+	for _, m := range cssURLRE.FindAllStringSubmatch(decoded, -1) {
+		if arg := strings.TrimSpace(m[1]); attrCarriesContent(arg) || activeScheme(arg) {
+			return true
+		}
+	}
+	for _, m := range cssStringRE.FindAllStringSubmatch(v, -1) { // a URL or words in any quoted string, image-set included
+		if arg := strings.TrimSpace(cssUnescape(m[1] + m[2])); attrCarriesContent(arg) || activeScheme(arg) {
+			return true
+		}
+	}
+	for _, decl := range cssDeclarations(v) {
+		name, value, ok := strings.Cut(decl, ":")
+		if !ok {
+			value = name // no property at all: the whole declaration is the value
+		}
+		if value = cssUnescape(value); attrHoldsURL(value) || wordCount(value) >= 4 {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *htmlInspector) popAnchor() {
@@ -1175,7 +1358,7 @@ func (h *htmlInspector) endTag(tag string, start int) {
 	l, col := h.pos(start)
 	h.d.md.HTMLTags = append(h.d.md.HTMLTags, HTMLTag{Name: tag, Line: h.line + l - 1, Column: h.sourceColumn(l, col), Closing: true})
 	if !presentationalHTML[tag] && tag != "subject" {
-		h.fully = false
+		h.unknown = true
 	}
 	if tag == "code" || tag == "pre" {
 		if len(h.codeStack) == 0 || h.codeStack[len(h.codeStack)-1] != tag {

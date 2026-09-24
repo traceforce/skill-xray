@@ -79,7 +79,7 @@ Exit code 0 means the scan and any report completed, even with critical findings
 
 ### system-scan
 
-Discover every skill package under the roots the common coding agents load skills from, analyze each one as `scan --analyze` would, and print a verdict per package: `BLOCKING` for a high or critical finding with a vector, `FINDINGS` for anything else reported, `CLEAN` for nothing.
+Discover every skill package under the roots the common coding agents load skills from, analyze each one as `scan --analyze` would, and print a verdict per package: `BLOCKING` for a high or critical finding with a vector, `FINDINGS` for any other finding with a vector or an analysis gap at medium or above, `CLEAN` otherwise. A low coverage note stays in the ledger and the JSON without moving the verdict.
 
 ```bash
 ./bin/skill-xray system-scan

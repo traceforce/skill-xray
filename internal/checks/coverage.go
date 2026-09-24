@@ -3,6 +3,7 @@ package checks
 import (
 	"cmp"
 	"fmt"
+	"strings"
 
 	"github.com/traceforce/skill-xray/internal/findings"
 	"github.com/traceforce/skill-xray/internal/ingest"
@@ -13,7 +14,8 @@ import (
 // _LOW_PARSE and _LOW_STATIC: gaps that are notes rather than incomplete analysis.
 var (
 	lowParse = pytext.Set("config_parse_error", "dep_manifest_unparsed", "frontmatter_parse_error",
-		"grants_unparsed_shape", "markdown_parse_error", "requirement_unparsed", "unmodeled_content", "unsupported_markup")
+		"grants_unparsed_shape", "markdown_parse_error", "raw_html_markup", "requirement_unparsed", "unmodeled_content",
+		"unsupported_markup")
 	lowStatic = ingest.BenignLedger
 )
 
@@ -25,14 +27,19 @@ func IsInventoryNote(vector, rule, severity string, evidence map[string]any) boo
 		evidence["phase"] == "static" && lowStatic[reason]
 }
 
-// StaticSeverity is coverage._static_severity; "" is None (binary content in an asset is not
-// a gap) and kind is "" when the ledger path has no artifact.
-func StaticSeverity(reason, kind string) string {
+// StaticSeverity grades a static ledger gap; "" is no gap (binary content in an asset) and
+// kind is "" when the ledger path has no artifact. An SVG that could not be reviewed is a
+// note: an agent never reads it as instructions and its bytes still pass the forensics lane.
+// A PDF or a nested archive holds content an agent may be told to read or unpack, so those
+// stay gaps.
+func StaticSeverity(reason, kind, rel string) string {
 	switch {
 	case lowStatic[reason]:
 		return "low"
 	case reason == "binary_content" && kind == "asset":
 		return ""
+	case reason == "unreviewable_content" && kind == "active_asset" && strings.HasSuffix(pytext.Lower(rel), ".svg"):
+		return "low"
 	}
 	return "high"
 }
@@ -59,7 +66,7 @@ func Coverage(p *parse.Package) []findings.Finding {
 			if a := p.ByRel[e.Path]; a != nil {
 				kind = a.Kind
 			}
-			severity = StaticSeverity(reason, kind)
+			severity = StaticSeverity(reason, kind, e.Path)
 		}
 		if severity == "" {
 			continue
