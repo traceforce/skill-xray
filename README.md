@@ -6,7 +6,7 @@ Skill X-Ray is a static security scanner for AI skill packages: the folders (a `
 
 The product is the Go binary built from `cmd/skill-xray`. It is the counterpart of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same for MCP servers. Every scan builds a coverage ledger that records each file it read and each file it did not, with a reason. Every scan runs deterministic checks, including a pinned [OpenGrep](https://github.com/opengrep/opengrep) code lane over bundled Python, shell, JavaScript and TypeScript, and writes a validated [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report, the only output format, as MCP X-Ray does. The tool is report-only: it writes the file you name and uploads nothing, unless the opt-in `--llm` lane is on, which sends skill text to the configured provider.
 
-Every verdict comes from deterministic rules whose behaviour is pinned by the test suite and measured against a public benchmark by the runner under `tools/bench`; the optional LLM lane adds advisory findings and annotates deterministic ones; it never removes a finding, and only the further `--llm-apply` opt-in can lower one, to `low`.
+Every verdict comes from deterministic rules whose behaviour is pinned by the test suite and measured against a public benchmark by the runner under `tools/bench`; the optional LLM lane adds advisory findings and annotates deterministic ones; it never removes a finding, and within the lane only the further `--llm-apply` opt-in can lower one, to `low`; an operator policy passed with `--policy` is the other way a result is demoted or suppressed, and the report records which.
 
 ## Installation
 
@@ -65,7 +65,7 @@ The console line is `VERDICT  seen=N read=N cov=P%  package`, with the verdict a
 
 ### system-scan
 
-Discover every skill package under the roots the common coding agents load skills from, analyze each one as `scan` would, write one report with one run per package, and print a verdict per package: `BLOCKING` for a high or critical finding with a vector, `FINDINGS` for any other finding with a vector or an analysis gap at medium or above, `CLEAN` otherwise. A low coverage note stays in the ledger and the report without moving the verdict.
+Discover every skill package under the roots the common coding agents load skills from, analyze each one as `scan` would, write one report with one run per package, and print a verdict per package: `BLOCKING` for a high or critical finding with a vector, `FINDINGS` for any other finding with a vector or an analysis gap at medium or above, `CLEAN` otherwise. A package whose analysis raised a context error reads `FINDINGS`, never `CLEAN`, and exits 2. A low coverage note stays in the ledger and the report without moving the verdict.
 
 ```bash
 ./bin/skill-xray system-scan
@@ -194,7 +194,7 @@ The walker reads a package it does not trust, so:
 - it does not open a FIFO, device, or socket (a `read()` on a FIFO never returns);
 - it inventories shipped compiled and native code (`.pyc`/`.pyo`/`.pyd`, `.so`/`.dylib`/`.dll`/`.exe`/`.wasm`, `.jar`/`.class`/`.node`, and versioned `.so.N`) instead of dropping it, as one `analysis-incomplete` result per file with the reason `shipped_compiled`, so a full text-coverage number can never hide unreviewable executable code;
 - it surfaces opaque content with the reason `unreviewable_content` and counts it against coverage: an `.svg` is a low `coverage-note`, since an agent never reads it as instructions and its bytes still pass the forensics lane, while a `.pdf` or a nested archive is a high `analysis-incomplete` gap that exits 2, since an agent may be told to read or unpack it;
-- raw HTML in a Markdown file that the prose model cannot project is a high `analysis-incomplete` gap with the reason `raw_html` when it carries text or a link label, since an agent reads that text while the scanner could not; markup alone, such as a centred image block, is a low note;
+- raw HTML in a Markdown file that the prose model cannot project is a high `analysis-incomplete` gap with the reason `raw_html` when it carries text or a link label, or when the inspector could not read it whole (a behavioural attribute, a dangerous scheme, a duplicate attribute, an unclosed anchor or code block), since an agent reads what the scanner could not; markup read whole that carries no text, such as a centred image block, is a low note;
 - it records every file it does not read, with a reason, and a skipped file lowers the reported coverage unless it is an inert asset, compiled code, or an excluded cache directory (a bundled `node_modules`/`dist`/`build` does lower it).
 
 Every SARIF run carries the ledger's coverage status under `coverage`, `no-reported-gap` or `incomplete`, and each analysis gap is a result of its own, so a report can never look complete while files went unread.

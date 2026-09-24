@@ -1,11 +1,10 @@
 # Correlation and operator decisions
 
-Every scan correlates its findings before the report is written. The correlation, carried in
-the SARIF run properties, contains:
+Every scan correlates its findings before the report is written. In the SARIF run:
 
-- `raw_candidates`: emitted check results, with their original evidence and provenance;
-- `results`: equivalent occurrences consolidated without losing distinct evidence;
-- `links`: every candidate's result, disposition and reason.
+- `runs[].results` are the equivalent occurrences consolidated without losing distinct evidence;
+- `runs[].properties.rawCandidates` are the emitted check results, with their original evidence and provenance;
+- `runs[].properties.candidateLinks` give every candidate's result, disposition and reason.
 
 Detector caps happen upstream. A cap/coverage record is not a claim that uncollected
 candidates can be recovered. Existing LLM review annotations stay separate and never
