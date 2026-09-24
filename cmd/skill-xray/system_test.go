@@ -14,7 +14,9 @@ import (
 	"github.com/traceforce/skill-xray/internal/llm"
 	"github.com/traceforce/skill-xray/internal/metadata"
 	"github.com/traceforce/skill-xray/internal/opengrep"
+	"github.com/traceforce/skill-xray/internal/parse"
 	"github.com/traceforce/skill-xray/internal/sarif"
+	"github.com/traceforce/skill-xray/internal/scan"
 	"github.com/traceforce/skill-xray/internal/testutil"
 )
 
@@ -85,6 +87,29 @@ func TestSystemScanConsoleAndReport(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, vectors)
+}
+
+// A package whose run cannot be built is named on stderr and left out of the report; the other
+// packages keep theirs and the exit code says the scan is incomplete.
+func TestSystemScanKeepsTheReportWhenOneRunCannotBeBuilt(t *testing.T) {
+	real := scanReport
+	testutil.Swap(t, &scanReport, func(p *parse.Package, o scan.Options) (*scan.ScanReport, error) {
+		report, err := real(p, o)
+		if err == nil && p.Name == "leaky" { // as scan records a correlation step that panicked
+			report.Correlation.Errors = []string{"correlation-error: RuntimeError"}
+			report.ContextErrors = append(report.ContextErrors, "correlation-error: RuntimeError")
+		}
+		return report, err
+	})
+	target := filepath.Join(t.TempDir(), "system.sarif")
+	rc, stdout, stderr := cli(t, "system-scan", "--root", systemRoot(t), "--output", target)
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "no SARIF run for ")
+	assert.Contains(t, stderr, "leaky: Cannot emit SARIF after a correlation failure\n")
+	assert.Contains(t, stderr, "leaky: correlation-error: RuntimeError\n")
+	assert.Contains(t, stdout, "report: "+target+"\n")
+	assert.Contains(t, stdout, "packages: 2, blocking: 1, with findings: 0, clean: 1, incomplete: 1, discovery exceptions: 0\n")
+	assert.Len(t, runs(t, sarifDoc(t, target)), 1)
 }
 
 // A target inside a discovered package is refused before any package is scanned.

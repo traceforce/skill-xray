@@ -114,8 +114,9 @@ func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer)
 				err = sarif.Validate(doc)
 			}
 			switch {
-			case err != nil:
-				sarifErr = err
+			case err != nil: // the other packages keep their report; this one is named here and by its exit code
+				fmt.Fprintf(stderr, "no SARIF run for %s: %s\n", display(path), pytext.UnicodeEscape(err.Error()))
+				rc = 2
 			case merged == nil:
 				merged = doc
 			default:
