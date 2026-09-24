@@ -283,13 +283,14 @@ func Adjudicate(p *parse.Package, c Completer, maxFiles int) []findings.Finding 
 			continue
 		}
 		// The quote is model-provided: cite it only when it is a genuine substring of what the
-		// model saw (the sent prefix) and of the artifact; null/non-text never fabricates one.
+		// model saw (the sent prefix) and of the artifact, and carries no control or format
+		// character a viewer could render as something else; null/non-text never fabricates one.
 		quote, reason, severity := "", "", "medium"
 		if s, ok := verdict["evidence_quote"].(string); ok {
 			quote = pytext.Head(s, 160)
 		}
 		verified := pytext.Strip(strings.ReplaceAll(quote, "[REDACTED]", "")) != "" &&
-			strings.Contains(pytext.Head(redacted, maxChars), quote) && strings.Contains(t.text, quote)
+			strings.Contains(pytext.Head(redacted, maxChars), quote) && strings.Contains(t.text, quote) && !hides(quote)
 		if s, ok := verdict["reason"].(string); ok {
 			reason = pytext.Head(printable(Redact(s)), 200)
 		}
