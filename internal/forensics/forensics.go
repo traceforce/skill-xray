@@ -229,7 +229,7 @@ func is7z(raw []byte, i int) bool {
 		return false
 	}
 	nhOff, nhSize, nhCRC := binary.LittleEndian.Uint64(raw[i+12:]), binary.LittleEndian.Uint64(raw[i+20:]), binary.LittleEndian.Uint32(raw[i+28:])
-	base := uint64(i + 32)
+	base := uint64(i + 32) // #nosec G115 -- i is a non-negative offset already checked against len(raw)
 	if nhSize == 0 || nhSize > maxArchiveHeader || base+nhOff+nhSize > uint64(len(raw)) || base+nhOff+nhSize < base {
 		return false
 	}

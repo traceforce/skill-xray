@@ -124,7 +124,7 @@ func decodeUnicodeEscapes(s string) (string, error) {
 				v = v*8 + int(s[i]-'0')
 				i++
 			}
-			writeCodePoint(&b, rune(v))
+			writeCodePoint(&b, rune(v)) // #nosec G115 -- v is at most three octal digits
 		case 'x', 'u', 'U':
 			n := map[byte]int{'x': 2, 'u': 4, 'U': 8}[c]
 			end := i
@@ -171,9 +171,9 @@ func decodeUnicodeEscapes(s string) (string, error) {
 // pytext.Repr renders them like Python does.
 func writeCodePoint(b *strings.Builder, r rune) {
 	if r >= 0xD800 && r <= 0xDFFF {
-		b.WriteByte(byte(0xE0 | r>>12))
-		b.WriteByte(byte(0x80 | (r>>6)&0x3F))
-		b.WriteByte(byte(0x80 | r&0x3F))
+		b.WriteByte(byte(0xE0 | r>>12))       // #nosec G115 -- r is a surrogate in D800..DFFF, so r>>12 is 0xD
+		b.WriteByte(byte(0x80 | (r>>6)&0x3F)) // #nosec G115 -- masked to six bits
+		b.WriteByte(byte(0x80 | r&0x3F))      // #nosec G115 -- masked to six bits
 		return
 	}
 	b.WriteRune(r)
@@ -203,7 +203,7 @@ func decodeBytesEscapes(s string) ([]byte, error) {
 				v = v*8 + int(s[i]-'0')
 				i++
 			}
-			out = append(out, byte(v))
+			out = append(out, byte(v)) // #nosec G115 -- an octal escape above 0o377 stores mod 256, as CPython does
 		case 'x':
 			if i+2 > len(s) || !isXDigit(int(s[i])) || !isXDigit(int(s[i+1])) {
 				return nil, fmt.Errorf("invalid \\x escape at position %d", i-2)

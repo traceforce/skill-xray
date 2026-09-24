@@ -105,6 +105,48 @@ func TestSingleFileIsWrappedIntoAPackage(t *testing.T) {
 }
 
 // test_single_file_symlink_is_refused
+func openRO(t *testing.T, p string) *os.File {
+	t.Helper()
+	f, err := os.Open(p)
+	require.NoError(t, err)
+	t.Cleanup(func() { f.Close() })
+	return f
+}
+
+// The single-file path reads only through the handle it checked: once opened, the target can be
+// removed or replaced and every later read still sees the checked bytes. A directory or a link in
+// the file's place is refused at the open.
+func TestSingleFileReadsUseTheCheckedHandle(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "skill.md")
+	require.NoError(t, os.WriteFile(p, []byte("# a\n"), 0o644))
+	f, err := openTarget(p)
+	require.NoError(t, err)
+	defer f.Close()
+	require.NoError(t, os.Remove(p))
+	_ = os.WriteFile(p, []byte("# swapped\n"), 0o644) // may fail while a delete is pending on Windows
+	assert.False(t, looksLikeZip(f))
+	assert.False(t, isUnsupportedArchive(f, p))
+	tmp, err := wrapSingleFile(f, p)
+	require.NoError(t, err)
+	defer rmtree(tmp)
+	copied, err := os.ReadFile(filepath.Join(tmp, "skill.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "# a\n", string(copied))
+
+	d := filepath.Join(dir, "dir.md")
+	require.NoError(t, os.Mkdir(d, 0o755))
+	_, err = openTarget(d)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a regular file")
+	target := filepath.Join(dir, "target.md")
+	require.NoError(t, os.WriteFile(target, []byte("# b\n"), 0o644))
+	link := filepath.Join(dir, "link.md")
+	testutil.SymlinkOrSkip(t, target, link)
+	_, err = openTarget(link)
+	require.Error(t, err)
+}
+
 func TestSingleFileSymlinkIsRefused(t *testing.T) {
 	tmp := t.TempDir()
 	writeFile(t, filepath.Join(tmp, "secret"), "SENSITIVE")
@@ -184,7 +226,7 @@ func TestZipTrailerDoesNotEvadeAsEmptyArchive(t *testing.T) {
 func TestZipPrefixedMagicWithEmptyEocdDoesNotEvade(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "evil.md")
 	writeFile(t, p, "PK\x03\x04---\nname: evil\n---\nbody\n"+eocd)
-	assert.False(t, looksLikeZip(p))
+	assert.False(t, looksLikeZip(openRO(t, p)))
 	r := resolveOK(t, p)
 	assert.Equal(t, "file", r.Kind)
 	assert.NotEmpty(t, BuildPackage(r.Root).Artifacts)
@@ -194,7 +236,7 @@ func TestZipPrefixedMagicWithEmptyEocdDoesNotEvade(t *testing.T) {
 func TestZipRootOnlyMemberDoesNotEvade(t *testing.T) {
 	z := filepath.Join(t.TempDir(), "dot.zip")
 	writeZip(t, z, []member{{".", "payload"}})
-	assert.False(t, looksLikeZip(z))
+	assert.False(t, looksLikeZip(openRO(t, z)))
 	assert.Equal(t, "file", resolveOK(t, z).Kind)
 }
 

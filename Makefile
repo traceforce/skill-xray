@@ -1,4 +1,4 @@
-.PHONY: all build install-opengrep test lint vuln ci fuzz clean help
+.PHONY: all build install-opengrep test lint vuln sec ci fuzz clean help
 
 GO ?= go
 FUZZTIME ?= 30s
@@ -24,6 +24,9 @@ lint: ## Run go vet and staticcheck
 
 vuln: ## Check every dependency against the Go vulnerability database
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+sec: ## Run gosec over the product code at medium severity and confidence
+	$(GO) run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 -quiet -severity medium -confidence medium -exclude-dir internal/testutil -exclude-dir tools ./...
 
 ci: ## Run the same checks CI runs: build, vet, test
 	$(GO) build ./...

@@ -160,7 +160,7 @@ type dirHandle interface {
 }
 
 var (
-	openDir  = func(path string) (dirHandle, error) { return os.Open(path) }
+	openDir  = func(path string) (dirHandle, error) { return os.Open(path) } // #nosec G304 -- the walker opens the scan target's directories by design
 	openFile = os.OpenFile
 	stat     = os.Stat
 )

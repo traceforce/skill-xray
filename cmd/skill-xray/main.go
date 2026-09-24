@@ -322,7 +322,7 @@ func (o *options) preflight(pkg, root string) (map[string]any, error) {
 	if st, err := os.Stat(policy); err != nil || !st.Mode().IsRegular() {
 		return nil, errors.New("Operator policy must be a regular file")
 	}
-	f, err := os.Open(policy)
+	f, err := os.Open(policy) // #nosec G304 -- the operator's policy path, checked by preflight before this read
 	if err != nil {
 		return nil, err
 	}

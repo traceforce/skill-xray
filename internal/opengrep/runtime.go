@@ -103,13 +103,8 @@ func CachedExecutable(dir string) string {
 	return filepath.Join(dir, name)
 }
 
-// digestFile is _digest; a test counts its calls.
-var digestFile = func(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
+// digestFile is _digest over the open handle; a test counts its calls.
+var digestFile = func(f *os.File) (string, error) {
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return "", err
@@ -118,12 +113,13 @@ var digestFile = func(path string) (string, error) {
 }
 
 // digests caches a verified binary's digest by file identity (_digest_cached, lru_cache(8)).
-// ponytail: identity is (abs path, size, mtime) since ctime/ino/dev need syscall (code.md R10);
-// the cache is cleared rather than LRU-evicted when it fills. Scans may run concurrently in one
-// process, so the lookup and the hash run under one lock: the first scan hashes the engine and
-// the others wait for its result instead of hashing the same file again.
+// ponytail: identity is (abs path, size, mtime, ctime) plus the os.SameFile check on the entry,
+// which stands for ino and dev; the cache is cleared rather than LRU-evicted when
+// it fills. Scans may run concurrently in one process, so the lookup and the hash run under one
+// lock: the first scan hashes the engine and the others wait for its result instead of hashing
+// the same file again.
 var (
-	digests   = map[digestKey]string{}
+	digests   = map[digestKey]digestEntry{}
 	digestsMu sync.Mutex
 )
 
@@ -131,10 +127,59 @@ type digestKey struct {
 	path  string
 	size  int64
 	mtime time.Time
+	ctime int64
+}
+
+// digestEntry keeps the identity of the file that was hashed. A replacement with the same size
+// and modification time is hashed again, and so is the same file rewritten in place with both
+// kept, since a write moves its change time, which is part of the key.
+type digestEntry struct {
+	digest string
+	info   os.FileInfo
+}
+
+// trustedLocation refuses an engine that a user other than this one or an administrator could
+// swap between the verification and the run. Every component on the path as named and on the
+// path it resolves to, from the engine itself up to the root, must pass the platform's
+// trustedComponent: on Unix it is owned by this user or root and is not world-writable unless it
+// is a sticky directory; on Windows its owner is this user, Administrators, SYSTEM or
+// TrustedInstaller and its DACL grants no replacing right to Everyone, Authenticated Users or
+// Users. A group one of them granted write to keeps it on both. It returns the resolved path.
+func trustedLocation(info os.FileInfo, abs string) (string, error) {
+	real, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", err
+	}
+	if err := trustedComponent(real, info); err != nil { // the engine itself, as opened
+		return "", err
+	}
+	chains := []string{filepath.Dir(real)}
+	if abs != real {
+		chains = append(chains, abs) // the link and every directory on the path as named
+	}
+	for _, start := range chains {
+		for p := start; ; p = filepath.Dir(p) {
+			st, err := os.Lstat(p) // #nosec G703 -- a component of the engine's path, judged by its owner and permissions
+			if err != nil {
+				return "", err
+			}
+			if err := trustedComponent(p, st); err != nil {
+				return "", err
+			}
+			if filepath.Dir(p) == p {
+				break
+			}
+		}
+	}
+	return real, nil
 }
 
 // verifyExecutable is verify_executable: path must be a regular file with the asset's size
-// and SHA-256 (nil asset: this machine's). It returns the path it verified.
+// and SHA-256 (nil asset: this machine's), both read through one open handle, in a location
+// that only this user, root or an administrator, or a group one of them granted, can change,
+// on every platform. It returns the resolved path it verified, links followed, and the engine
+// runs from that path; the window between the verification and the run is open to those writers alone, so
+// the pin defends against a corrupt or stale download rather than against them.
 func verifyExecutable(path string, asset *asset) (string, error) {
 	if asset == nil {
 		a, err := hostAsset()
@@ -143,7 +188,12 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 		}
 		asset = &a
 	}
-	info, err := os.Stat(path)
+	f, err := os.Open(path) // #nosec G304 G703 -- hashing the engine the operator or the cache names is the verification itself
+	if err != nil {
+		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
+	}
+	defer f.Close()
+	info, err := f.Stat()
 	if err != nil {
 		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 	}
@@ -151,24 +201,40 @@ func verifyExecutable(path string, asset *asset) (string, error) {
 	if !info.Mode().IsRegular() || info.Size() != asset.Size {
 		return "", mismatch
 	}
-	abs, _ := filepath.Abs(path)
-	key := digestKey{abs, info.Size(), info.ModTime()}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
+	}
+	real, err := trustedLocation(info, abs)
+	if err != nil {
+		return "", runtimeError{fmt.Sprintf("OpenGrep executable location can be changed by another user (%s): %s", err, path)}
+	}
+	if st, err := os.Stat(real); err != nil || !os.SameFile(st, info) { // #nosec G703 -- the resolved engine path, which must still name the handle that was hashed
+		return "", runtimeError{"OpenGrep executable path changed during verification: " + path}
+	}
+	ctime, err := changeTime(f, info)
+	if err != nil {
+		return "", runtimeError{"OpenGrep executable is unavailable: " + path}
+	}
+	key := digestKey{real, info.Size(), info.ModTime(), ctime}
 	digestsMu.Lock()
 	defer digestsMu.Unlock()
-	digest, ok := digests[key]
-	if !ok {
-		if digest, err = digestFile(path); err != nil {
+	entry, ok := digests[key]
+	if !ok || !os.SameFile(entry.info, info) {
+		digest, err := digestFile(f)
+		if err != nil {
 			return "", runtimeError{"OpenGrep executable is unavailable: " + path}
 		}
 		if len(digests) >= 8 {
 			clear(digests)
 		}
-		digests[key] = digest
+		entry = digestEntry{digest, info}
+		digests[key] = entry
 	}
-	if digest != asset.SHA256 {
+	if entry.digest != asset.SHA256 {
 		return "", mismatch
 	}
-	return path, nil
+	return real, nil // the resolved name, so the run opens the file that was hashed, not a lexical relative of a link
 }
 
 // Resolve is resolve_opengrep: the explicit path, else $SKILL_XRAY_OPENGREP_BIN, else the
@@ -211,7 +277,7 @@ func Install(cacheDir string, client *http.Client) (string, error) {
 	if _, err := verifyExecutable(temporary, &asset); err != nil {
 		return "", err
 	}
-	if err := os.Chmod(temporary, 0o700); err != nil {
+	if err := os.Chmod(temporary, 0o700); err != nil { // #nosec G302 -- the verified engine must stay executable; 0o700 is owner-only
 		return "", installFailed(err)
 	}
 	if err := os.Rename(temporary, destination); err != nil {
@@ -227,7 +293,7 @@ func installFailed(err error) error {
 // download streams the asset into a ".opengrep-*" file beside destination, capped at 64 MiB.
 // The temp file's name is returned even on failure so the caller removes it.
 func download(asset asset, destination string, client *http.Client) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destination), 0o750); err != nil {
 		return "", installFailed(err)
 	}
 	req, err := http.NewRequest(http.MethodGet, asset.url(), nil)

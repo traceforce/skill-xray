@@ -120,7 +120,7 @@ func fmLoad(a *Artifact, block string) (code string) {
 		if m[2] >= 0 && m[4] >= 0 {
 			hi, _ := strconv.ParseUint(block[from+m[2]:from+m[3]], 16, 32)
 			lo, _ := strconv.ParseUint(block[from+m[4]:from+m[5]], 16, 32)
-			cp = utf16.DecodeRune(rune(hi), rune(lo))
+			cp = utf16.DecodeRune(rune(hi), rune(lo)) // #nosec G115 -- hi and lo are four-hex-digit captures, at most 0xFFFF
 		}
 		repl := fmt.Sprintf(`\U%08X`, cp)
 		block, from = block[:start]+repl+block[end:], start+len(repl)

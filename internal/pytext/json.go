@@ -126,7 +126,7 @@ func unescapeString(s string) string {
 		if rs[i] == escapeMarker {
 			b.WriteRune(escapeMarker)
 		} else {
-			b.WriteByte(byte(rs[i] - escapeBase))
+			b.WriteByte(byte(rs[i] - escapeBase)) // #nosec G115 -- rs[i] is escapeBase plus one byte, as escapeString wrote it
 		}
 	}
 	return b.String()

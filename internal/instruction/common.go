@@ -145,7 +145,7 @@ func indexRunes(s string) *runeIndex {
 		n++
 	}
 	x.toRune[len(s)] = n
-	x.toByte = append(x.toByte, int32(len(s)))
+	x.toByte = append(x.toByte, int32(len(s))) // #nosec G115 -- len(s) is at most ingest.MaxFileBytes
 	return x
 }
 

@@ -240,6 +240,7 @@ The ledger with its counts and exception records is printed by every inventory a
 make ci        # what CI runs: go build ./..., go vet ./..., go test ./...
 make test      # go test ./...
 make lint      # go vet plus staticcheck
+make sec       # gosec over the product code at medium severity and confidence
 make fuzz      # every fuzz target for FUZZTIME (default 30s); a crasher lands in <pkg>/testdata/fuzz/
 make clean     # remove bin/
 ```
@@ -282,7 +283,7 @@ internal/
 tools/bench/             the benchmark runner and scorer
 docs/spec/               the detection specification, one file per group; 00-overview.md is the binding contract
 docs/reporting.md        result identity, operator decisions and SARIF semantics
-Makefile                 all, build, install-opengrep, test, lint, vuln, ci, fuzz, clean, help
+Makefile                 all, build, install-opengrep, test, lint, vuln, sec, ci, fuzz, clean, help
 ```
 
 ## Contributing

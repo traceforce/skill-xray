@@ -106,7 +106,7 @@ func rmtree(p string) {
 	_ = filepath.WalkDir(p, func(q string, d fs.DirEntry, err error) error {
 		if err == nil && d.Type()&fs.ModeSymlink == 0 {
 			if st, err := os.Lstat(q); err == nil {
-				_ = os.Chmod(q, st.Mode()|0o700)
+				_ = os.Chmod(q, st.Mode()|0o700) // #nosec G122 -- our own temp tree; symlinks were skipped above
 			}
 		}
 		return nil
@@ -131,26 +131,26 @@ func Resolve(target string) (Resolved, func(), error) {
 		}
 		return Resolved{abs, name, "directory"}, noop, nil
 	} else if err == nil && st.Mode().IsRegular() {
-		if lst, err := os.Lstat(target); err == nil && lst.Mode()&fs.ModeSymlink != 0 {
-			// Refuse before the zip check: a symlink to a zip would otherwise be
-			// extracted, pulling the target's contents in.
-			return Resolved{}, noop, refuse("single-file input is a symlink; refused: %s", target)
+		f, err := openTarget(target)
+		if err != nil {
+			return Resolved{}, noop, err
 		}
-		if looksLikeZip(target) {
+		defer f.Close()
+		if looksLikeZip(f) {
 			tmp, err := mkdtemp()
 			if err != nil {
 				return Resolved{}, noop, refuse("cannot read zip %s: %s", target, err)
 			}
-			if err := extractZip(target, tmp); err != nil {
+			if err := extractZip(f, tmp); err != nil {
 				rmtree(tmp)
 				return Resolved{}, noop, failClosed(err, "cannot read zip %s: %s", target)
 			}
 			return Resolved{tmp, trimSuffixFold(baseName(target), ".zip"), "zip"}, func() { rmtree(tmp) }, nil
 		}
-		if isUnsupportedArchive(target, target) {
+		if isUnsupportedArchive(f, target) {
 			return Resolved{}, noop, refuse("%s is an archive skill-xray does not extract; unpack it and scan the directory", baseName(target))
 		}
-		tmp, err := wrapSingleFile(target)
+		tmp, err := wrapSingleFile(f, target)
 		if err != nil {
 			return Resolved{}, noop, err
 		}
@@ -192,9 +192,26 @@ func trimSuffixFold(name, suffix string) string {
 
 // isUnsupportedArchive is true for a tar (plain, gzip, bzip2 or xz) or a file whose
 // name carries another archive extension.
-func isUnsupportedArchive(p, name string) bool {
+func isUnsupportedArchive(f *os.File, name string) bool {
 	low := pytext.Lower(name)
-	return isTar(p) || slices.ContainsFunc(archiveExts, func(e string) bool { return strings.HasSuffix(low, e) })
+	return isTar(f) || slices.ContainsFunc(archiveExts, func(e string) bool { return strings.HasSuffix(low, e) })
+}
+
+// openTarget opens a single-file target once, without following a symlink or a junction in its
+// final component, and checks on the handle that it is a regular file; every later read of the
+// target goes through that handle, so nothing swapped in after the check is read. A link among
+// the directories on the way is part of the path the operator named, as for any file name.
+func openTarget(target string) (*os.File, error) {
+	f, err := openNoFollow(target)
+	if err != nil {
+		return nil, failClosed(err, "cannot read file %s: %s", target)
+	}
+	st, err := f.Stat()
+	if err != nil || !st.Mode().IsRegular() {
+		f.Close()
+		return nil, refuse("single-file input is not a regular file; refused: %s", target)
+	}
+	return f, nil
 }
 
 func tarHeader(r io.Reader) bool {
@@ -202,12 +219,7 @@ func tarHeader(r io.Reader) bool {
 	return err == nil
 }
 
-func isTar(p string) bool {
-	f, err := os.Open(p)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
+func isTar(f *os.File) bool {
 	at := func() io.Reader { return io.NewSectionReader(f, 0, 1<<62) } // a fresh read from offset 0
 	if gz, err := gzip.NewReader(at()); err == nil && tarHeader(gz) {
 		return true
@@ -237,26 +249,33 @@ func zipMemberExtracts(f *zip.File) bool {
 // directory lists a member that would actually extract to a file. A bare EOCD
 // trailer appended to any file reads as a valid empty zip and would leave an empty
 // package at 100%; anything without a real member takes the single-file path.
-func looksLikeZip(p string) bool {
-	f, err := os.Open(p)
+func looksLikeZip(f *os.File) bool {
+	var magic [4]byte
+	if _, err := f.ReadAt(magic[:], 0); err != nil || string(magic[:]) != "PK\x03\x04" {
+		return false
+	}
+	r, err := zipReader(f)
 	if err != nil {
 		return false
 	}
-	var magic [4]byte
-	_, err = io.ReadFull(f, magic[:])
-	f.Close()
-	if err != nil || string(magic[:]) != "PK\x03\x04" {
-		return false
-	}
-	r, err := zip.OpenReader(p)
-	if err != nil && !errors.Is(err, zip.ErrInsecurePath) {
-		return false
-	}
-	defer r.Close()
 	return slices.ContainsFunc(r.File, zipMemberExtracts)
 }
 
-func wrapSingleFile(p string) (string, error) {
+// zipReader reads the central directory through the open descriptor; an insecure member name
+// is left for extractZip to refuse.
+func zipReader(f *os.File) (*zip.Reader, error) {
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	r, err := zip.NewReader(io.NewSectionReader(f, 0, st.Size()), st.Size())
+	if err != nil && !errors.Is(err, zip.ErrInsecurePath) {
+		return nil, err
+	}
+	return r, nil
+}
+
+func wrapSingleFile(f *os.File, p string) (string, error) {
 	// Copy in bounded chunks rather than a pre-copy size check: a file that grows
 	// after the check must still not write more than ingestMaxBytes.
 	tmp, err := mkdtemp()
@@ -264,17 +283,12 @@ func wrapSingleFile(p string) (string, error) {
 		return "", refuse("cannot read file %s: %s", p, err)
 	}
 	err = func() error {
-		src, err := os.Open(p)
-		if err != nil {
-			return err
-		}
-		defer src.Close()
-		dst, err := os.Create(filepath.Join(tmp, baseName(p)))
+		dst, err := os.Create(filepath.Join(tmp, baseName(p))) // #nosec G304 -- a base name under a fresh temp directory
 		if err != nil {
 			return err
 		}
 		defer dst.Close()
-		_, err = io.Copy(cappedWriter{dst, new(int64), ingestMaxBytes, "file exceeds %d bytes"}, src)
+		_, err = io.Copy(cappedWriter{dst, new(int64), ingestMaxBytes, "file exceeds %d bytes"}, io.NewSectionReader(f, 0, 1<<62))
 		return err
 	}()
 	if err != nil {
@@ -304,13 +318,12 @@ var driveRE = regexp.MustCompile(`^[A-Za-z]:`)
 
 // extractZip extracts into dest, refusing zip-slip, symlink members, colliding
 // portable names, too many members and more than ingestMaxBytes of written bytes.
-func extractZip(zipPath, dest string) error {
+func extractZip(f *os.File, dest string) error {
 	destReal := realpath(dest)
-	r, err := zip.OpenReader(zipPath)
-	if err != nil && !errors.Is(err, zip.ErrInsecurePath) {
+	r, err := zipReader(f)
+	if err != nil {
 		return err
 	}
-	defer r.Close()
 	if len(r.File) > ingestMaxZipMembers {
 		return limit("zip has %d members (max %d)", len(r.File), ingestMaxZipMembers)
 	}
@@ -360,12 +373,12 @@ func extractZip(zipPath, dest string) error {
 			return refuse("zip contains a symlink: %s", info.Name)
 		}
 		if isDir {
-			if err := os.MkdirAll(out, 0o755); err != nil {
+			if err := os.MkdirAll(out, 0o750); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(out), 0o750); err != nil {
 			return err
 		}
 		if err := func() error {
@@ -374,12 +387,12 @@ func extractZip(zipPath, dest string) error {
 				return err
 			}
 			defer src.Close()
-			dst, err := os.Create(out)
+			dst, err := os.Create(out) // #nosec G304 -- out is a member path extractZip already checked
 			if err != nil {
 				return err
 			}
 			defer dst.Close()
-			_, err = io.Copy(cappedWriter{dst, &written, ingestMaxBytes, "zip uncompressed size exceeds %d bytes"}, src)
+			_, err = io.Copy(cappedWriter{dst, &written, ingestMaxBytes, "zip uncompressed size exceeds %d bytes"}, src) // #nosec G110 -- cappedWriter fails closed at ingestMaxBytes
 			return err
 		}(); err != nil {
 			return err
@@ -579,7 +592,7 @@ func (c *deadlineConn) Write(b []byte) (int, error) {
 
 func dialTLSDefault(ctx context.Context, ip netip.Addr, port int, host string) (net.Conn, error) {
 	var d net.Dialer
-	raw, err := d.DialContext(ctx, "tcp", netip.AddrPortFrom(ip, uint16(port)).String())
+	raw, err := d.DialContext(ctx, "tcp", netip.AddrPortFrom(ip, uint16(port)).String()) // #nosec G115 -- port was range-checked by checkURLHostDefault
 	if err != nil {
 		return nil, err
 	}
@@ -631,7 +644,7 @@ func downloadCapped(t urlTarget, dest string, deadline time.Time) error {
 	if resp.StatusCode != 200 {
 		return refuse("URL returned HTTP %d", resp.StatusCode)
 	}
-	fh, err := os.Create(dest)
+	fh, err := os.Create(dest) // #nosec G304 -- a constant name under a fresh temp directory
 	if err != nil {
 		return err
 	}
@@ -700,12 +713,19 @@ func fetchInto(rawurl string, t urlTarget, tmp string, deadline time.Time) (root
 	if name == "" || name == "." || name == ".." {
 		name = "download"
 	}
-	if looksLikeZip(download) {
+	f, err := os.Open(download) // #nosec G304 -- a constant name under a fresh temp directory
+	if err != nil {
+		return "", "", err
+	}
+	if looksLikeZip(f) {
 		extract := filepath.Join(tmp, "extracted")
-		if err := os.Mkdir(extract, 0o755); err != nil {
+		if err := os.Mkdir(extract, 0o750); err != nil {
+			f.Close()
 			return "", "", err
 		}
-		if err := extractZip(download, extract); err != nil {
+		err := extractZip(f, extract)
+		f.Close()
+		if err != nil {
 			return "", "", err
 		}
 		if err := os.Remove(download); err != nil {
@@ -713,7 +733,9 @@ func fetchInto(rawurl string, t urlTarget, tmp string, deadline time.Time) (root
 		}
 		return extract, trimSuffixFold(name, ".zip"), nil
 	}
-	if isUnsupportedArchive(download, name) {
+	unsupported := isUnsupportedArchive(f, name)
+	f.Close()
+	if unsupported {
 		return "", "", refuse("downloaded file is an archive skill-xray does not extract; fetch and unpack it, then scan the directory")
 	}
 	dest := filepath.Join(tmp, name)
@@ -736,7 +758,7 @@ func checkGitRemoteDefault(rawurl string) error {
 }
 
 func runGitDefault(ctx context.Context, argv, env []string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) // #nosec G204 -- git with fixed flags and a URL checkGitRemoteDefault validated
 	cmd.Env = env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
