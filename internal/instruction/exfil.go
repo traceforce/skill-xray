@@ -266,11 +266,12 @@ type sentenceContext struct {
 	spans    [][]int
 	rcps     map[string]*recipientInfo
 	marks    []int8 // per span, a sender mark between the previous span and it: 0 unread, 1 yes, 2 no
+	capped   bool   // a chain reached exfilMaxChain with another address in reach
 }
 
 func newSentenceContext(sentence string, x *runeIndex) *sentenceContext {
 	spans := exfilAddrRE.FindAllStringIndex(sentence, -1)
-	return &sentenceContext{sentence, x, spans, map[string]*recipientInfo{}, make([]int8, len(spans))}
+	return &sentenceContext{sentence: sentence, x: x, spans: spans, rcps: map[string]*recipientInfo{}, marks: make([]int8, len(spans))}
 }
 
 // recipientOf is exfilRecipient plus the host and local guards, once per address text.
@@ -310,7 +311,7 @@ func exfilAddresses(sc *sentenceContext, pos int) [][]int {
 	var out [][]int
 	x, spans := sc.x, sc.spans
 	limit, first := x.rune(pos)+60, sort.Search(len(spans), func(i int) bool { return spans[i][0] >= pos })
-	for i := first; i < len(spans) && len(out) < exfilMaxChain; i++ {
+	for i := first; i < len(spans); i++ {
 		start, end := spans[i][0], spans[i][1]
 		if x.rune(start) > limit {
 			break
@@ -320,6 +321,10 @@ func exfilAddresses(sc *sentenceContext, pos int) [][]int {
 				break
 			}
 		} else if sc.markBefore(i) {
+			break
+		}
+		if len(out) == exfilMaxChain { // an address in reach is left unread: the artifact says so
+			sc.capped = true
 			break
 		}
 		out = append(out, spans[i])
@@ -444,7 +449,7 @@ func objectOf(gap, verb, pre string) objectResolution {
 func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 	var out []findings.Finding
 	seen := map[exfilKey]bool{}
-	total, analysed, exhausted := 0, 0, false
+	total, analysed, exhausted, chainCapped := 0, 0, false, false
 	previous, prevTail, exampleSection := "", "", false
 	for _, b := range proseBlocks(a) {
 		raw := FlattenProse(b.Text)
@@ -470,6 +475,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 			x, tx := indexRunes(sentence), indexRunes(s.text)
 			sc := newSentenceContext(sentence, x)
 			deliveries := exfilDeliveries(sc)
+			chainCapped = chainCapped || sc.capped
 			verbs := map[[2]int]*verbContext{}
 			var wholeDisclosure, wholeTelemetry, wholePossessive *bool // the whole sentence, read once when a verb has no acquisition
 			once := func(cell **bool, re *regexp.Regexp) bool {
@@ -648,6 +654,11 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 	}
 	if total > findingCap {
 		out = append(out, capNote(a.Rel, "SXV-043", total-findingCap))
+	}
+	if chainCapped {
+		out = append(out, findings.Finding{Rule: "analysis-incomplete", Severity: "high", Path: a.Rel,
+			Message:  fmt.Sprintf("a recipient list in %s runs past %d addresses; the rest was not read", a.Rel, exfilMaxChain),
+			Evidence: map[string]any{"reason": "exfil_chain_cap", "addresses": exfilMaxChain}})
 	}
 	if exhausted {
 		out = append(out, findings.Finding{Rule: "analysis-incomplete", Severity: "high", Path: a.Rel,

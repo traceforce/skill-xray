@@ -836,7 +836,8 @@ func IsWithinSource(path, root string) bool {
 
 // directoriesUnder is the identity of every directory below root, read through root's own
 // path, so a root that is itself a junction is entered, with links below it not followed;
-// complete is false when the read stopped at the budget or a directory could not be read.
+// complete is false when the read stopped at the budget or a directory or its identity could
+// not be read.
 func directoriesUnder(root string) (out []os.FileInfo, complete bool) {
 	complete = true
 	entries := 0
@@ -846,9 +847,12 @@ func directoriesUnder(root string) (out []os.FileInfo, complete bool) {
 			return fs.SkipAll
 		}
 		if p != "." && d.IsDir() {
-			if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(p))); err == nil {
-				out = append(out, info)
+			info, err := os.Stat(filepath.Join(root, filepath.FromSlash(p)))
+			if err != nil { // an identity that cannot be read is one that cannot be compared: fail closed
+				complete = false
+				return fs.SkipAll
 			}
+			out = append(out, info)
 		}
 		return nil
 	})
