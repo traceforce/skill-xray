@@ -1,6 +1,6 @@
 // Package parse holds the parsed intermediate representation every check reads (Python
 // parse.ParsedPackage / ParsedArtifact). Nil on a pointer, map or slice field is Python None
-// where the spec says so (00-overview D3); an empty non-nil value is a parsed empty value.
+// where the spec says so; an empty non-nil value is a parsed empty value.
 package parse
 
 import (
@@ -231,10 +231,10 @@ func Reach(p *Package, roots, targets map[string]bool, includeRoots bool) map[st
 	return out
 }
 
-// presenceOnly names the diagnostics whose detail the IR dump reduces to true (parse.md R6).
+// presenceOnly names the diagnostics whose detail the IR dump reduces to true.
 var presenceOnly = map[string]bool{"config_parse_error": true, "shell_error_region": true, "parse_crash": true}
 
-// irDoc is the per-artifact record of the IR dump (00-overview §6), in the shape the Python
+// irDoc is the per-artifact record of the IR dump, in the shape the Python
 // scanner's dump had. refs is the whole package's Refs; those from a.Rel are
 // kept. A nil value is Python None; a typed nil slice or map renders as [] or {} through pytext.
 func irDoc(a *Artifact, refs []Ref) map[string]any {
@@ -263,7 +263,7 @@ func irDoc(a *Artifact, refs []Ref) map[string]any {
 		"unsafe_yaml_tags": a.UnsafeYamlTags, "grants": nil,
 		"fences": nil, "fence_spans": nil, "code_spans": nil, "prose_spans": nil,
 		"reference_spans": nil, "paragraph_spans": nil,
-		"links": nil, "fallback_links": []Link{}, // the fallback path is not ported (parse.md R4)
+		"links": nil, "fallback_links": []Link{}, // the fallback path is not ported
 		"html_comments": nil, "html_prose": nil, "html_uninspectable": nil,
 		"has_html": nil, "has_uninspectable_html": nil,
 		"preprocessing": a.Preprocessing, "preprocessing_counts": a.PreprocessingCounts,

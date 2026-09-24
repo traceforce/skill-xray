@@ -6,7 +6,7 @@ Skill X-Ray is a static security scanner for AI skill packages: the folders (a `
 
 The product is the Go binary built from `cmd/skill-xray`. It is the counterpart of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same for MCP servers. Every scan builds a coverage ledger that records each file it read and each file it did not, with a reason. Every scan runs deterministic checks, including a pinned [OpenGrep](https://github.com/opengrep/opengrep) code lane over bundled Python, shell, JavaScript and TypeScript, and writes a validated [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report, the only output format, as MCP X-Ray does. The tool is report-only: it writes the file you name and uploads nothing.
 
-The binary was ported from a Python scanner and, before that code was retired in pull request 46, proved to produce the same findings, the same JSON and the same SARIF bytes across its fixture corpus and the benchmark test split (pull request 42); the detection contract it implements is written down in `docs/spec`.
+The binary was ported from a Python scanner and, before that code was retired in pull request 46, proved to produce the same findings, the same JSON and the same SARIF bytes across its fixture corpus and the benchmark test split (pull request 42). The detection rules are pinned by the test suite and measured by the benchmark runner under `tools/bench`.
 
 ## Installation
 
@@ -240,7 +240,6 @@ internal/
                          Python, CPython AST, PEP 508 and Unicode bidi semantics the port reproduces
   testutil               helpers shared by every package's tests
 tools/bench/             the benchmark runner and scorer
-docs/spec/               the detection specification, one file per group; 00-overview.md is the binding contract
 docs/reporting.md        result identity, operator decisions and SARIF semantics
 Makefile                 all, build, install-opengrep, test, lint, vuln, ci, fuzz, clean, help
 ```
@@ -251,7 +250,7 @@ Contributions are welcome. Please ensure that:
 
 1. `make ci` passes: it builds, vets and tests every package.
 2. `make lint` passes: `go vet` plus staticcheck.
-3. Detection behaviour follows `docs/spec`. A change to detection lands with its tests and the matching spec update, and says what it did to the benchmark.
+3. A change to detection lands with its tests and says what it did to the benchmark.
 4. Documentation is updated.
 
 ## References

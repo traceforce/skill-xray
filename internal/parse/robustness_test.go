@@ -3,7 +3,7 @@ package parse
 // Posture-audit fixes (2026-09-19): inputs that CPython, markdown-it-py and tomllib handle in
 // polynomial time but the Go libraries parse quadratically (or with quadratic memory) are refused
 // fail-visibly before the library runs, and a single artifact can no longer outlive the package
-// budget. Each refusal is an accepted divergence listed in 00-overview §7.
+// budget. Each refusal is an accepted divergence from the Python scanner.
 
 import (
 	"slices"

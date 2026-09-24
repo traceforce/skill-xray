@@ -150,7 +150,7 @@ func Candidates(fs []findings.Finding) []Candidate {
 	return out
 }
 
-// ToMap is the generic JSON document of c; integral numbers are Go int (00-overview D7).
+// ToMap is the generic JSON document of c; integral numbers are Go int.
 func (c *Correlation) ToMap() map[string]any {
 	return pytext.JSONView(c).(map[string]any)
 }

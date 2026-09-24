@@ -23,7 +23,7 @@ var engineSeverity = map[string]string{"ERROR": "high", "WARNING": "medium", "IN
 
 // pyStr is str(v or "") for the scalar engine fields the bridge stringifies.
 // ponytail: a container rendered here would take Go's spelling, not Python's repr; OpenGrep
-// emits strings (code.md §5.12).
+// emits strings.
 func pyStr(v any) string {
 	switch {
 	case !pytext.Truthy(v):
@@ -265,7 +265,7 @@ func observe(target Selected, name, capability string, line, col int, p *parse.P
 
 // FindingsFromReport is findings_from_report: translate OpenGrep's stable JSON result shape
 // into native findings. observations, when non-nil, collects the capability observations
-// (00-overview D9); redactions are replaced by "<local>" in engine error messages.
+// redactions are replaced by "<local>" in engine error messages.
 func FindingsFromReport(report map[string]any, targets map[string]Selected, p *parse.Package, redactions []string, observations *[]map[string]any) []findings.Finding {
 	out := []findings.Finding{}
 	pythonTrees := map[string]*pyast.Module{}

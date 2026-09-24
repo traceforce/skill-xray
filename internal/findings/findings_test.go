@@ -110,7 +110,7 @@ func loadGolden(t *testing.T) golden {
 		t.Fatal(err)
 	}
 	for _, fs := range [][]Finding{g.Inputs, g.Sorted, g.Deduped, g.Capped} {
-		for i := range fs { // ints inside decoded evidence must be Go int (00-overview D7)
+		for i := range fs { // ints inside decoded evidence must be Go int
 			pytext.Intify(fs[i].Evidence)
 		}
 	}
@@ -162,7 +162,7 @@ func TestGolden(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// numbers compare numerically (00-overview D11): Python spells the one float 3.0, Go 3
+			// numbers compare numerically: Python spells the one float 3.0, Go 3
 			wantDoc, err := json.Marshal(g.ToDict[i].Value)
 			if err != nil {
 				t.Fatal(err)

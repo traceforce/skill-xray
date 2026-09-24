@@ -118,7 +118,7 @@ var digestFile = func(path string) (string, error) {
 }
 
 // digests caches a verified binary's digest by file identity (_digest_cached, lru_cache(8)).
-// ponytail: identity is (abs path, size, mtime) since ctime/ino/dev need syscall (code.md R10);
+// ponytail: identity is (abs path, size, mtime) since ctime/ino/dev need syscall;
 // the cache is cleared rather than LRU-evicted when it fills. Scans may run concurrently in one
 // process, so the lookup and the hash run under one lock: the first scan hashes the engine and
 // the others wait for its result instead of hashing the same file again.

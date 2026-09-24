@@ -171,7 +171,7 @@ func parseOne(a *Artifact, text string) {
 }
 
 // parseMD is _parse_md on the success path only: goldmark cannot fail, so markdown_parse_error
-// and the fallback scanners never run (parse.md R4). A variable so a test can make it panic.
+// and the fallback scanners never run. A variable so a test can make it panic.
 var parseMD = func(a *Artifact, text string, stripFM bool) {
 	if strings.HasSuffix(pytext.Lower(a.Rel), ".rst") {
 		a.diag("unsupported_markup", detail("rst"))
@@ -267,7 +267,7 @@ func parseShell(a *Artifact, text string) {
 		return
 	}
 	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(text), "")
-	if err != nil { // one span at the first error: mvdan/sh stops there and keeps no tree (parse.md 4.8)
+	if err != nil { // one span at the first error: mvdan/sh stops there and keeps no tree
 		var pe syntax.ParseError
 		var le syntax.LangError
 		line := 0

@@ -86,7 +86,7 @@ func capFindings(fs []findings.Finding) []findings.Finding {
 	return kept
 }
 
-// Code-point arithmetic (instruction.md §5.1): regex offsets are bytes, every Python window
+// Code-point arithmetic: regex offsets are bytes, every Python window
 // constant, column and [:n] slice counts code points.
 
 // runeIdx converts a byte offset in s to a code-point offset.
@@ -210,7 +210,7 @@ func startsWithWordBoundary(src string) bool {
 var softBreakRE = regexp.MustCompile(`[ \t]*\n[ \t]*`)
 
 // FlattenProse is _flatten_prose: CommonMark soft breaks become one space, then a Python strip.
-// Exported for obfuscation and llm (00-overview D13).
+// Exported for obfuscation and llm.
 func FlattenProse(text string) string { return pytext.Strip(softBreakRE.ReplaceAllString(text, " ")) }
 
 // SourcePosition is _source_position: maps a code-point offset in FlattenProse(text) back to a
@@ -236,7 +236,7 @@ func SourcePosition(text string, startLine, pos int) (int, int) {
 }
 
 // Block is one prose block: its raw source text and 1-based first line. Exported with
-// SourceSpanBlocks and PlainProseBlocks for obfuscation (00-overview D13).
+// SourceSpanBlocks and PlainProseBlocks for obfuscation.
 type Block struct {
 	Text  string
 	Start int

@@ -325,7 +325,7 @@ func secretFindings(p *parse.Package) (out []findings.Finding) {
 }
 
 // vcsInstallRE is _VCS_INSTALL_RE with the archive alternative last and its trailing \b as a
-// consuming class outside the capture (code.md §3.2 #27); the alternatives start with disjoint
+// consuming class outside the capture; the alternatives start with disjoint
 // characters, so the order is irrelevant. The extent is group 1 or group 2.
 var vcsInstallRE = regexp.MustCompile(`(?i)((?:git|hg|svn|bzr)\+[\pL\pN_]+://` + pytext.NotSpace + `+|@` + pytext.Space + `*[a-z][a-z0-9]*(?:\+[a-z0-9]+)?://` + pytext.NotSpace + `+|(?:-e|--editable)` + pytext.Space + `+` + pytext.NotSpace + `*://` + pytext.NotSpace + `+)|((?:^|` + pytext.Space + `|=)https?://` + pytext.NotSpace + `+?\.(?:git|zip|tar(?:\.(?:gz|bz2|xz))?|tgz|whl))(?:[^\pL\pN_]|$)`)
 

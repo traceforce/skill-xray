@@ -78,7 +78,7 @@ func Check(p *parse.Package, o Options) (out []findings.Finding) {
 	defer func() {
 		if r := recover(); r != nil {
 			out = append(out, findings.Finding{Rule: "opengrep-internal-error", Severity: "high",
-				Message:  "OpenGrep analysis failed unexpectedly: RuntimeError", // type(exc).__name__ (code.md 5.9)
+				Message:  "OpenGrep analysis failed unexpectedly: RuntimeError", // type(exc).__name__
 				Evidence: map[string]any{"engine": "opengrep"}})
 		}
 		out = findings.CapFindings(out)

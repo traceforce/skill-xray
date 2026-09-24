@@ -60,7 +60,7 @@ func decodeTOML(text string) (map[string]any, toml.MetaData, string) {
 // tomlMaxDepth bounds a key path. BurntSushi/toml records every key with its full path, so a
 // dotted key or inline-table chain of depth n costs n²/2 strings: 12 GB at 30k segments, where
 // tomllib is merely slow. Past the bound the document is refused as config_parse_error; tomllib
-// would still decode it, a documented divergence (00-overview §7) no real manifest reaches.
+// would still decode it, a documented divergence no real manifest reaches.
 const tomlMaxDepth = 1000
 
 // tomlTooDeep reports a key with more than tomlMaxDepth dotted segments or inline tables nested

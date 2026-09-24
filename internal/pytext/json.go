@@ -35,7 +35,7 @@ func Dumps(v any, indent int) string {
 }
 
 // Intify is the D7 normalisation of a UseNumber-decoded tree, in place: a json.Number becomes
-// int when integral and within int64, else float64 (00-overview D7).
+// int when integral and within int64, else float64.
 func Intify(v any) any {
 	switch x := v.(type) {
 	case json.Number:

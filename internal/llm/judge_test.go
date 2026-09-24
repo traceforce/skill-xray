@@ -40,7 +40,7 @@ func dispositions(ds []Decision) []string {
 }
 
 // test_judge_response_contract.py::test_prompt_has_separate_reason_and_impact_fields, plus the
-// pinned prompt and schema hashes and the schema's byte budget (output-llm §2.6).
+// pinned prompt and schema hashes and the schema's byte budget.
 func TestPromptAndSchemaArePinned(t *testing.T) {
 	assert.Equal(t, "6845601e243f1eba459259b8619878d972ea48ce51b5a859a90c8365fa396941", sha256Hex(judgeSystem))
 	assert.Len(t, judgeSystem, 2355)
