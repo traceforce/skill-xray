@@ -65,6 +65,14 @@ func printable(s string) string {
 	}, s)
 }
 
+// hides reports a control or format character other than a line break or a tab, one a viewer
+// could render as something else than the quoted source; a quote keeps its soft breaks.
+func hides(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool {
+		return unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' || unicode.Is(unicode.Cf, r)
+	})
+}
+
 func redactNamed(text string) string {
 	runes := []rune(text)
 	var b strings.Builder

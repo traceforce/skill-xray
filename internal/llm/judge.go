@@ -192,7 +192,7 @@ func proposal(reply, candidateID, snippet string) (*Proposal, string) {
 	for _, ellipsis := range []string{"...", "…"} {
 		quote = strings.TrimSpace(strings.TrimSuffix(quote, ellipsis))
 	}
-	if utf8.RuneCountInString(quote) > 160 || !strings.Contains(snippet, quote) || printable(quote) != quote ||
+	if utf8.RuneCountInString(quote) > 160 || !strings.Contains(snippet, quote) || hides(quote) ||
 		pytext.Strip(strings.ReplaceAll(quote, "[REDACTED]", "")) == "" {
 		return nil, "evidence-quote"
 	}
