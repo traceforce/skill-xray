@@ -329,6 +329,7 @@ func TestDeadlineCoversBodyRead(t *testing.T) {
 func TestRetryDelay(t *testing.T) {
 	assert.Equal(t, 5*time.Second, retryDelay("5", 0))
 	assert.Equal(t, 500*time.Millisecond, retryDelay("61", 0))
+	assert.Equal(t, 500*time.Millisecond, retryDelay("30", 0), "a wait over ten seconds is not honoured")
 	assert.Equal(t, 500*time.Millisecond, retryDelay("soon", 0))
 	assert.Equal(t, 4*time.Second, retryDelay("", 3))
 	assert.Equal(t, 8*time.Second, retryDelay("", 5))
