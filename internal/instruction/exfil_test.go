@@ -15,7 +15,7 @@ import (
 )
 
 // The cases below are tests/test_instruction_exfil.py's SXV-043 tests; each Go test names its
-// Python function and the case strings are the fixtures (instruction.md §6).
+// Python function and the case strings are the fixtures.
 
 const manifest043 = "---\nname: t\n---\n" // _M_PLAIN
 

@@ -18,7 +18,7 @@ import (
 )
 
 // The core-owned tests/test_capability.py cases. The cases built on findings_from_report /
-// SelectedCode / opengrep_check are the OpenGrep bridge's (core.md §6); one of them,
+// SelectedCode / opengrep_check are the OpenGrep bridge's; one of them,
 // test_missing_manifest_and_failed_ast_stay_unknown, is kept here with the unvalidated
 // observation the bridge emits fed by hand. test_collector_reaches_bridge_without_new_engine_run
 // lives in internal/checks.

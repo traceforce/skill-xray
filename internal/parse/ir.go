@@ -1,6 +1,7 @@
 // Package parse holds the parsed intermediate representation every check reads (Python
-// parse.ParsedPackage / ParsedArtifact). Nil on a pointer, map or slice field is Python None
-// where the spec says so (00-overview D3); an empty non-nil value is a parsed empty value.
+// parse.ParsedPackage / ParsedArtifact). Nil on a pointer, map or slice field stands for the
+// Python None the scanner recorded there, an absent or unparsed value; an empty non-nil value
+// is a parsed empty value.
 package parse
 
 import (
@@ -45,7 +46,7 @@ type Artifact struct {
 	Preprocessing       []Preproc
 	PreprocessingCounts PreprocCounts
 	PyTree              *pyast.Module // nil == None
-	ShellTree           *syntax.File  // nil == None (and nil on a parse error, parse.md R1)
+	ShellTree           *syntax.File  // nil == None, and nil on a parse error: mvdan/sh keeps no partial tree
 	Config              any           // map[string]any | []any | scalar; nil == None
 	ManifestKind        string        // "" == None
 	Deps                []Dep         // nil == None

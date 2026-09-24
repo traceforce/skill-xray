@@ -16,7 +16,7 @@ import (
 )
 
 // The core-owned tests/test_coverage.py cases; the build_code_lane and scan cases are the code
-// group's (core.md §6).
+// group's.
 
 func coverage(t *testing.T, files map[string]string) []findings.Finding {
 	return Coverage(parsed(t, files))

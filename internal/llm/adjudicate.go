@@ -67,7 +67,7 @@ func targetText(a *parse.Artifact) (string, bool) {
 
 // configPromptText is _config_prompt_text: depth-first over the parsed config, projecting only
 // explicitly prompt-bearing string fields so sibling secrets and endpoints never leave. Go maps
-// have no insertion order, so keys are walked sorted (output-llm R6, accepted LLM-lane divergence).
+// have no insertion order, so keys are walked sorted.
 func configPromptText(config any) (string, bool) {
 	var found []string
 	stack := []any{config}

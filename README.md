@@ -4,9 +4,9 @@
 
 Skill X-Ray is a static security scanner for AI skill packages: the folders (a `SKILL.md` manifest plus bundled `scripts/`, `references/`, `hooks.json` and `.mcp.json`) that coding agents load and act on. A skill's instructions enter the agent's context and its scripts run with the agent's privileges, so a skill can read data or run code on the machine it is installed on. Skill X-Ray reads a package before it is installed and never executes it.
 
-The product is the Go binary built from `cmd/skill-xray`. It is the counterpart of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same for MCP servers. Every scan builds a coverage ledger that records each file it read and each file it did not, with a reason. Every scan runs deterministic checks, including a pinned [OpenGrep](https://github.com/opengrep/opengrep) code lane over bundled Python, shell, JavaScript and TypeScript, and writes a validated [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report, the only output format, as MCP X-Ray does. The tool is report-only: it writes the file you name and uploads nothing.
+The product is the Go binary built from `cmd/skill-xray`. It is the counterpart of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same for MCP servers. Every scan builds a coverage ledger that records each file it read and each file it did not, with a reason. Every scan runs deterministic checks, including a pinned [OpenGrep](https://github.com/opengrep/opengrep) code lane over bundled Python, shell, JavaScript and TypeScript, and writes a validated [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report, the only output format, as MCP X-Ray does. The tool is report-only: it writes the file you name and uploads nothing, unless the opt-in `--llm` lane is on, which sends skill text to the configured provider.
 
-The binary was ported from a Python scanner and, before that code was retired in pull request 46, proved to produce the same findings, the same JSON and the same SARIF bytes across its fixture corpus and the benchmark test split (pull request 42); the detection contract it implements is written down in `docs/spec`.
+Without the LLM lane every verdict comes from deterministic rules whose behaviour is pinned by the test suite and measured against a public benchmark by the runner under `tools/bench`; the optional LLM lane adds advisory findings, capped at medium, which can move a clean package to `FINDINGS`, and annotates deterministic ones; it never removes a finding, and within the lane only the further `--llm-apply` opt-in can lower one, to `low`; an operator policy passed with `--policy` is the other way a result is demoted or suppressed, and the report records which.
 
 ## Installation
 
@@ -51,7 +51,7 @@ Analyze one skill package and write its report.
 ./bin/skill-xray scan ./my-skill --output ../reports/my-skill.sarif --policy ../reviewed-policy.json
 ```
 
-The target may be a directory, a single file such as `SKILL.md`, a `.zip` archive, an `https://` URL, or a remote git repository (an `https://` or `ssh://` address ending in `.git`, or a `git@` or `git://` address); a local directory is always scanned as a directory, whatever its name, and a local file is a single-file input. Directory, file and zip inputs are fully offline. URL and git inputs are the only ones that use the network; each enforces size, count and SSRF limits and fails closed. Tar archives are refused; unpack them and scan the directory.
+The target may be a directory, a single file such as `SKILL.md`, a `.zip` archive, an `https://` URL, or a remote git repository, an `https://` address ending in `.git`; `ssh://`, `git@` and `git://` addresses and plain `http://` URLs are refused. A local directory is always scanned as a directory, whatever its name, and a local file is a single-file input. Directory, file and zip inputs are fully offline. URL and git inputs are the only ones that use the network; each enforces size, count and SSRF limits and fails closed. Tar archives are refused; unpack them and scan the directory.
 
 | flag | effect |
 |---|---|
@@ -193,7 +193,8 @@ The walker reads a package it does not trust, so:
 - it does not follow a symlink or an NTFS junction out of the package directory;
 - it does not open a FIFO, device, or socket (a `read()` on a FIFO never returns);
 - it inventories shipped compiled and native code (`.pyc`/`.pyo`/`.pyd`, `.so`/`.dylib`/`.dll`/`.exe`/`.wasm`, `.jar`/`.class`/`.node`, and versioned `.so.N`) instead of dropping it, as one `analysis-incomplete` result per file with the reason `shipped_compiled`, so a full text-coverage number can never hide unreviewable executable code;
-- it surfaces active or opaque content (`.svg`, `.pdf`, nested archives) as a `coverage-note` result per file with the reason `unreviewable_content` and counts it against coverage;
+- it surfaces opaque content with the reason `unreviewable_content` and counts it against coverage: an `.svg` is a low `coverage-note`, since an agent never reads it as instructions and its bytes still pass the forensics lane, while a `.pdf` or a nested archive is a high `analysis-incomplete` gap that exits 2, since an agent may be told to read or unpack it;
+- raw HTML in a Markdown file that the prose model cannot project is a high `analysis-incomplete` gap with the reason `raw_html` when it carries text or a link label, or when the inspector could not read it whole (a behavioural attribute, a dangerous scheme, a duplicate attribute, an unclosed anchor or code block), since an agent reads what the scanner could not; markup read whole that carries no text, such as a centred image block, is a low note;
 - it records every file it does not read, with a reason, and a skipped file lowers the reported coverage unless it is an inert asset, compiled code, or an excluded cache directory (a bundled `node_modules`/`dist`/`build` does lower it).
 
 Every SARIF run carries the ledger's coverage status under `coverage`, `no-reported-gap` or `incomplete`, and each analysis gap is a result of its own, so a report can never look complete while files went unread.
@@ -242,10 +243,9 @@ internal/
   scan                   run every check over a parsed package
   metadata               the tool version
   pytext, pyast, pep508, uba
-                         Python, CPython AST, PEP 508 and Unicode bidi semantics the port reproduces
+                         Python text, CPython AST, PEP 508 and Unicode bidi semantics reproduced in Go
   testutil               helpers shared by every package's tests
 tools/bench/             the benchmark runner and scorer
-docs/spec/               the detection specification, one file per group; 00-overview.md is the binding contract
 docs/reporting.md        result identity, operator decisions and SARIF semantics
 Makefile                 all, build, install-opengrep, test, lint, vuln, sec, ci, fuzz, clean, help
 ```
@@ -256,7 +256,7 @@ Contributions are welcome. Please ensure that:
 
 1. `make ci` passes: it builds, vets and tests every package.
 2. `make lint` passes: `go vet` plus staticcheck.
-3. Detection behaviour follows `docs/spec`. A change to detection lands with its tests and the matching spec update, and says what it did to the benchmark.
+3. A change to detection lands with its tests and says what it did to the benchmark.
 4. Documentation is updated.
 
 ## References

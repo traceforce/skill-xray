@@ -49,8 +49,8 @@ func (c strCase) in(t *testing.T) string {
 	return c.Input
 }
 
-// Unicode 15.1 (CPython) assigned these; Go 1.26's tables are 15.0 (00-overview D1,
-// obfuscation §4.1). They are the only accepted property divergence.
+// Unicode 15.1 (CPython) assigned these; Go 1.26's tables are 15.0. They are the only accepted
+// property divergence.
 var unicode151 = [][2]rune{{0x2FFC, 0x2FFF}, {0x31EF, 0x31EF}, {0x2EBF0, 0x2EE5D}}
 
 func skipRune(r rune) bool { return 0xD800 <= r && r <= 0xDFFF || inRanges(unicode151, r) }
@@ -412,7 +412,7 @@ func TestOSErrorName(t *testing.T) {
 	assert.Equal(t, "FileNotFoundError", OSErrorName(&exec.Error{Name: "opengrep", Err: exec.ErrNotFound}), "missing binary")
 }
 
-// D7 (00-overview): an integral json.Number is int, any other number float64, through maps and lists.
+// An integral json.Number is int, any other number float64, through maps and lists.
 func TestFloatRepr(t *testing.T) {
 	for f, want := range map[float64]string{1e16: "1e+16", 1e15: "1000000000000000.0", 1e-5: "1e-05", 1e-4: "0.0001",
 		100: "100.0", 66.67: "66.67", 0: "0.0", math.Inf(1): "inf", math.Inf(-1): "-inf"} {
@@ -434,8 +434,8 @@ func TestIntify(t *testing.T) {
 	}
 }
 
-// JSONView is the to_dict shape: structs and typed slices become generic maps and lists with D7
-// numbers, and the view never aliases its input.
+// JSONView is the to_dict shape: structs and typed slices become generic maps and lists with
+// integral numbers as int, and the view never aliases its input.
 func TestJSONView(t *testing.T) {
 	type row struct {
 		Line *int     `json:"line"`

@@ -97,7 +97,8 @@ var mdParser = func() parser.Parser {
 // mdMaxMarkers bounds what goldmark parses quadratically on one line: nested container markers
 // ('>' and list bullets, each opening a container) and link openers with unclosed destinations.
 // 600k leading '>' never finish where markdown-it-py takes 4 s, so a line past the bound is
-// refused as markdown_too_complex: a documented divergence (00-overview §7) no real skill reaches.
+// refused as markdown_too_complex; the bound is an accepted difference from the Python scanner
+// that no real skill reaches.
 const mdMaxMarkers = 10000
 
 // markdownTooComplex returns the count of the first line over mdMaxMarkers, else 0.
@@ -159,7 +160,7 @@ type mdDoc struct {
 }
 
 // parseMarkdown is parse.parse_markdown. Line numbers are offset by lineOffset (the frontmatter
-// height). goldmark cannot fail, so there is no error value (parse.md R4).
+// height). goldmark cannot fail, so there is no error value.
 func parseMarkdown(body string, lineOffset int) *Markdown {
 	body = normNewlines(body)
 	d := &mdDoc{src: []byte(body), lines: strings.Split(body, "\n"), off: lineOffset, md: &Markdown{},
@@ -1423,7 +1424,7 @@ func projectHTML(fragment string) string {
 	return out.String()
 }
 
-// --- line-based helpers after the parse (parse.md 2.5): table exclusion and the inline scan ---
+// --- line-based helpers after the parse: table exclusion and the inline scan ---
 
 var (
 	tableDividerRE = regexp.MustCompile(`^` + pytext.Space + `*\|?` + pytext.Space + `*:?-{3,}:?(?:` + pytext.Space + `*\|` + pytext.Space + `*:?-{3,}:?)*` + pytext.Space + `*\|?` + pytext.Space + `*$`)

@@ -60,7 +60,8 @@ func decodeTOML(text string) (map[string]any, toml.MetaData, string) {
 // tomlMaxDepth bounds a key path. BurntSushi/toml records every key with its full path, so a
 // dotted key or inline-table chain of depth n costs n²/2 strings: 12 GB at 30k segments, where
 // tomllib is merely slow. Past the bound the document is refused as config_parse_error; tomllib
-// would still decode it, a documented divergence (00-overview §7) no real manifest reaches.
+// would still decode it; the bound is an accepted difference from the Python scanner that no
+// real manifest reaches.
 const tomlMaxDepth = 1000
 
 // tomlTooDeep reports a key with more than tomlMaxDepth dotted segments or inline tables nested
@@ -164,8 +165,8 @@ func tableKeys(md toml.MetaData, table map[string]any, path ...string) []string 
 	return keys
 }
 
-// jsonValue normalises a UseNumber tree to the D7 shape: int when the literal fits int64,
-// float64 otherwise, with CPython's 4300-digit integer limit kept as the ValueError it raises.
+// jsonValue normalises a UseNumber tree to the report's number shape: int when the literal fits
+// int64, float64 otherwise, with CPython's 4300-digit integer limit kept as the ValueError it raises.
 func jsonValue(v any) (any, error) {
 	switch x := v.(type) {
 	case json.Number:

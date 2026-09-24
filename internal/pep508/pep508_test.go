@@ -18,7 +18,7 @@ import (
 // test_pep508_direct_reference_sha_is_a_pin, test_direct_reference_sha_with_subdir_fragment_is_a_pin,
 // test_pep508_file_reference_is_local_pin, test_python_wildcard_pin_is_still_floating,
 // test_pinned_or_local_mcp_server_does_not_report_floating_package, test_floating_mcp_package_reports)
-// or "edge" for grammar corners from instruction.md 4.4.
+// or "edge" for grammar corners.
 type goldens struct {
 	Requirements []struct {
 		From         string     `json:"from"`

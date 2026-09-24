@@ -925,7 +925,7 @@ func TestSkippedArtifactReportsHighNotClean(t *testing.T) {
 	assert.Equal(t, "obfuscation skipped SKILL.md: panic", err[0].Message)
 }
 
-// The §4.2 oracle table (python-bidi 0.6.6, base_dir="L") plus two paragraph-separator and
+// The bidi oracle table (python-bidi 0.6.6, base_dir="L") plus two paragraph-separator and
 // BN probes recorded from the same oracle.
 func TestBidiReordersReadableOracleTable(t *testing.T) {
 	for _, row := range []struct {

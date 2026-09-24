@@ -351,7 +351,7 @@ func TestShellErrorRegions(t *testing.T) {
 		assert.Empty(t, pp.ByRel[rel].Diagnostics, rel)
 	}
 	for _, rel := range []string{"bad.sh", "scripts/bad.sh"} {
-		assert.Nil(t, pp.ByRel[rel].ShellTree, rel) // mvdan/sh keeps no partial tree (parse.md R1)
+		assert.Nil(t, pp.ByRel[rel].ShellTree, rel) // mvdan/sh keeps no partial tree
 		assert.True(t, hasDiag(pp.ByRel[rel], "shell_error_region"), rel)
 	}
 	det, ok := diag(pp.ByRel["scripts/b.sh"], "shell_error_region")
@@ -362,7 +362,7 @@ func TestShellErrorRegions(t *testing.T) {
 	_, err := fmt.Sscanf(spans, "%d-%d", &lo, &hi)
 	require.NoError(t, err)
 	// mvdan/sh reports the line it stopped on (3), inside the tree-sitter ERROR span (lines 2-3) of
-	// the malformed `for` (parse.md R1).
+	// the malformed `for`.
 	assert.True(t, lo == hi && 2 <= lo && lo <= 3, det)
 }
 

@@ -231,7 +231,7 @@ func TestFrontmatterValuesMatchRuamel(t *testing.T) {
 		{"a: \"x\\z\"", "yaml_error:line 2", "", ""},
 		// surrogate escapes: ruamel keeps chr() of each half ('\ud83e\uddea', '\ud83e', '\uddea',
 		// '\ud83e' for \U0000D83E, 'foo bar \ud83e'), Go pairs the halves and holds a lone half as
-		// U+FFFD (parse.md §5); single-quoted and plain forms are literal text on both sides
+		// U+FFFD; single-quoted and plain forms are literal text on both sides
 		{"a: \"\\ud83e\\uddea\"\nb: \"\\ud83d\\uddc4\\ufe0f\"", "", `{"a":"\ud83e\uddea","b":"\ud83d\uddc4\ufe0f"}`, `["a","b"]`},
 		{"a: \"\\ud83e\"\nb: \"\\uddea\"\nc: \"\\uddea\\ud83e\"\nd: \"\\U0000D83E\"", "", `{"a":"\ufffd","b":"\ufffd","c":"\ufffd\ufffd","d":"\ufffd"}`, `["a","b","c","d"]`},
 		{"a: '\\ud83e\\uddea'\nb: \\ud83e\\uddea\nc: {s: 'lit \\ud83e', d: \"\\ud83e\\uddea\"}", "", `{"a":"\\ud83e\\uddea","b":"\\ud83e\\uddea","c":{"d":"\ud83e\uddea","s":"lit \\ud83e"}}`, `["a","b","c"]`},

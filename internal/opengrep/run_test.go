@@ -311,7 +311,7 @@ func TestMissingAndOversizedReportsAreNotClean(t *testing.T) {
 	assert.Equal(t, "OpenGrep's JSON report exceeded the 3-byte limit.", fs[0].Message)
 }
 
-// Report numbers are int when integral and float64 otherwise, never json.Number (D7).
+// Report numbers are int when integral and float64 otherwise, never json.Number.
 func TestDecodeReportNormalisesNumbers(t *testing.T) {
 	v, err := decodeReport([]byte(`{"a": 1, "b": 1.0, "c": [2, 3e2, 99999999999999999999], "d": true}`))
 	require.NoError(t, err)

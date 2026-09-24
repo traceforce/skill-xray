@@ -74,7 +74,7 @@ type ScanReport struct {
 	Correlation   *correlate.Correlation
 }
 
-// ToMap is to_dict: the generic, deep-copied JSON view with integral numbers as int (D7).
+// ToMap is to_dict: the generic, deep-copied JSON view with integral numbers as int.
 func (r *ScanReport) ToMap() map[string]any {
 	doc := map[string]any{"schema_version": "context-shadow-v1", "findings": r.Findings,
 		"raw_scope":      "emitted-check-results-before-reporting-deduplication",

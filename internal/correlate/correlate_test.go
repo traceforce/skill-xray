@@ -330,7 +330,7 @@ func TestBinaryEvidenceIdentityAndByteOccurrences(t *testing.T) {
 }
 
 // testdata/canonical.jsonl: correlate.canonical and digest over the objects correlate hashes,
-// recorded from the Python scanner (core.md R2).
+// recorded from the Python scanner.
 func TestCanonicalGolden(t *testing.T) {
 	f, err := os.Open("testdata/canonical.jsonl")
 	require.NoError(t, err)
