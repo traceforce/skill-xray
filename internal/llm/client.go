@@ -217,7 +217,7 @@ func unreachable(err error) error {
 	return &Error{Transport, "LLM endpoint unreachable: " + why}
 }
 
-// retryDelay is _retry_delay: a sane Retry-After (0..60 s) wins, else capped exponential backoff.
+// retryDelay is _retry_delay: a sane Retry-After (0..10 s) wins, else capped exponential backoff.
 func retryDelay(retryAfter string, attempt int) time.Duration {
 	if secs, err := strconv.Atoi(strings.TrimSpace(retryAfter)); err == nil && 0 <= secs && secs <= 10 { // a longer wait falls back to the backoff
 		return time.Duration(secs) * time.Second

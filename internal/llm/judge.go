@@ -197,7 +197,7 @@ func proposal(reply, candidateID, snippet string) (*Proposal, string) {
 		return nil, "evidence-quote"
 	}
 	for _, f := range []string{"reason", "mechanism", "intent", "impact"} {
-		if vals[f] = Redact(vals[f]); utf8.RuneCountInString(vals[f]) > 200 {
+		if vals[f] = printable(Redact(vals[f])); utf8.RuneCountInString(vals[f]) > 200 {
 			return nil, "field-bounds"
 		}
 	}

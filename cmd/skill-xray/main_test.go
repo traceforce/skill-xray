@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/traceforce/skill-xray/internal/findings"
 	"github.com/traceforce/skill-xray/internal/ingest"
 	"github.com/traceforce/skill-xray/internal/llm"
 	"github.com/traceforce/skill-xray/internal/parse"
@@ -217,6 +218,17 @@ func TestLLMPartialCoverageIsOnTheConsole(t *testing.T) {
 	_, stdout, _, doc := scanned(t, root, "--llm")
 	assert.Contains(t, stdout, "1 file not read whole by the model (size or budget), see the report", stdout)
 	assert.Contains(t, property(doc, "category"), "analysis-diagnostic")
+}
+
+// One llm-budget note stands for the file it names and every later one; the console counts them all.
+func TestLLMBudgetNoteCountsEveryUncheckedFile(t *testing.T) {
+	var s llmSummary
+	s.add(&scan.ScanReport{LLMUsage: map[string]any{"advisory_enabled": true, "calls": 1},
+		Findings: []findings.Finding{{Rule: "llm-budget", Evidence: map[string]any{"unchecked": 3}}, {Rule: "llm-truncated"}}})
+	assert.Equal(t, 4, s.partial)
+	var b strings.Builder
+	s.line(&b)
+	assert.Contains(t, b.String(), "4 files not read whole by the model")
 }
 
 func TestLLMFailureReasonIsReported(t *testing.T) {
