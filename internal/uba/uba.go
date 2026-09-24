@@ -1,5 +1,5 @@
 // Package uba is the Unicode Bidirectional Algorithm core of golang.org/x/text/unicode/bidi
-// (core.go and bracket.go copied verbatim from v0.42.0, BSD-3-Clause, see THIRD_PARTY_NOTICES).
+// (core.go and bracket.go copied verbatim from v0.42.0, BSD-3-Clause, see NOTICE).
 // The public bidi.Paragraph API can neither force paragraph level 0 nor apply rule L2, which
 // python-bidi's get_display(line, base_dir="L") does; the copy exposes both through Visual.
 package uba

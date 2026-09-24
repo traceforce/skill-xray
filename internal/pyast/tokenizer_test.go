@@ -16,7 +16,7 @@ import (
 // (ast.parse error class, message, lineno, offset).
 
 func tokenizeAll(src string) ([]Token, *SyntaxError) {
-	t := newTokenizer(src, false)
+	t := newTokenizer(src)
 	var toks []Token
 	for {
 		tok, err := t.next()
@@ -197,6 +197,15 @@ func TestTokenizerPositions(t *testing.T) {
 	got, err = tokenizeAll("f'''{x # c\n=}'''\n")
 	require.Nil(t, err)
 	assert.Equal(t, "x \n=", got[4].Meta, "comments are cut from the debug text")
+
+	got, err = tokenizeAll("x = 1  # c\n\n(\n)\n")
+	require.Nil(t, err)
+	kinds = nil
+	for _, tk := range got {
+		kinds = append(kinds, tk.Kind.String())
+	}
+	assert.Equal(t, []string{"NAME", "OP", "NUMBER", "NEWLINE", "OP", "OP", "NEWLINE", "ENDMARKER"}, kinds,
+		"pegen's stream: a comment, a blank line and a newline inside brackets emit no token of their own")
 
 	got, err = tokenizeAll("")
 	require.Nil(t, err)

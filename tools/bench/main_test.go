@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -30,6 +31,54 @@ func TestDirNameKeepsEveryIDInItsOwnChild(t *testing.T) {
 		assert.LessOrEqual(t, len(d), 51)
 	}
 	assert.True(t, strings.HasPrefix(dirName("ASB04_000018"), "ASB04_000018-"))
+}
+
+// The runner fans the records out to several workers and writes exactly one row per record.
+func TestRunWritesOneRowPerRecord(t *testing.T) {
+	dir := t.TempDir()
+	var ids, lines []string
+	for i := range 6 {
+		id := fmt.Sprintf("t/%d", i) // already in sorted order
+		ids = append(ids, id)
+		lines = append(lines, fmt.Sprintf(`{"benchmark_id":%q,"split":"tiny","label":%d,"source_name":"s","text":"---\nname: t\n---\nRead the guide.\n"}`, id, i%2))
+	}
+	sum := sha256.Sum256([]byte(strings.Join(ids, "\n")))
+	testutil.Swap(t, &pinnedSplits, map[string]string{"tiny": hex.EncodeToString(sum[:])})
+	data, out := filepath.Join(dir, "tiny.jsonl"), filepath.Join(dir, "rows.jsonl")
+	require.NoError(t, os.WriteFile(data, []byte(strings.Join(lines, "\n")+"\n"), 0o644))
+	require.NoError(t, cmdRun([]string{"--data", data, "--out", out, "--workers", "3", "--work", dir}))
+	rows, err := loadRows(out)
+	require.NoError(t, err)
+	var got []string
+	for _, r := range rows {
+		require.Nil(t, r.Error, r.BenchmarkID)
+		assert.Equal(t, 1, r.Analyzed, r.BenchmarkID)
+		got = append(got, r.BenchmarkID)
+	}
+	assert.ElementsMatch(t, ids, got)
+}
+
+// A staged text that could not be removed is a failed row, never a clean one.
+func TestCleanupFailureIsRecorded(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions are not enforced on Windows")
+	}
+	work := t.TempDir()
+	locked := filepath.Join(work, dirName("held"), "locked")
+	require.NoError(t, os.MkdirAll(locked, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(locked, "note.txt"), []byte("x"), 0o644))
+	require.NoError(t, os.Chmod(locked, 0o555)) // its file cannot be unlinked, so the scratch directory stays
+	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+	r := scanOne(work, record{BenchmarkID: "held", Label: 0, Text: manifest + "Read the guide.\n"}, "")
+	require.NotNil(t, r.Error)
+	assert.Contains(t, *r.Error, "cleanup")
+}
+
+// A vectorless critical finding is an analysis that did not complete, as the CLI's exit rule says.
+func TestVectorlessCriticalIsIncomplete(t *testing.T) {
+	r := row{Label: 0, Findings: []finding{{Rule: "check-error", Severity: "critical"}}}
+	assert.True(t, incomplete(r))
+	assert.Equal(t, [5]int{0, 0, 0, 0, 1}, counts(metrics([]row{r}, verdicts(false)[0].flagged)))
 }
 
 func TestPinnedSplitIsTheSortedIDListDigest(t *testing.T) {
@@ -82,7 +131,7 @@ func TestScanOneRecordsFindingsAndCleansUp(t *testing.T) {
 
 	empty := scanOne(work, record{BenchmarkID: "e"}, "")
 	require.NotNil(t, empty.Error)
-	assert.Equal(t, "record has no skill_text", *empty.Error)
+	assert.Equal(t, "record has no text", *empty.Error)
 }
 
 // run scans records concurrently in one process, so the scanner's shared caches must take it;
@@ -134,12 +183,24 @@ func TestRunRefusesBadWorkerCountsAndTrailingInput(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, records, 1)
 
-	// a label that is missing or not binary is refused, never scored as benign
+	// a label that is missing or not binary is refused in a record and in a row, never scored as benign
 	for _, body := range []string{`{"benchmark_id":"a","text":"x"}`, `{"benchmark_id":"a","label":2,"text":"x"}`} {
 		require.NoError(t, os.WriteFile(bad, []byte(body+"\n"), 0o644))
 		_, err = loadRecords(bad)
 		assert.ErrorContains(t, err, "label must be 0 or 1", body)
+		_, err = loadRows(bad)
+		assert.ErrorContains(t, err, "label must be 0 or 1", body)
 	}
+	// a repeated identity would be scored twice and compared once
+	require.NoError(t, os.WriteFile(bad, []byte(`{"benchmark_id":"a","label":0}`+"\n"+`{"benchmark_id":"a","label":0}`+"\n"), 0o644))
+	_, err = loadRows(bad)
+	assert.ErrorContains(t, err, "appears twice")
+
+	// a staged file that vanished before the scan, as a quarantine removes it, is an error and not a clean scan
+	gone := filepath.Join(t.TempDir(), "gone")
+	require.NoError(t, os.Mkdir(gone, 0o755))
+	var vanished row
+	assert.ErrorContains(t, scanRoot(gone, "", &vanished), "empty package")
 }
 
 func note(rule string) finding { return finding{Rule: rule, Severity: "low"} }
@@ -190,24 +251,25 @@ func TestVerdictsMetricsAndReport(t *testing.T) {
 		{BenchmarkID: "tn-t3", Label: 0, SourceName: "good", Findings: []finding{hit("SXV-033", "T3", "high")}},
 		{BenchmarkID: "tn", Label: 0, SourceName: "good"},
 		{BenchmarkID: "unanalyzed", Label: 0, SourceName: "good", Error: ptr("ValueError: x")},
+		{BenchmarkID: "unanalyzed-empty", Label: 0, SourceName: "good", Error: ptr("")}, // counted as an error, so not a true negative
 	}
 	vs := verdicts(false)
 	blocking := metrics(rows, vs[0].flagged)
-	assert.Equal(t, [5]int{1, 1, 3, 1, 1}, counts(blocking))
+	assert.Equal(t, [5]int{1, 1, 3, 1, 2}, counts(blocking))
 	assert.InDelta(t, 0.5, blocking.Precision, 1e-9)
 	assert.InDelta(t, 0.5, blocking.Recall, 1e-9)
 	assert.InDelta(t, 0.5, blocking.F1, 1e-9)
 	assert.InDelta(t, 0.25, blocking.FPR, 1e-9)
-	assert.Equal(t, [5]int{2, 2, 2, 0, 1}, counts(metrics(rows, vs[1].flagged)))
-	assert.Equal(t, [5]int{2, 3, 1, 0, 1}, counts(metrics(rows, vs[2].flagged)))
-	assert.Equal(t, [5]int{2, 3, 1, 0, 1}, counts(metrics(rows, vs[3].flagged)))
+	assert.Equal(t, [5]int{2, 2, 2, 0, 2}, counts(metrics(rows, vs[1].flagged)))
+	assert.Equal(t, [5]int{2, 3, 1, 0, 2}, counts(metrics(rows, vs[2].flagged)))
+	assert.Equal(t, [5]int{2, 3, 1, 0, 2}, counts(metrics(rows, vs[3].flagged)))
 
 	text := report(rows, "t", false)
 	for _, want := range []string{
 		"# t",
-		"records: 7  (malicious 2 / benign 5)  errors: 1  oversize: 0",
-		"| blocking (T1/T2 and high/critical) | 1 | 1 | 3 | 1 | 50.00% | 50.00% | 50.00% | 25.00% |",
-		"excluded from TN and FPR: 1",
+		"records: 8  (malicious 2 / benign 6)  errors: 2  oversize: 0",
+		"| blocking (T1/T2 and high/critical) | 1 | 1 | 3 | 1 | 2 | 50.00% | 50.00% | 50.00% | 25.00% |",
+		"unanalyzed: benign records whose scan did not complete and that carry no finding under that verdict, excluded from TN and FPR",
 		"benign packages with ONLY T3 capability findings (correctly not counted): 1",
 		"| SXV-008 | 1 |",
 		"| SXV-008 / r | 1 |\n| SXV-008 / r2 | 1 |\n| SXV-008 / r3 | 1 |",
@@ -237,19 +299,22 @@ func TestCompareCarriesUnpairedBaseRowsAndRejectsUnknownIDs(t *testing.T) {
 		{BenchmarkID: "c", Label: 1, Findings: []finding{hit("SXV-011", "T1", "high")}},
 		{BenchmarkID: "zz", Label: 0},
 		{BenchmarkID: "aa", Label: 0},
+		{BenchmarkID: "d", Label: 0, Findings: []finding{hit("SXV-008", "T2", "high")}},
 	}
 	after := []row{
 		{BenchmarkID: "a", Label: 1, AttackCategories: []string{"Exfil"}, Findings: []finding{hit("SXV-011", "T1", "high")}},
 		{BenchmarkID: "zz", Label: 0, Findings: []finding{hit("SXV-008", "T2", "high")}},
 		{BenchmarkID: "aa", Label: 0, Findings: []finding{hit("SXV-008", "T2", "high")}},
+		{BenchmarkID: "d", Label: 0, Error: ptr("ValueError: x")}, // its finding vanished with the scan, not with a detector
 	}
 	text, err := compare(after, base, false)
 	require.NoError(t, err)
 	for _, want := range []string{
-		"## Before / after on 5 paired identities (2 carried over unchanged from the base run: the after-run is a subset)",
-		"| blocking (T1/T2 and high/critical) | 50.00% / 50.00% / 50.00% / 33.33% | 40.00% / 100.00% / 57.14% / 100.00% | 1 1 2 1 | 2 3 0 0 |",
-		"| SXV-008 | 1 | 3 |",
+		"## Before / after on 6 paired identities (2 carried over unchanged from the base run: the after-run is a subset)",
+		"| blocking (T1/T2 and high/critical) | 33.33% / 50.00% / 40.00% / 50.00% | 40.00% / 100.00% / 57.14% / 100.00% | 1 2 2 1 | 2 3 0 0 |",
+		"| SXV-008 | 2 | 3 |",
 		"newly caught malicious: 1 | malicious lost: 0 | benign FPs fixed: 0 | new benign FPs: 2",
+		"records whose scan completed on one side only, left out of these transitions: 1",
 		"new benign FP ids: aa, zz",
 		"| SXV-011 | 1 |",
 		"| Exfil | 1 |",
@@ -271,4 +336,29 @@ func TestCompareCarriesUnpairedBaseRowsAndRejectsUnknownIDs(t *testing.T) {
 	assert.ErrorContains(t, err, "label of a differs")
 	_, err = compare(nil, base, false)
 	require.NoError(t, err)
+}
+
+// The Errors summary counts our own messages by their kind and a filesystem error by its
+// operation, since the scratch path before its colon differs on every row.
+func TestErrKindGroupsFilesystemErrorsByOperation(t *testing.T) {
+	for _, tc := range []struct{ msg, want string }{
+		{"record has no text", "record has no text"},
+		{"empty package: SKILL.md was not found", "empty package"},
+		{"cleanup: unlinkat /tmp/msb-work-1/a-1/SKILL.md: permission denied", "cleanup"},
+		{"runtime.boundsError: runtime error: index out of range [3] with length 3", "runtime.boundsError"},
+		{"open /tmp/msb-work-1/a-1/SKILL.md: permission denied", "open"},
+		{"open /tmp/msb-work-1/b-2/SKILL.md: permission denied", "open"},
+		{"mkdir /tmp/msb-work-1/c-3: permission denied", "mkdir"},
+		{"write /tmp/msb-work-1/d-4/SKILL.md: no space left on device", "write"},
+		{`open C:\Temp\msb-work-1\e-5\SKILL.md: Access is denied.`, "open"},
+		{"open /tmp/msb-work-1/f-6/SKILL.md: permission denied; cleanup: unlinkat /tmp/msb-work-1/f-6/SKILL.md: permission denied", "open"},
+	} {
+		assert.Equal(t, tc.want, errKind(tc.msg), tc.msg)
+	}
+	err := os.WriteFile(filepath.Join(t.TempDir(), "missing", "SKILL.md"), nil, 0o644) // a path error the OS wrote
+	require.Error(t, err)
+	assert.Equal(t, "open", errKind(err.Error()))
+	text := report([]row{{BenchmarkID: "a", Label: 0, Error: ptr("open /tmp/msb-work-1/a-1/SKILL.md: permission denied")},
+		{BenchmarkID: "b", Label: 0, Error: ptr("open /tmp/msb-work-1/b-2/SKILL.md: permission denied")}}, "t", false)
+	assert.Contains(t, text, "- open: 2")
 }

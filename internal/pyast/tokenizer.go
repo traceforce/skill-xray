@@ -12,11 +12,9 @@ import (
 
 // The tokenizer is CPython 3.13.2 Parser/lexer/lexer.c driven over a string buffer the way
 // ast.parse(str) drives it (_PyTokenizer_FromUTF8: newlines translated, no BOM or cookie
-// handling, encoding fixed to UTF-8). Token positions are what pegen's Token carries; with
-// extra=true it is the tokenize module's stream instead (COMMENT and NL tokens, INDENT/DEDENT
-// spans, no identifier or number-tail validation, lenient closing brackets), which is what the
-// corpus goldens hold. Errors are formatted as ast.parse raises them, including the ones
-// pegen's _Pypegen_tokenizer_error builds from tok->done.
+// handling, encoding fixed to UTF-8). Token positions are what pegen's Token carries. Errors
+// are formatted as ast.parse raises them, including the ones pegen's _Pypegen_tokenizer_error
+// builds from tok->done.
 
 const (
 	maxIndent       = 100 // MAXINDENT: the 100th indentation level is refused
@@ -63,8 +61,7 @@ type tokenizer struct {
 	done                        int
 	err                         *SyntaxError
 	meta                        string // metadata for the token being emitted (set_fstring_expr)
-	extra                       bool   // tok_extra_tokens
-	atbol, commentNewline       bool
+	atbol                       bool
 	indent, pendin              int
 	indstack, altindstack       [maxIndent]int
 	level                       int
@@ -74,12 +71,12 @@ type tokenizer struct {
 }
 
 // newTokenizer applies translate_newlines(exec_input=1) and starts at the beginning of a line.
-func newTokenizer(src string, extra bool) *tokenizer {
+func newTokenizer(src string) *tokenizer {
 	src = strings.ReplaceAll(strings.ReplaceAll(src, "\r\n", "\n"), "\r", "\n")
 	if src != "" && !strings.HasSuffix(src, "\n") {
 		src += "\n"
 	}
-	return &tokenizer{src: src, atbol: true, extra: extra, modes: []tokMode{{}}}
+	return &tokenizer{src: src, atbol: true, modes: []tokMode{{}}}
 }
 
 func (t *tokenizer) mode() *tokMode { return &t.modes[len(t.modes)-1] }
@@ -131,7 +128,7 @@ func (t *tokenizer) next() (Token, *SyntaxError) {
 	return t.normalMode()
 }
 
-// emit is token_setup plus the position rules of pegen (or, with extra, of Python-tokenize.c).
+// emit is token_setup plus the position rules of pegen.
 // pStart < 0 is a NULL start: INDENT, DEDENT and ENDMARKER in parser mode.
 func (t *tokenizer) emit(kind TokenKind, pStart, pEnd int) (Token, *SyntaxError) {
 	tok := Token{Kind: kind, Lineno: t.lineno, EndLineno: t.lineno, Level: t.level, Cur: t.cur - t.lineStart, Meta: t.meta}
@@ -145,12 +142,6 @@ func (t *tokenizer) emit(kind TokenKind, pStart, pEnd int) (Token, *SyntaxError)
 		return tok, nil
 	}
 	tok.Str, tok.Col, tok.EndCol = t.src[pStart:pEnd], pStart-ls, t.cur-t.lineStart
-	if t.extra {
-		tok.EndCol = pEnd - t.lineStart
-		if kind == NEWLINE {
-			tok.EndCol++
-		}
-	}
 	return tok, nil
 }
 
@@ -273,9 +264,6 @@ func isXidContinue(r rune) bool {
 
 // verifyIdentifier is lexer.c verify_identifier over the token at start..cur.
 func (t *tokenizer) verifyIdentifier() bool {
-	if t.extra {
-		return true
-	}
 	s := t.src[t.start:t.cur]
 	for i, r := range s {
 		ok := isXidContinue(r)
@@ -321,9 +309,6 @@ func (t *tokenizer) lookahead(test string) bool {
 // verifyEndOfNumber is lexer.c verify_end_of_number; the SyntaxWarning branch (a keyword right
 // after the literal) is a no-op because the oracle suppresses SyntaxWarning.
 func (t *tokenizer) verifyEndOfNumber(c int, kind string) bool {
-	if t.extra {
-		return true
-	}
 	r := false
 	switch c {
 	case 'a':
@@ -412,7 +397,7 @@ func (t *tokenizer) number(c int) (Token, *SyntaxError) {
 		return t.exponentOrEnd(c)
 	case c == 'j' || c == 'J':
 		return t.imaginaryOrEnd(c)
-	case nonzero && !t.extra:
+	case nonzero:
 		t.backup(c)
 		// syntaxerror_known_range: a byte column, used as it is.
 		return Token{}, t.fail("SyntaxError", "leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers",
@@ -631,15 +616,9 @@ nextline:
 	if t.pendin != 0 {
 		if t.pendin < 0 {
 			t.pendin++
-			if t.extra {
-				return t.emit(DEDENT, t.cur, t.cur)
-			}
 			return t.emit(DEDENT, -1, -1)
 		}
 		t.pendin--
-		if t.extra {
-			return t.emit(INDENT, t.lineStart, t.cur)
-		}
 		return t.emit(INDENT, -1, -1)
 	}
 
@@ -651,11 +630,6 @@ again:
 	if c == '#' {
 		for c != eof && c != '\n' && c != '\r' {
 			c = t.nextc()
-		}
-		if t.extra {
-			t.backup(c) // leave the newline or EOF
-			t.commentNewline = blankline
-			return t.emit(COMMENT, t.start, t.cur)
 		}
 	}
 
@@ -707,15 +681,7 @@ again:
 	if c == '\n' {
 		t.atbol = true
 		if blankline || t.level > 0 {
-			if t.extra {
-				t.commentNewline = false
-				return t.emit(NL, t.start, t.cur)
-			}
 			goto nextline
-		}
-		if t.commentNewline && t.extra {
-			t.commentNewline = false
-			return t.emit(NL, t.start, t.cur)
 		}
 		return t.emit(NEWLINE, t.start, t.cur-1) // the '\n' is left out of the string
 	}
@@ -866,13 +832,13 @@ fstringQuote:
 		if t.insideFstring() && t.mode().curlyDepth == 0 && c == '}' {
 			return Token{}, t.syntaxError("f-string: single '}' is not allowed")
 		}
-		if !t.extra && t.level == 0 {
+		if t.level == 0 {
 			return Token{}, t.syntaxError("unmatched '%c'", c)
 		}
 		if t.level > 0 {
 			t.level--
 			opening := t.parenstack[t.level]
-			if !t.extra && !((opening == '(' && c == ')') || (opening == '[' && c == ']') || (opening == '{' && c == '}')) {
+			if !((opening == '(' && c == ')') || (opening == '[' && c == ']') || (opening == '{' && c == '}')) {
 				if m := t.mode(); t.insideFstring() && opening == '{' && m.curlyDepth-1 == m.exprStartDepth {
 					return Token{}, t.syntaxError("f-string: unmatched '%c'", c)
 				}

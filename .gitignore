@@ -1,5 +1,6 @@
 # Build and scan output
 out/
 bin/
+dist/
 *.exe
 *.test
