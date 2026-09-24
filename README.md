@@ -6,7 +6,7 @@ Skill X-Ray is a static security scanner for AI skill packages: the folders (a `
 
 The product is the Go binary built from `cmd/skill-xray`. It is the counterpart of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same for MCP servers. Every scan builds a coverage ledger that records each file it read and each file it did not, with a reason. `--analyze` runs deterministic checks, including a pinned [OpenGrep](https://github.com/opengrep/opengrep) code lane over bundled Python, shell, JavaScript and TypeScript, and can write a validated [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report. The tool is report-only: it writes to stdout or to the file you name and uploads nothing.
 
-The Python scanner under `src/skill_xray` is the reference implementation the Go binary was ported from. For the same target and flags the two produce the same findings, the same JSON and the same SARIF bytes; see [Reference implementation (Python)](#reference-implementation-python).
+The binary was ported from a Python scanner and, before that code was retired in pull request 46, proved to produce the same findings, the same JSON and the same SARIF bytes across its fixture corpus and the benchmark test split (pull request 42); the detection contract it implements is written down in `docs/spec`.
 
 ## Installation
 
@@ -234,31 +234,13 @@ The ledger with its counts and exception records is printed by every inventory a
 
 ```bash
 make ci        # what CI runs: go build ./..., go vet ./..., go test ./...
-make test      # go test ./...; the parity gates skip themselves when corpus/ is absent
+make test      # go test ./...
 make lint      # go vet plus staticcheck
 make fuzz      # every fuzz target for FUZZTIME (default 30s); a crasher lands in <pkg>/testdata/fuzz/
-make parity    # build, then compare the Go scanner with the Python oracle over the fixtures under corpus/
-make corpus    # materialise the parity fixtures under corpus/ from the oracle's test suite
 make clean     # remove bin/
 ```
 
-`make parity` and `make corpus` need Python and a checkout of the Python scanner; `ORACLE` names it (default `../_reference/skill-xray-oracle`) and `PYTHON` names the interpreter. The harness in `tools/parity` runs both scanners over the same packages and diffs the `--json` output and the SARIF bytes; the only accepted differences are listed in `tools/parity/known_divergences.json` and are failure-path message prefixes that embed a Python exception class name. `go run ./tools/parity run -h` lists its flags.
-
-CI runs the Go and Python jobs on Linux, macOS and Windows. Each OS exercises a different part: the symlink tests run on Linux and macOS, the NTFS junction test runs on Windows, and macOS is where filenames arrive in a different Unicode form (NFD instead of NFC).
-
-### Reference implementation (Python)
-
-The Python scanner under `src/skill_xray` is the reference implementation and the oracle the Go port is checked against. The Go binary is the supported product; the Python package is kept so that detection changes can be specified and verified in one place, and so `make parity` has something to compare with. For the same target and flags it produces the same findings, the same JSON and the same SARIF bytes as `skill-xray scan`. It has no `system-scan`; its `--scan-known-skills` is the same inventory-only walk the Go binary keeps as a legacy flag.
-
-It requires Python 3.12.4 or newer: the junction check uses `os.path.isjunction` (added in 3.12), and the SSRF guard relies on the `ipaddress.is_global` fix for IPv4-mapped addresses shipped in 3.12.4 (CVE-2024-4032).
-
-```bash
-pip install -e . -r requirements-dev.txt   # installs the skill-xray console script and the pinned dev tools
-skill-xray ./my-skill --analyze            # same flags as the Go scan subcommand
-python -m pytest tests                     # tests
-python -m ruff check .                     # lint
-python dev/deadcode.py src                 # unused top-level symbols
-```
+CI runs the Go job on Linux, macOS and Windows. Each OS exercises a different part: the symlink tests run on Linux and macOS, the NTFS junction test runs on Windows, and macOS is where filenames arrive in a different Unicode form (NFD instead of NFC).
 
 ## Layout
 
@@ -281,13 +263,9 @@ internal/
   pytext, pyast, pep508, uba
                          Python, CPython AST, PEP 508 and Unicode bidi semantics the port reproduces
   testutil               helpers shared by every package's tests
-tools/parity/            parity harness: run both scanners over the fixtures and diff JSON output and SARIF bytes
-docs/spec/               the port specification, one file per group; 00-overview.md is the binding contract
+docs/spec/               the detection specification, one file per group; 00-overview.md is the binding contract
 docs/reporting.md        result identity, operator decisions and SARIF semantics
-src/skill_xray/          the Python reference implementation
-tests/                   the Python test suite, which also feeds the parity fixtures
-dev/deadcode.py          unused-symbol check for the Python sources, also run in CI
-Makefile                 all, build, install-opengrep, test, lint, ci, parity, corpus, fuzz, clean, help
+Makefile                 all, build, install-opengrep, test, lint, vuln, ci, fuzz, clean, help
 ```
 
 ## Contributing
@@ -296,7 +274,7 @@ Contributions are welcome. Please ensure that:
 
 1. `make ci` passes: it builds, vets and tests every package.
 2. `make lint` passes: `go vet` plus staticcheck.
-3. Detection behaviour stays equal to the Python scanner. `make parity` builds the binary and compares its `--json` output and SARIF bytes with the Python oracle; it needs Python and the checkout named by `ORACLE`. A change to detection lands in both implementations and in `docs/spec`.
+3. Detection behaviour follows `docs/spec`. A change to detection lands with its tests and the matching spec update, and says what it did to the benchmark.
 4. Documentation is updated.
 
 ## References

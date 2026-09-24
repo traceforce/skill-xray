@@ -36,9 +36,9 @@ internal/sarif/schemas/sarif-schema-2.1.0.json is the unmodified OASIS SARIF 2.1
 schema (Copyright OASIS Open 2023, all rights reserved), embedded into the binary; its source,
 SHA-256 and usage terms are recorded in internal/sarif/schemas/README.md.
 
-internal/obfuscation/scripts.tsv and internal/obfuscation/confusables.tsv are written by
-internal/obfuscation/testdata/gen_tables.py from the data files (categories.json, confusables.json)
-of the confusable-homoglyphs 3.3.1 Python package (https://github.com/vhf/confusable_homoglyphs),
+internal/obfuscation/scripts.tsv and internal/obfuscation/confusables.tsv are derived from the
+data files (categories.json, confusables.json) of the confusable-homoglyphs 3.3.1 Python package
+(https://github.com/vhf/confusable_homoglyphs),
 distributed under the MIT License:
 
 Copyright (c) 2016-2018 Victor Felder, 2024 Elena Grandi

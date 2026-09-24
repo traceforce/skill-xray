@@ -1,5 +1,7 @@
 # Port overview: shared contract, dependencies, build order, parity
 
+Status: this specification was written for the port of the Python scanner to Go and is the binding description of the detection behaviour the Go binary implements. The Python implementation, its tests, its benchmark harness, its dev tooling and the parity harness (`src/`, `tests/`, `benchmark/`, `dev/`, `tools/parity`) were removed once the port was proved identical to them; where this document refers to them, it describes the repository at the merge of pull request 42, which git history keeps.
+
 This file is the binding cross-group contract. Where a group spec (`core.md`, `parse.md`,
 `instruction.md`, `code.md`, `obfuscation.md`, `output-llm.md`) names a Go identifier or type
 differently, this file wins; each group spec carries an "Errata (00-overview)" block just under its
@@ -543,6 +545,8 @@ Each step lists what it unblocks. Steps on one line can proceed in parallel.
 8. **`tools/parity`** can be built from step 1 (it runs the Python side and the corpus dump without any Go product code) and gates every step from 3 onward: IR dump parity after step 3, findings parity per group as each check lands, SARIF byte parity after step 7. `make parity` is the definition of done.
 
 ## 6. `tools/parity` design
+
+> Historical. The parity harness, the Python scanner and the CLI flags this section names were retired in pull request 46 once the port had matched the Python output record for record; sections 6 and 7 record how that was established and are not a description of the current tool.
 
 Layout (module `skillxray`, all Go code under `tools/parity`, Python helpers beside it; nothing
 under `skill-xray/` is modified):

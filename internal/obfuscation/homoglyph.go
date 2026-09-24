@@ -20,7 +20,7 @@ import (
 	"github.com/traceforce/skill-xray/internal/pytext"
 )
 
-// Both tables are written by testdata/gen_tables.py from confusable-homoglyphs 3.3.1: the
+// Both tables are derived from confusable-homoglyphs 3.3.1: the
 // UTS #39 script ranges of categories.json and the single-letter ASCII prototype of every
 // non-ASCII confusable (the oracle's _load_confusables derivation, frozen).
 var (

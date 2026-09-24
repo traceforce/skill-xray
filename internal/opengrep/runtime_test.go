@@ -18,7 +18,7 @@ import (
 
 func hexSHA256(b []byte) string { return fmt.Sprintf("%x", sha256.Sum256(b)) }
 
-// The embedded rule file is the oracle's src/skill_xray/rules/opengrep-phase1.yml, byte for byte.
+// The embedded rule file matches its pinned SHA-256 byte for byte.
 func TestEmbeddedRulesAreByteIdentical(t *testing.T) {
 	assert.Equal(t, "f39f777ad115f0881ff2ffd7501836c9e36e6ec96b57c386c2760bd42a1bbd92", hexSHA256(Rules))
 }

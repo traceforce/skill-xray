@@ -330,7 +330,7 @@ func TestBinaryEvidenceIdentityAndByteOccurrences(t *testing.T) {
 }
 
 // testdata/canonical.jsonl: correlate.canonical and digest over the objects correlate hashes,
-// recorded by tools/parity/gen_correlate_golden.py on the oracle (core.md R2).
+// recorded from the Python scanner (core.md R2).
 func TestCanonicalGolden(t *testing.T) {
 	f, err := os.Open("testdata/canonical.jsonl")
 	require.NoError(t, err)

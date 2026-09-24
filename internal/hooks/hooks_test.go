@@ -475,13 +475,6 @@ func TestInvalidHooksJSONDoesNotBlindMcpCheck(t *testing.T) {
 	assert.NotContains(t, rules(fs), "analysis-incomplete")
 }
 
-// Corpus parity against skill_xray.checks.hooks.
-func TestCorpusParity(t *testing.T) {
-	testutil.CheckParity(t, "hooks", func(dir string) []findings.Finding {
-		return Check(parse.Parse(ingest.BuildPackage(dir)))
-	})
-}
-
 // test_url_only_remote_mcp_server_is_valid
 func TestURLOnlyRemoteServerIsValid(t *testing.T) {
 	fs := run(t, withMCP(cfg(m{"mcpServers": m{"search": m{"url": "https://mcp.example.com/sse"}}})))

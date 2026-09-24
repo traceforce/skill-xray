@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Every golden under testdata/ is written by tools/parity/gen_goldens.py from CPython 3.13.2.
+// Every golden under testdata/ was recorded from CPython 3.13.2.
 
 func load(t *testing.T, name string, v any) {
 	t.Helper()
