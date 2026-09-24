@@ -289,6 +289,17 @@ func TestVerifiedQuoteIsPreservedExactly(t *testing.T) {
 	assert.Equal(t, snippet, prop.EvidenceQuote)
 }
 
+// The model's free text reaches the proposal without control or format characters.
+func TestProposalFreeTextIsPrintable(t *testing.T) {
+	snippet := "password=[REDACTED]"
+	reply, _ := json.Marshal(map[string]any{"candidate_id": "c1", "verdict": "retain_finding", "confidence": "low",
+		"reason": "safe\u202e\x07text", "mechanism": "supported", "intent": "unknown", "impact": "key sk-proj-abcdefghijklmnop", "evidence_quote": snippet})
+	prop, code := proposal(string(reply), "c1", snippet)
+	require.Equal(t, "", code)
+	assert.Equal(t, "safe  text", prop.Reason)
+	assert.Equal(t, "key [REDACTED]", prop.Impact)
+}
+
 // test_llm_review.py::test_review_disputes_without_changing_findings_or_severity (the judge half)
 func TestReviewDisputesWithoutChangingFindings(t *testing.T) {
 	p := parsePkg(t, map[string]string{"SKILL.md": frontmatter + body})
