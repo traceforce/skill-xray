@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -155,7 +156,7 @@ func (c *httpClient) post(url string, headers map[string]string, body map[string
 		}
 		if status/100 != 2 {
 			if !retryStatus[status] {
-				return nil, &Error{Transport, fmt.Sprintf("LLM endpoint returned HTTP %d", status)}
+				return nil, &Error{Transport, fmt.Sprintf("LLM endpoint returned HTTP %d%s", status, httpHint[status])}
 			}
 			lastCode = status
 			if attempt < maxRetries {
@@ -203,13 +204,22 @@ func (c *httpClient) readBounded(url string, headers map[string]string, data []b
 	return resp.StatusCode, raw, "", nil
 }
 
+// httpHint tells the operator what the common refusals mean; the body is never read.
+var httpHint = map[int]string{401: " (API key rejected)", 403: " (access denied for this key)",
+	404: " (model or endpoint not found; check SKILLXRAY_LLM_MODEL and SKILLXRAY_LLM_BASE_URL)"}
+
 func unreachable(err error) error {
-	return &Error{Transport, fmt.Sprintf("LLM endpoint unreachable: %T", err)}
+	why := "connection failed"
+	var ne net.Error
+	if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &ne) && ne.Timeout() {
+		why = "timed out"
+	}
+	return &Error{Transport, "LLM endpoint unreachable: " + why}
 }
 
-// retryDelay is _retry_delay: a sane Retry-After (0..60 s) wins, else capped exponential backoff.
+// retryDelay is _retry_delay: a sane Retry-After (0..10 s) wins, else capped exponential backoff.
 func retryDelay(retryAfter string, attempt int) time.Duration {
-	if secs, err := strconv.Atoi(strings.TrimSpace(retryAfter)); err == nil && 0 <= secs && secs <= 60 {
+	if secs, err := strconv.Atoi(strings.TrimSpace(retryAfter)); err == nil && 0 <= secs && secs <= 10 { // a longer wait falls back to the backoff
 		return time.Duration(secs) * time.Second
 	}
 	return min(time.Second/2<<attempt, maxBackoff)

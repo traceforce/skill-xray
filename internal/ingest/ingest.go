@@ -61,11 +61,6 @@ type Discovery struct {
 	LedgerExceptions []LedgerEntry
 }
 
-// Percent is coveragePercent: a float that marshals with Python's repr (100.0, 66.67).
-type Percent float64
-
-func (p Percent) MarshalJSON() ([]byte, error) { return []byte(pytext.FloatRepr(float64(p))), nil }
-
 // Ledger is the coverage ledger; field order is the Python dict order.
 type Ledger struct {
 	ArtifactsSeen           int            `json:"artifactsSeen"`
@@ -79,7 +74,7 @@ type Ledger struct {
 	SecretMaterial          []string       `json:"secretMaterial"`
 	AgentConfig             []string       `json:"agentConfig"`
 	InspectableDenominator  int            `json:"inspectableDenominator"`
-	CoveragePercent         Percent        `json:"coveragePercent"`
+	CoveragePercent         float64        `json:"coveragePercent"`
 	ByRole                  map[string]int `json:"byRole"`
 	Exceptions              []LedgerEntry  `json:"exceptions"`
 }
@@ -125,8 +120,8 @@ var (
 	IdentityFiles = pytext.Set("claude.md", "agents.md", "agent.md", "gemini.md", "soul.md", "memory.md",
 		"identity.md", ".cursorrules", ".windsurfrules", ".clinerules", ".roorules", "copilot-instructions.md")
 
-	// KnownSkillRoots are the directories agents load skills from; tests replace it.
-	KnownSkillRoots = []string{
+	// knownSkillRoots are the directories agents load skills from.
+	knownSkillRoots = []string{
 		"~/.claude/skills", "~/.claude/plugins",
 		"~/.config/opencode/skills", ".opencode/skills",
 		"~/.cursor/skills", ".cursor/skills",
@@ -563,13 +558,14 @@ func discoveryError(err error, path string) LedgerEntry {
 	return discoveryEntry("walk_error:"+pytext.OSErrorName(err), posix(abs))
 }
 
-// Discover returns the skill package roots found under roots (nil means
-// KnownSkillRoots). A root is a directory holding a SKILL.md or a plugin marker;
+// Discover returns the skill package roots found under roots (nil means the known
+// agent skill roots). A root is a directory holding a SKILL.md or a plugin marker;
 // once found its subtree is pruned. A symlinked ROOT is followed, nested symlinks
 // are not, and hard directory and entry budgets bound the scan.
 func Discover(roots []string) Discovery {
+	explicit := roots != nil // a named root the operator mistyped must not pass for an empty one
 	if roots == nil {
-		roots = KnownSkillRoots
+		roots = knownSkillRoots
 	}
 	found := map[string]string{}
 	seen := map[string]bool{}
@@ -583,12 +579,18 @@ func Discover(roots []string) Discovery {
 		}
 		rootStat, err := stat(base)
 		if err != nil {
-			if !errors.Is(err, fs.ErrNotExist) {
+			switch {
+			case explicit && errors.Is(err, fs.ErrNotExist):
+				exceptions = append(exceptions, discoveryEntry("root_missing", posix(base)))
+			case explicit || !errors.Is(err, fs.ErrNotExist):
 				exceptions = append(exceptions, discoveryError(err, base))
 			}
 			continue
 		}
 		if !rootStat.IsDir() {
+			if explicit {
+				exceptions = append(exceptions, discoveryEntry("root_not_directory", posix(base)))
+			}
 			continue
 		}
 		pending := []string{base}
@@ -755,7 +757,7 @@ func BuildLedger(p *Package) Ledger {
 		SecretMaterial:          sortedRels(p.Artifacts, func(a *Artifact) bool { return a.Role == "secret" }),
 		AgentConfig:             sortedRels(p.Artifacts, func(a *Artifact) bool { return a.Role == "config" || a.Role == "root_config" }),
 		InspectableDenominator:  denom,
-		CoveragePercent:         Percent(percent),
+		CoveragePercent:         percent,
 		ByRole:                  byRole,
 		Exceptions:              exceptions,
 	}

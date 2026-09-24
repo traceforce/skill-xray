@@ -3,6 +3,7 @@ package llm
 import (
 	"errors"
 	"net"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/traceforce/skill-xray/internal/pytext"
@@ -14,6 +15,7 @@ type Session struct {
 	Client                                          Completer
 	MaxCalls, MaxBytes, Calls, InputBytes, Failures int
 	Unavailable                                     bool
+	FirstFailure                                    string // the first failure's message: a client error's sanitised text, else only the error class
 }
 
 // NewSession is LLMSession(client, max_calls, max_bytes); the budgets must be non-negative.
@@ -66,6 +68,13 @@ func (s *Session) complete(system, user string, schema any) (string, error) {
 		return reply, nil
 	}
 	s.Failures++
+	if s.FirstFailure == "" {
+		s.FirstFailure = errName(err)
+		var known *Error
+		if errors.As(err, &known) && strings.HasPrefix(known.Msg, "LLM ") {
+			s.FirstFailure = known.Msg // the client's own sanitised text; any other message keeps only the error class
+		}
+	}
 	var e *Error
 	var netErr net.Error // ponytail: OSError is net.Error here; a custom client's file errors classify as "error"
 	switch {
@@ -92,6 +101,6 @@ func (s *Session) Usage() map[string]any {
 		return "unknown"
 	}
 	return map[string]any{"calls": s.Calls, "input_bytes": s.InputBytes, "provider": bounded(provider),
-		"model": bounded(model), "failures": s.Failures, "unavailable": s.Unavailable, "max_calls": s.MaxCalls,
+		"model": bounded(model), "failures": s.Failures, "failure_reason": s.FirstFailure, "unavailable": s.Unavailable, "max_calls": s.MaxCalls,
 		"max_input_bytes": s.MaxBytes, "unit": "logical-completions; transport retries remain separately bounded"}
 }

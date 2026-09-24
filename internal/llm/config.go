@@ -15,7 +15,7 @@ import (
 
 var (
 	providers    = []string{"anthropic", "openai", "openai-compatible"}
-	defaultModel = map[string]string{"anthropic": "claude-haiku-4-5", "openai": "gpt-5-mini"}
+	defaultModel = map[string]string{"anthropic": "claude-haiku-4-5", "openai": "gpt-4.1-mini"}
 	defaultBase  = map[string]string{"anthropic": "https://api.anthropic.com", "openai": "https://api.openai.com/v1"}
 	keyFallback  = map[string]string{"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
 		"openai-compatible": "OPENAI_API_KEY"}

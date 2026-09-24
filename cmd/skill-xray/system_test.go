@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,9 +10,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/traceforce/skill-xray/internal/ingest"
+	"github.com/traceforce/skill-xray/internal/llm"
 	"github.com/traceforce/skill-xray/internal/metadata"
 	"github.com/traceforce/skill-xray/internal/opengrep"
+	"github.com/traceforce/skill-xray/internal/parse"
 	"github.com/traceforce/skill-xray/internal/sarif"
+	"github.com/traceforce/skill-xray/internal/scan"
 	"github.com/traceforce/skill-xray/internal/testutil"
 )
 
@@ -31,42 +34,27 @@ func systemRoot(t *testing.T) string {
 	return root
 }
 
-// byPackage indexes the system-scan JSON packages by name.
-func byPackage(doc any) map[string]any {
-	out := map[string]any{}
-	for _, p := range at(doc, "packages").([]any) {
-		out[at(p, "package").(string)] = p
+// runs validates every run of a merged report on its own and returns them.
+func runs(t *testing.T, doc any) []any {
+	t.Helper()
+	out := at(doc, "runs").([]any)
+	for _, run := range out {
+		require.NoError(t, sarif.Validate(map[string]any{"version": at(doc, "version"), "$schema": at(doc, "$schema"), "runs": []any{run}}))
 	}
 	return out
 }
 
-func TestRootLegacyFormStillAnalyzes(t *testing.T) {
-	root := testutil.MakePackage(t, leaky)
-	rc, stdout, _ := cli(t, root, "--analyze", "--json")
-	assert.Equal(t, 0, rc)
-	assert.True(t, hasVector(decode(t, stdout), "SXV-017"))
-}
-
-func TestScanSubcommandMatchesLegacyForm(t *testing.T) {
-	root := testutil.MakePackage(t, leaky)
-	for _, flags := range [][]string{{"--json"}, {"--analyze", "--json"}, {"--analyze"}} {
-		t.Run(strings.Join(flags, " "), func(t *testing.T) {
-			rc, legacy, _ := cli(t, append([]string{root}, flags...)...)
-			rcScan, scan, _ := cli(t, append([]string{"scan", root}, flags...)...)
-			assert.Equal(t, rc, rcScan)
-			assert.Equal(t, legacy, scan)
-			assert.NotEmpty(t, legacy)
-		})
-	}
-}
-
 func TestSubcommandsKeepUsageErrors(t *testing.T) {
 	for _, c := range []struct{ argv, want string }{
-		{"scan --scan-known-skills pkg", "no package argument"},
-		{"scan pkg --sarif x", "--sarif requires --analyze"},
-		{"scan", "scan-known-skills"},
-		{"system-scan extra", "unknown command"},
-		{"system-scan --sarif ", "non-empty path"},
+		{"scan", "accepts 1 arg"},
+		{"scan a b", "accepts 1 arg"},
+		{"scan pkg --output ", "non-empty path"},
+		{"system-scan extra", "skill-xray system-scan --root <dir>"},
+		{"system-scan --output ", "non-empty path"},
+		{"pkg --analyze", "unknown command"},
+		{"--json", "unknown flags --json"},
+		{"--json pkg", "skill-xray scan <package>"},
+		{"--install-opengrep", "unknown flags --install-opengrep"},
 	} {
 		t.Run(c.argv, func(t *testing.T) {
 			rc, _, stderr := cli(t, strings.Split(c.argv, " ")...)
@@ -76,76 +64,169 @@ func TestSubcommandsKeepUsageErrors(t *testing.T) {
 	}
 }
 
-func TestSystemScanJSONReportsVerdicts(t *testing.T) {
-	rc, stdout, stderr := cli(t, "system-scan", "--root", systemRoot(t), "--json")
-	assert.Equal(t, 0, rc)
-	assert.Empty(t, stderr)
-	doc := decode(t, stdout)
-	assert.Equal(t, "system-scan-v1", at(doc, "schema_version"))
-	assert.Len(t, at(doc, "discovery", "paths"), 2)
-	pkgs := byPackage(doc)
-	for _, c := range []struct{ name, verdict string }{{"clean", "CLEAN"}, {"leaky", "BLOCKING"}} {
-		require.Contains(t, pkgs, c.name)
-		assert.Equal(t, c.verdict, at(pkgs[c.name], "verdict"))
-		assert.Equal(t, opengrep.Version, at(pkgs[c.name], "analysis", "opengrepVersion"))
-		assert.Equal(t, json.Number("1"), at(pkgs[c.name], "ledger", "artifactsSeen"))
-	}
-	assert.True(t, hasVector(pkgs["leaky"], "SXV-017"))
-	assert.Equal(t, []any{}, at(pkgs["clean"], "findings"))
-	assert.Equal(t, map[string]any{"packages": json.Number("2"), "blocking": json.Number("1"),
-		"withFindings": json.Number("0"), "clean": json.Number("1")}, at(doc, "summary"))
-}
-
-func TestSystemScanTextOutput(t *testing.T) {
-	rc, stdout, _ := cli(t, "system-scan", "--root", systemRoot(t))
-	assert.Equal(t, 0, rc)
-	assert.Contains(t, stdout, "CLEAN     seen=1   analyzed=1   cov=100.0%  ")
-	assert.Contains(t, stdout, "BLOCKING  seen=1   analyzed=1   cov=100.0%  ")
-	assert.Contains(t, stdout, "committed-credential")
-	assert.True(t, strings.HasSuffix(stdout, "packages: 2, blocking: 1, with findings: 0, clean: 1, discovery exceptions: 0\n"))
-}
-
-func TestSystemScanSarifHoldsOneRunPerPackage(t *testing.T) {
-	root := systemRoot(t)
+// The console shows one verdict line per package, the report path and a summary; the report
+// holds one validated run per package.
+func TestSystemScanConsoleAndReport(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "system.sarif")
-	rc, _, stderr := cli(t, "system-scan", "--root", root, "--sarif", target)
+	rc, stdout, stderr := cli(t, "system-scan", "--root", systemRoot(t), "--output", target)
 	require.Equal(t, 0, rc, stderr)
+	assert.Empty(t, stderr)
+	assert.Contains(t, stdout, "CLEAN     seen=1   read=1   cov=100.0%  ")
+	assert.Contains(t, stdout, "BLOCKING  seen=1   read=1   cov=100.0%  ")
+	assert.Contains(t, stdout, "report: "+target+"\n")
+	assert.True(t, strings.HasSuffix(stdout, "packages: 2, blocking: 1, with findings: 0, clean: 1, incomplete: 0, discovery exceptions: 0\n"), stdout)
 	doc := sarifDoc(t, target)
-	runs := at(doc, "runs").([]any)
-	require.Len(t, runs, 2)
-	results := 0
-	for _, run := range runs {
-		require.NoError(t, sarif.Validate(map[string]any{"version": at(doc, "version"), "$schema": at(doc, "$schema"), "runs": []any{run}}))
-		results += len(at(run, "results").([]any))
+	rs := runs(t, doc)
+	require.Len(t, rs, 2)
+	vectors := 0
+	for _, run := range rs {
+		for _, r := range at(run, "results").([]any) {
+			if at(r, "properties", "sxv") == "SXV-017" {
+				vectors++
+			}
+		}
 	}
-	assert.Equal(t, 1, results)
+	assert.Equal(t, 1, vectors)
 }
 
+// A package whose run cannot be built is named on stderr and left out of the report; the other
+// packages keep theirs and the exit code says the scan is incomplete.
+func TestSystemScanKeepsTheReportWhenOneRunCannotBeBuilt(t *testing.T) {
+	real := scanReport
+	testutil.Swap(t, &scanReport, func(p *parse.Package, o scan.Options) (*scan.ScanReport, error) {
+		report, err := real(p, o)
+		switch {
+		case err != nil:
+		case p.Name == "leaky": // as scan records a correlation step that panicked
+			report.Correlation.Errors = []string{"correlation-error: RuntimeError"}
+			report.ContextErrors = append(report.ContextErrors, "correlation-error: RuntimeError")
+		case p.Name == "clean": // a context stage that failed on a package without findings
+			report.ContextErrors = append(report.ContextErrors, "capability-context-error: RuntimeError")
+		}
+		return report, err
+	})
+	target := filepath.Join(t.TempDir(), "system.sarif")
+	rc, stdout, stderr := cli(t, "system-scan", "--root", systemRoot(t), "--output", target)
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "no SARIF run for ")
+	assert.Contains(t, stderr, "leaky: Cannot emit SARIF after a correlation failure\n")
+	assert.Contains(t, stderr, "leaky: correlation-error: RuntimeError\n")
+	assert.Contains(t, stdout, "report: "+target+"\n")
+	assert.Contains(t, stdout, "FINDINGS  seen=1   read=1   cov=100.0%  ", "a context error never reads as clean")
+	assert.Contains(t, stdout, "packages: 2, blocking: 1, with findings: 1, clean: 0, incomplete: 2, discovery exceptions: 0\n")
+	assert.Len(t, runs(t, sarifDoc(t, target)), 1)
+}
+
+// A target inside a discovered package is refused before any package is scanned.
 func TestSystemScanSarifRefusesAScannedPackage(t *testing.T) {
 	root := systemRoot(t)
 	target := filepath.Join(root, "leaky", "report.sarif")
-	rc, _, stderr := cli(t, "system-scan", "--root", root, "--sarif", target)
+	noScan(t)
+	rc, stdout, stderr := cli(t, "system-scan", "--root", root, "--output", target)
 	assert.Equal(t, 2, rc)
 	assert.Contains(t, stderr, "cannot write SARIF")
+	assert.Empty(t, stdout)
 	assert.NoFileExists(t, target)
 }
 
 func TestSystemScanEmptyRoot(t *testing.T) {
-	rc, stdout, stderr := cli(t, "system-scan", "--root", t.TempDir(), "--json")
+	target := filepath.Join(t.TempDir(), "system.sarif")
+	rc, stdout, stderr := cli(t, "system-scan", "--root", t.TempDir(), "--output", target)
 	assert.Equal(t, 0, rc)
-	assert.Empty(t, stderr)
-	doc := decode(t, stdout)
-	assert.Equal(t, []any{}, at(doc, "packages"))
-	assert.Equal(t, json.Number("0"), at(doc, "summary", "packages"))
+	assert.Contains(t, stderr, "note: no skill packages found under ")
+	assert.True(t, strings.HasSuffix(stdout, "packages: 0, blocking: 0, with findings: 0, clean: 0, incomplete: 0, discovery exceptions: 0\n"), stdout)
+	assert.Equal(t, []any{}, at(sarifDoc(t, target), "runs"))
+}
+
+// A discovery walk that hits its directory budget is a visible gap: the exit is 2, stderr names
+// the reason and the summary line counts the exception, even with no package found.
+func TestSystemScanFailsVisibleWhenDiscoveryTruncates(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "a", "b"), 0o755))
+	testutil.Swap(t, &ingest.MaxDiscoveryDirs, 1)
+	target := filepath.Join(t.TempDir(), "system.sarif")
+	rc, stdout, stderr := cli(t, "system-scan", "--root", root, "--output", target)
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "skill discovery incomplete (walk_truncated)")
+	assert.True(t, strings.HasSuffix(stdout, "discovery exceptions: 1\n"), stdout)
+}
+
+// A --root that does not exist or is not a directory is a discovery exception on stderr with
+// exit 2, never an empty clean run.
+func TestSystemScanNamedRootMustBeADirectory(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "SKILL.md")
+	require.NoError(t, os.WriteFile(file, []byte(manifest), 0o644))
+	for name, root := range map[string]string{"missing": filepath.Join(t.TempDir(), "typo"), "file": file} {
+		target := filepath.Join(t.TempDir(), "system.sarif")
+		rc, stdout, stderr := cli(t, "system-scan", "--root", root, "--output", target)
+		assert.Equal(t, 2, rc, name)
+		assert.Contains(t, stderr, "skill discovery incomplete (", name)
+		assert.True(t, strings.HasSuffix(stdout, "discovery exceptions: 1\n"), stdout)
+	}
+	rc, _, stderr := cli(t, "system-scan", "--root", file, "--output", file) // the report must not replace the file named as a root
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "Report must be outside the scanned package")
+	kept, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Equal(t, manifest, string(kept))
+}
+
+// Every package whose analysis did not complete is explained on stderr and counted on the
+// summary line, so the exit 2 of a system scan names its causes.
+func TestSystemScanExplainsIncompletePackages(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "ruby"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "ruby", "SKILL.md"), []byte(manifest), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "ruby", "tool.rb"), []byte("puts 1\n"), 0o644))
+	target := filepath.Join(t.TempDir(), "system.sarif")
+	rc, stdout, stderr := cli(t, "system-scan", "--root", root, "--output", target)
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "analysis incomplete: ")
+	assert.Contains(t, stderr, "tool.rb")
+	assert.Contains(t, stdout, "incomplete: 1, discovery exceptions: 0\n")
 }
 
 func TestSystemScanRootRepeats(t *testing.T) {
 	a, b := systemRoot(t), testutil.MakePackage(t, leaky)
-	rc, stdout, _ := cli(t, "system-scan", "--root", a, "--root", filepath.Dir(b), "--json")
+	target := filepath.Join(t.TempDir(), "system.sarif")
+	rc, _, _ := cli(t, "system-scan", "--root", a, "--root", filepath.Dir(b), "--output", target)
 	assert.Equal(t, 0, rc)
-	doc := decode(t, stdout)
-	assert.Len(t, at(doc, "packages"), 3)
-	assert.Equal(t, []any{a, filepath.Dir(b)}, at(doc, "roots"))
+	assert.Len(t, runs(t, sarifDoc(t, target)), 3)
+}
+
+// Without --output the merged report lands in the working directory.
+func TestSystemScanDefaultReportPath(t *testing.T) {
+	root := systemRoot(t)
+	t.Chdir(t.TempDir())
+	rc, stdout, _ := cli(t, "system-scan", "--root", root)
+	assert.Equal(t, 0, rc)
+	assert.Contains(t, stdout, "report: "+defaultReport+"\n")
+	assert.Len(t, runs(t, sarifDoc(t, defaultReport)), 2)
+}
+
+// The LLM lane runs over every discovered package under the same flags as scan, and its usage
+// checks apply.
+func TestSystemScanLLMLane(t *testing.T) {
+	root := t.TempDir()
+	pkg := testutil.MakePackage(t, map[string]string{"SKILL.md": "---\nname: t\ndescription: override the loading agent\n---\n"})
+	require.NoError(t, os.Rename(pkg, filepath.Join(root, "override")))
+	testutil.Swap(t, &llmFromEnv, config(&llm.Config{Provider: "openai", Model: "m", APIKey: "k", BaseURL: "https://api.openai.com/v1"}, nil))
+	testutil.Swap(t, &buildClient, client(&fakeClient{verdict}))
+	target := filepath.Join(t.TempDir(), "system.sarif")
+	rc, stdout, stderr := cli(t, "system-scan", "--root", root, "--llm", "--output", target)
+	require.Equal(t, 0, rc, stderr)
+	assert.Contains(t, stdout, "\nllm: ", stdout)
+	vectors := []string{}
+	for _, r := range at(runs(t, sarifDoc(t, target))[0], "results").([]any) {
+		if v, ok := at(r, "properties", "sxv").(string); ok {
+			vectors = append(vectors, v)
+		}
+	}
+	assert.Contains(t, vectors, "SXV-038")
+
+	rc, _, stderr = cli(t, "system-scan", "--root", root, "--llm-review", "--output", target)
+	assert.Equal(t, 2, rc)
+	assert.Contains(t, stderr, "explicit --llm opt-in")
 }
 
 func TestVersionSubcommand(t *testing.T) {

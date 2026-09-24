@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/dlclark/regexp2"
@@ -19,6 +20,7 @@ var (
 	pemRE = regexp.MustCompile(`(?s)-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----.*?` +
 		`(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|\z)`)
 	// Python's Unicode \b becomes a captured boundary character that the replacement re-emits.
+	keyRE  = regexp.MustCompile(`(^|[^A-Za-z0-9])sk-[A-Za-z0-9_-]{16,}`) // vendor API keys by shape, after any non-alphanumeric, an underscore included
 	authRE = regexp.MustCompile(`(?i)(^|[^\pL\pN_])((?:Bearer|Basic)[ \t]+[A-Za-z0-9._~+/=-]+)`)
 	urlRE  = regexp.MustCompile(`(?i)(^|[^a-z0-9+.-])([a-z][a-z0-9+.-]*://[^<>"'` + pytext.SpaceBody + `]+)`)
 	// regexp2: the lookbehind must see the char before the search start; three lookaheads.
@@ -36,6 +38,7 @@ func Redact(text string) string {
 	})
 	text = supplychain.ReplaceSecrets(text, func(string) string { return "[REDACTED]" })
 	text = authRE.ReplaceAllString(text, "${1}[REDACTED]")
+	text = keyRE.ReplaceAllString(text, "${1}[REDACTED]")
 	text = redactNamed(text)
 	var b strings.Builder
 	last := 0
@@ -51,6 +54,25 @@ func Redact(text string) string {
 // redactNamed is the _NAMED loop over code points: a credential-shaped key keeps its key,
 // separator and gap; the value (with any YAML continuation lines deeper than the key's indent)
 // becomes [REDACTED]. A sibling key on a later line is never read as the value.
+// printable keeps the model's free text out of the terminal's and the viewer's control planes: every
+// control character and every format character, the bidi overrides included, becomes a space.
+func printable(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
+// hides reports a control or format character other than a line break or a tab, one a viewer
+// could render as something else than the quoted source; a quote keeps its soft breaks.
+func hides(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool {
+		return unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' || unicode.Is(unicode.Cf, r)
+	})
+}
+
 func redactNamed(text string) string {
 	runes := []rune(text)
 	var b strings.Builder

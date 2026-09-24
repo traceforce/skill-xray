@@ -149,6 +149,6 @@ func TestUsageIdentityIsBounded(t *testing.T) {
 	assert.Equal(t, "custom", usage["provider"])
 	assert.Equal(t, "unknown", usage["model"])
 	assert.Equal(t, map[string]any{"calls": 0, "input_bytes": 0, "provider": "custom", "model": "unknown",
-		"failures": 0, "unavailable": false, "max_calls": 25, "max_input_bytes": 1 << 20,
+		"failures": 0, "failure_reason": "", "unavailable": false, "max_calls": 25, "max_input_bytes": 1 << 20,
 		"unit": "logical-completions; transport retries remain separately bounded"}, usage)
 }

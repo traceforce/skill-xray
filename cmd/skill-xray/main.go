@@ -1,26 +1,28 @@
-// Command skill-xray scans agent skill packages (cli.py). "scan [package]" inventories a directory,
-// file, .zip, https URL or git repository, or with --analyze runs the detection engines over it;
-// --scan-known-skills is the inventory-only walk of the known agent skill roots. "system-scan"
-// analyzes every package under those roots, "install-opengrep" fetches the pinned engine and
-// "version" prints the version; the root still takes the legacy "[package] [flags]" form. Exit is
-// 0 on a complete run, else 2: bad usage, a failed ingest or write, incomplete high-severity analysis.
+// Command skill-xray scans agent skill packages. "scan <package>" analyzes a directory, file,
+// .zip, https URL or git repository and writes a SARIF report, the only output format, as MCP
+// X-Ray does; "system-scan" does the same for every package under the known agent skill roots
+// with one run per package; "install-opengrep" fetches the pinned engine and "version" prints the
+// version. The console shows one verdict line per package and the report path. Exit is 0 on a
+// complete run, else 2: bad usage, a failed ingest or write, incomplete high-severity analysis.
 //
-//lint:file-ignore ST1005 the oracle's messages are printed verbatim
+//lint:file-ignore ST1005 the CLI's messages are a documented contract
 package main
 
 import (
-	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
+	"github.com/traceforce/skill-xray/internal/correlate"
 	"github.com/traceforce/skill-xray/internal/findings"
 	"github.com/traceforce/skill-xray/internal/ingest"
 	"github.com/traceforce/skill-xray/internal/llm"
@@ -32,12 +34,11 @@ import (
 	"github.com/traceforce/skill-xray/internal/scan"
 )
 
-// The names the oracle's tests monkeypatch on the cli module, as package vars.
+// The seams the tests replace, as package vars.
 var (
 	llmFromEnv      = llm.FromEnv
 	buildClient     = llm.BuildClient
 	installOpengrep = opengrep.Install
-	scanFn          = scan.Scan
 	scanReport      = scan.Report
 	buildSarif      = sarif.Build
 	writeSarif      = sarif.Write
@@ -45,48 +46,71 @@ var (
 	resolvePath     = sarif.Resolve
 )
 
+// defaultReport is where the report lands when --output is not given, in the working directory.
+const defaultReport = "findings.sarif.json"
+
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 type options struct {
-	scanKnown, analyze, llm, enrich, llmShadow, llmReview, llmAdditive, llmApply, installOpengrep, json bool
-	opengrepBin, sarif, policy                                                                          string
+	llmFlags
+	opengrepBin, output, policy string
 }
 
-// run is cli.main: a usage error prints "skill-xray: error: <msg>" and exits 2, as argparse does.
-// The root runs the legacy "skill-xray [package] [flags]" form through the same code as "scan".
+// llmFlags are the opt-in LLM lane switches, the same on scan and system-scan.
+type llmFlags struct {
+	llm, llmShadow, llmReview, llmAdditive, llmApply bool
+}
+
+// run is the command line: a usage error prints "skill-xray: error: <msg>" and exits 2.
 func run(argv []string, stdout, stderr io.Writer) int {
 	var o options
 	var s systemOptions
 	rc := 0
-	scanRun := func(c *cobra.Command, args []string) (err error) {
-		rc, err = o.main(c.Flags().Changed, cmp.Or(args...), stdout, stderr)
-		return err
-	}
 	root := &cobra.Command{
-		Use:           "skill-xray [package]",
-		Short:         "Inventory and analyze agent skill packages.",
-		Args:          cobra.MaximumNArgs(1),
-		Version:       metadata.Version,
-		SilenceUsage:  true,
-		SilenceErrors: true,
-		RunE:          scanRun,
+		Use:                "skill-xray",
+		Short:              "Analyze agent skill packages and write SARIF reports.",
+		Version:            metadata.Version,
+		SilenceUsage:       true,
+		SilenceErrors:      true,
+		Args:               cobra.ArbitraryArgs,                          // so the retired root form gets a pointer to scan, not a bare unknown command
+		FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true}, // its retired flags too
+		RunE: func(c *cobra.Command, args []string) error {
+			if i := slices.IndexFunc(argv, func(a string) bool { return !strings.HasPrefix(a, "-") }); len(args) == 0 && i >= 0 {
+				args = argv[i:] // pflag swallowed the package as an unknown flag's value
+			}
+			switch {
+			case len(args) > 0:
+				return fmt.Errorf("unknown command \"%s\"; to analyze a package run: skill-xray scan <package>", console(args[0]))
+			case len(argv) > 0: // cobra answered --help and --version itself, so only retired flags reach here
+				return fmt.Errorf("unknown flags %s; run skill-xray --help", console(strings.Join(argv, " ")))
+			}
+			return c.Help()
+		},
 	}
 	root.SetVersionTemplate("skill-xray {{.Version}}\n")
+	root.CompletionOptions.DisableDefaultCmd = true // the README documents four subcommands; shell completion is not one of them
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.SetArgs(append([]string{}, argv...))
-	o.bind(root)
 	scan := &cobra.Command{
-		Use:   "scan [package]",
-		Short: "Inventory a skill package, or with --analyze run the detection engines over it.",
-		Args:  cobra.MaximumNArgs(1),
-		RunE:  scanRun,
+		Use:   "scan <package>",
+		Short: "Analyze one skill package and write a SARIF report.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) (err error) {
+			rc, err = o.main(c.Flags().Changed, args[0], stdout, stderr)
+			return err
+		},
 	}
 	o.bind(scan)
 	system := &cobra.Command{
 		Use:   "system-scan",
-		Short: "Analyze every skill package under the known agent skill roots.",
-		Args:  cobra.NoArgs,
+		Short: "Analyze every skill package under the known agent skill roots into one SARIF report.",
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return errors.New("system-scan takes no positional argument; to scan the packages under a directory run: skill-xray system-scan --root <dir>")
+			}
+			return nil
+		},
 		RunE: func(c *cobra.Command, _ []string) (err error) {
 			rc, err = s.run(c.Flags().Changed, stdout, stderr)
 			return err
@@ -105,203 +129,340 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	return rc
 }
 
-// bind registers the scan flags on c; the root and "scan" carry the same set.
+// bind registers the scan flags.
 func (o *options) bind(c *cobra.Command) {
 	f := c.Flags()
-	f.BoolVar(&o.scanKnown, "scan-known-skills", false, "walk every package under the known agent skill roots")
-	f.BoolVar(&o.analyze, "analyze", false, "run the detection engines and report findings instead of the inventory")
-	f.StringVar(&o.opengrepBin, "opengrep-bin", "", "explicit pinned OpenGrep binary for --analyze")
-	f.BoolVar(&o.llm, "llm", false, "also run the opt-in LLM adjudication pass (semantic prompt injection). "+
-		"SENDS THE TEXT of the scanned skill files to the configured third-party LLM provider, so do not use "+
-		"it on confidential packages. Requires SKILLXRAY_LLM_PROVIDER and an API key in the environment")
-	f.BoolVar(&o.enrich, "enrich", false, "include capability context and raw candidates with --analyze --json")
-	f.BoolVar(&o.llmShadow, "llm-shadow", false, "review static candidates only, without additive SXV-038 detection; requires --llm --json")
-	f.BoolVar(&o.llmReview, "llm-review", false, "annotate disputed findings without removing or downgrading them; requires --llm --json")
-	f.BoolVar(&o.llmAdditive, "llm-additive", false, "also run SXV-038 after LLM review, using the remaining shared budget")
-	f.BoolVar(&o.llmApply, "llm-apply", false, "let a validated llm-disputed review demote that text-pattern finding to low "+
-		"in the correlated results (audited as corrected, never removed); requires --llm-review")
-	f.BoolVar(&o.installOpengrep, "install-opengrep", false, "download and verify the pinned OpenGrep runtime, then exit")
-	f.BoolVar(&o.json, "json", false, "emit the inventory as JSON")
-	f.StringVar(&o.sarif, "sarif", "", "write validated SARIF outside the scanned package")
-	f.StringVar(&o.policy, "policy", "", "explicit scoped operator policy for --sarif")
+	f.StringVarP(&o.output, "output", "o", defaultReport, "write the validated SARIF report here; the path must be outside the scanned package and its directory must exist")
+	f.StringVar(&o.policy, "policy", "", "scoped operator policy JSON (version skill-xray/scoped-policy/v1) that suppresses or demotes named results; a regular file outside the scanned package")
+	f.StringVar(&o.opengrepBin, "opengrep-bin", "", "OpenGrep 1.29.0 executable for the code lane; it must match the pinned size and SHA-256, with no fallback to the cache")
+	o.llmFlags.bind(c)
 }
 
-// install is the --install-opengrep action and the "install-opengrep" subcommand.
+// bind registers the LLM flags on c.
+func (l *llmFlags) bind(c *cobra.Command) {
+	f := c.Flags()
+	f.BoolVar(&l.llm, "llm", false, "also run the opt-in LLM adjudication pass (semantic prompt injection). "+
+		"SENDS THE TEXT of the scanned skill files to the configured third-party LLM provider, so do not use "+
+		"it on confidential packages. Requires SKILLXRAY_LLM_PROVIDER and an API key in the environment")
+	f.BoolVar(&l.llmShadow, "llm-shadow", false, "review the static text-pattern candidates (SXV-028 to SXV-031) as shadow proposals only; requires --llm, excludes --llm-review, and turns the semantic SXV-038 check off unless --llm-additive is given")
+	f.BoolVar(&l.llmReview, "llm-review", false, "review the static text-pattern candidates and annotate a validated dispute as llm-disputed without removing or downgrading it; requires --llm, excludes --llm-shadow, and turns the semantic SXV-038 check off unless --llm-additive is given")
+	f.BoolVar(&l.llmAdditive, "llm-additive", false, "also run the semantic SXV-038 check after the review, within the same shared budget; requires --llm-shadow or --llm-review")
+	f.BoolVar(&l.llmApply, "llm-apply", false, "let a validated llm-disputed review demote that text-pattern finding to low "+
+		"in the correlated results (audited as corrected, never removed); requires --llm-review")
+}
+
+// client checks the flag combination and builds the opt-in client up front, so a misconfiguration
+// fails before anything is read; a returned error is a usage error and a nil client means the
+// lane is off.
+func (l *llmFlags) client() (llm.Completer, error) {
+	reviewing := l.llmShadow || l.llmReview
+	switch {
+	case reviewing && !l.llm:
+		return nil, errors.New("LLM review requires explicit --llm opt-in")
+	case l.llmShadow && l.llmReview:
+		return nil, errors.New("--llm-shadow and --llm-review are mutually exclusive")
+	case l.llmAdditive && !reviewing:
+		return nil, errors.New("--llm-additive requires --llm-shadow or --llm-review")
+	case l.llmApply && !l.llmReview:
+		return nil, errors.New("--llm-apply requires --llm-review")
+	case !l.llm:
+		return nil, nil
+	}
+	cfg, err := llmFromEnv(os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return nil, errors.New("--llm needs SKILLXRAY_LLM_PROVIDER and SKILLXRAY_LLM_API_KEY (or the vendor's own key variable) in the environment")
+	}
+	return buildClient(*cfg), nil
+}
+
+// scanOptions is the configuration of one package's scan under these flags.
+func (l *llmFlags) scanOptions(client llm.Completer, exe string, policy map[string]any) scan.Options {
+	return scan.Options{Client: client, LLMShadow: l.llmShadow, LLMReview: l.llmReview, LLMApply: l.llmApply,
+		LLMAdditive: l.llmAdditive, OpengrepExe: exe, DispositionPolicy: policy}
+}
+
+// install is the "install-opengrep" subcommand.
 func install(stdout, stderr io.Writer) int {
 	installed, err := installOpengrep("", nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "cannot install OpenGrep: %s\n", pytext.UnicodeEscape(err.Error()))
 		return 2
 	}
-	fmt.Fprintf(stdout, "installed OpenGrep %s at %s\n", opengrep.Version, pytext.UnicodeEscape(installed))
+	fmt.Fprintf(stdout, "installed OpenGrep %s at %s\n", opengrep.Version, console(installed))
 	return 0
 }
 
 // incomplete is the exit-2 rule of an analysis: a context error, or a high or critical finding
 // without a vector (a check or engine that could not run). Findings with a vector never trigger it.
-func incomplete(report *scan.ScanReport, fs []findings.Finding) bool {
-	return report != nil && len(report.ContextErrors) > 0 || slices.ContainsFunc(fs, func(f findings.Finding) bool {
-		return f.Vector == "" && (f.Severity == "critical" || f.Severity == "high")
-	})
+func incomplete(report *scan.ScanReport) bool {
+	return len(report.ContextErrors) > 0 || slices.ContainsFunc(report.Findings, gap)
 }
 
-// main is cli.main after argument parsing, in the oracle's order of checks; a returned error is
-// a usage error.
-func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.Writer) (int, error) {
-	if changed("sarif") && o.sarif == "" || changed("policy") && o.policy == "" {
-		return 2, errors.New("--sarif and --policy require non-empty paths")
+func gap(f findings.Finding) bool {
+	return f.Vector == "" && (f.Severity == "critical" || f.Severity == "high")
+}
+
+// explainIncomplete names on stderr what kept an analysis from completing, one line per cause,
+// so an exit 2 never arrives without a reason; it reports whether there was one.
+func explainIncomplete(w io.Writer, name string, report *scan.ScanReport) bool {
+	seen := map[string]bool{}
+	say := func(line string) {
+		if !seen[line] {
+			seen[line] = true
+			fmt.Fprintln(w, line)
+		}
 	}
-	reviewing := o.llmShadow || o.llmReview
-	analysis := o.analyze || o.opengrepBin != "" || o.llm || o.enrich || o.llmShadow || o.llmAdditive ||
-		o.llmReview || o.llmApply || o.sarif != "" || o.policy != ""
-	if o.installOpengrep {
-		if pkg != "" || o.scanKnown || o.json || analysis {
-			return 2, errors.New("--install-opengrep is a standalone action")
-		}
-		return install(stdout, stderr), nil
+	for _, e := range report.ContextErrors {
+		say("analysis incomplete: " + name + ": " + pytext.UnicodeEscape(e))
 	}
-	if o.scanKnown {
-		if pkg != "" {
-			return 2, errors.New("--scan-known-skills takes no package argument")
+	for _, f := range report.Findings {
+		if gap(f) {
+			where := f.Rule
+			if f.Path != "" {
+				where += " " + pytext.UnicodeEscape(f.Path)
+			}
+			msg, _, _ := strings.Cut(f.Message, "\n") // the first line; an engine error can quote the source below it
+			say("analysis incomplete: " + name + ": " + where + ": " + pytext.UnicodeEscape(pytext.Head(msg, 200)))
 		}
-		if analysis {
-			return 2, errors.New("--scan-known-skills does not accept analysis options")
+	}
+	return incomplete(report)
+}
+
+// llmSummary collects what the LLM lane did over the packages of one command for the one console
+// line that says whether the model was reached: the calls made, whether the semantic pass ran,
+// and the reviews sent or held back with the reason, so a run that never called the model cannot
+// pass for one that did.
+type llmSummary struct {
+	configured, calls, failures, sent    int
+	partial                              int // llm-truncated and llm-budget notes: files the model did not read whole
+	unavailable, advisoryOn, advisoryOff bool
+	judgeOn                              bool
+	reason                               string // the first failure's reason seen
+	held                                 map[string]int
+}
+
+func (s *llmSummary) add(report *scan.ScanReport) {
+	u := report.LLMUsage
+	if u == nil || !pytext.Truthy(u["advisory_enabled"]) && !pytext.Truthy(u["judge_enabled"]) {
+		return // the lane was not requested
+	}
+	s.configured++
+	s.calls += count(u["calls"])
+	for _, f := range report.Findings {
+		switch f.Rule {
+		case "llm-truncated":
+			s.partial++
+		case "llm-budget": // one note stands for this file and every later one
+			s.partial += max(1, count(f.Evidence["unchecked"]))
 		}
-		return scanKnown(o.json, stdout, stderr), nil
+	}
+	s.failures += count(u["failures"])
+	if r, _ := u["failure_reason"].(string); r != "" && s.reason == "" {
+		s.reason = r
+	}
+	s.unavailable = s.unavailable || pytext.Truthy(u["unavailable"])
+	s.advisoryOn = s.advisoryOn || pytext.Truthy(u["advisory_enabled"])
+	s.advisoryOff = s.advisoryOff || !pytext.Truthy(u["advisory_enabled"])
+	s.judgeOn = s.judgeOn || pytext.Truthy(u["judge_enabled"])
+	decisions := report.Shadow
+	if report.ReviewMode {
+		decisions = report.Dispositions
+	}
+	for _, d := range decisions {
+		switch {
+		case d.Status == "ineligible":
+		case d.RequestSHA256 != "": // a request left for the model
+			s.sent++
+		default:
+			if s.held == nil {
+				s.held = map[string]int{}
+			}
+			s.held[d.Status]++
+		}
+	}
+}
+
+func (s *llmSummary) line(w io.Writer) {
+	if s.configured == 0 {
+		return
+	}
+	fmt.Fprintf(w, "llm: %d model call%s", s.calls, plural(s.calls))
+	if s.failures > 0 {
+		fmt.Fprintf(w, ", %d failed", s.failures)
+		if s.reason != "" {
+			fmt.Fprintf(w, " (%s)", s.reason)
+		}
+	}
+	if s.unavailable {
+		fmt.Fprint(w, ", provider unavailable")
 	}
 	switch {
-	case pkg == "":
-		return 2, errors.New("provide a package directory, or use --scan-known-skills")
-	case o.opengrepBin != "" && !o.analyze:
-		return 2, errors.New("--opengrep-bin requires --analyze")
-	case o.sarif != "" && !o.analyze:
-		return 2, errors.New("--sarif requires --analyze")
-	case o.policy != "" && o.sarif == "":
-		return 2, errors.New("--policy requires --sarif")
-	case (o.enrich || reviewing) && !(o.analyze && o.json):
-		return 2, errors.New("--enrich and LLM review require --analyze --json")
-	case reviewing && !o.llm:
-		return 2, errors.New("LLM review requires explicit --llm opt-in")
-	case o.llmShadow && o.llmReview:
-		return 2, errors.New("--llm-shadow and --llm-review are mutually exclusive")
-	case o.llmAdditive && !reviewing:
-		return 2, errors.New("--llm-additive requires --llm-shadow or --llm-review")
-	case o.llmApply && !o.llmReview:
-		return 2, errors.New("--llm-apply requires --llm-review")
+	case s.advisoryOff:
+		fmt.Fprint(w, "; semantic check (SXV-038) skipped in review mode, add --llm-additive to run it")
+	case s.advisoryOn && !s.unavailable:
+		fmt.Fprint(w, "; semantic check (SXV-038) ran")
+	}
+	if s.partial > 0 {
+		fmt.Fprintf(w, "; %d file%s not read whole by the model (size or budget), see the report", s.partial, plural(s.partial))
+	}
+	if s.judgeOn {
+		fmt.Fprintf(w, "; reviews sent %d", s.sent)
+		if s.sent == 0 && len(s.held) == 0 {
+			fmt.Fprint(w, " (no eligible text-pattern candidates)")
+		}
+		if len(s.held) > 0 {
+			parts, total := []string{}, 0
+			for _, k := range slices.Sorted(maps.Keys(s.held)) {
+				parts = append(parts, fmt.Sprintf("%s %d", k, s.held[k]))
+				total += s.held[k]
+			}
+			fmt.Fprintf(w, ", held %d (%s)", total, strings.Join(parts, ", "))
+		}
+	}
+	fmt.Fprintln(w)
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// count reads a usage counter, which the session keeps as an int.
+func count(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case float64:
+		return int(n)
+	}
+	return 0
+}
+
+// verdictLine is the one console line per package: the verdict, the ledger counts and the name.
+func verdictLine(w io.Writer, verdict string, l ingest.Ledger, name string) {
+	fmt.Fprintf(w, "%-8s  seen=%-3d read=%-3d cov=%5.1f%%  %s\n", verdict, l.ArtifactsSeen, l.ArtifactsAnalyzed, float64(l.CoveragePercent), name)
+}
+
+// main is "scan" after argument parsing; a returned error is a usage error.
+func (o *options) main(changed func(string) bool, pkg string, stdout, stderr io.Writer) (int, error) {
+	if changed("output") && o.output == "" || changed("policy") && o.policy == "" {
+		return 2, errors.New("--output and --policy require non-empty paths")
+	}
+	client, err := o.client()
+	if err != nil {
+		return 2, err
 	}
 
-	// The opt-in LLM client is built up front so a misconfiguration fails before the scan runs.
-	var client llm.Completer
-	if o.llm {
-		if !o.analyze {
-			return 2, errors.New("--llm requires --analyze")
-		}
-		cfg, err := llmFromEnv(os.Getenv)
-		if err != nil {
-			return 2, err
-		}
-		if cfg == nil {
-			return 2, errors.New("--llm needs SKILLXRAY_LLM_PROVIDER and an API key in the environment")
-		}
-		client = buildClient(*cfg)
+	policy, err := o.preflight(pkg)
+	if err != nil {
+		fmt.Fprintf(stderr, "cannot prepare SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
+		return 2, nil
 	}
-
 	r, cleanup, err := resolveInput(pkg)
 	if err != nil {
 		// The package argument and the error text can carry attacker-controlled names (zip
 		// members, URLs); escape them like artifact paths.
-		fmt.Fprintf(stderr, "cannot ingest %s: %s\n", pytext.UnicodeEscape(pkg), pytext.UnicodeEscape(err.Error()))
+		fmt.Fprintf(stderr, "cannot ingest %s: %s\n", console(pkg), pytext.UnicodeEscape(err.Error()))
 		return 2, nil
 	}
 	defer cleanup()
-	var policy map[string]any
-	if o.sarif != "" {
-		if policy, err = o.preflight(pkg, r.Root); err != nil {
-			fmt.Fprintf(stderr, "cannot prepare SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
-			return 2, nil
-		}
+	if err := o.contained(r.Root); err != nil {
+		fmt.Fprintf(stderr, "cannot prepare SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
+		return 2, nil
 	}
 	p := ingest.BuildPackage(r.Root)
 	p.Name = r.Name // friendly name; the root may be a temp dir
-	ledger := ingest.BuildLedger(p)
-	doc := map[string]any{"package": p.Name, "identity": p.Identity, "source": pkg, "kind": r.Kind, "ledger": ledger}
-	switch {
-	case o.analyze:
-		parsed := parse.Parse(p)
-		var report *scan.ScanReport
-		var fs []findings.Finding
-		if o.enrich || reviewing || o.sarif != "" {
-			if report, err = scanReport(parsed, scan.Options{Client: client, LLMShadow: o.llmShadow, LLMReview: o.llmReview,
-				LLMApply: o.llmApply, LLMAdditive: o.llmAdditive, OpengrepExe: o.opengrepBin, DispositionPolicy: policy}); err != nil {
-				panic(err) // the flag checks above exclude scan_report's argument errors
-			}
-			fs = report.Findings
-		} else {
-			fs = scanFn(parsed, client, o.opengrepBin)
-		}
-		reportFailed := false
-		if o.sarif != "" {
-			sarifDoc, err := buildSarif(parsed, report)
-			if err == nil {
-				err = writeSarif(sarifDoc, o.sarif, r.Root)
-			}
-			if err != nil {
-				fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
-				reportFailed = true
-			}
-		}
-		if o.json {
-			analysis := map[string]any{"opengrepVersion": opengrep.Version}
-			if client != nil {
-				cov := llm.CoverageSummary(parsed, fs)
-				if report != nil && report.LLMUsage["advisory_enabled"] == false {
-					cov["enabled"], cov["checked"], cov["skipped"], cov["reason"] = false, 0, cov["eligible"], "Additive SXV-038 pass not requested"
-				}
-				analysis["llmCoverage"] = cov
-			}
-			doc["analysis"] = analysis
-			if o.enrich || reviewing {
-				enrichment := report.ToMap()
-				doc["findings"], doc["enrichment"] = enrichment["findings"], enrichment
-				delete(enrichment, "findings")
-			} else {
-				doc["findings"] = findings.ToMaps(fs)
-			}
-			fmt.Fprint(stdout, pytext.Dumps(doc, 2)+"\n")
-		} else {
-			printFindings(stdout, p.Name, fs)
-			if client != nil {
-				cov := llm.CoverageSummary(parsed, fs)
-				fmt.Fprintf(stdout, "  LLM adjudication: %d eligible, %d checked, %d truncated, %d skipped, %d errored, %d flagged\n",
-					cov["eligible"], cov["checked"], cov["truncated"], cov["skipped"], cov["errored"], cov["flagged"])
-			}
-		}
-		if reportFailed || incomplete(report, fs) {
-			return 2, nil
-		}
-	case o.json:
-		doc["artifacts"] = artifactRows(p)
-		fmt.Fprint(stdout, pytext.Dumps(doc, 2)+"\n")
-	default:
-		printOne(stdout, p, ledger)
+	parsed := parse.Parse(p)
+	report, err := scanReport(parsed, o.scanOptions(client, o.opengrepBin, policy))
+	if err != nil {
+		panic(err) // the flag checks above exclude scan_report's argument errors
 	}
-	return 0, nil
+	rc := 0
+	doc, err := buildSarif(parsed, report)
+	if err == nil {
+		err = writeSarif(doc, o.output, r.Root)
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
+		rc = 2
+	}
+	ledger := ingest.BuildLedger(p)
+	verdictLine(stdout, reportHeadline(report), ledger, console(pkg))
+	switch {
+	case ledger.ArtifactsSeen == 0:
+		fmt.Fprintf(stderr, "note: no files found under %s\n", console(pkg))
+	case !slices.ContainsFunc(parsed.Artifacts, func(a *parse.Artifact) bool { return strings.EqualFold(filepath.Base(a.Rel), "SKILL.md") }):
+		fmt.Fprintf(stderr, "note: no SKILL.md found under %s; nothing was evaluated as a skill manifest\n", console(pkg))
+	}
+	if o.policy != "" && report.Correlation != nil { // a CLEAN produced by a suppression is visible as such
+		suppressed, demoted := 0, 0
+		identities := map[[4]string]bool{}
+		for _, r := range report.Correlation.Results {
+			path, _ := r.Finding["path"].(string)
+			identities[[4]string{r.RuleID, path, r.Fingerprint, r.ContextDigest}] = true
+			if r.Decision != nil && r.DecisionProvenance == "operator-policy" {
+				switch r.Disposition {
+				case "suppressed":
+					suppressed++
+				case "corrected":
+					demoted++
+				}
+			}
+		}
+		decisions, _ := policy["decisions"].([]any)
+		unmatched := 0
+		for _, d := range decisions { // a decision that names no result of this report did nothing
+			m, _ := d.(map[string]any)
+			key := [4]string{}
+			for i, f := range []string{"rule_id", "path", "fingerprint", "context_digest"} {
+				key[i], _ = m[f].(string)
+			}
+			if !identities[key] {
+				unmatched++
+			}
+		}
+		fmt.Fprintf(stdout, "policy: %d suppressed, %d demoted, %d of %d decisions matched no result\n", suppressed, demoted, unmatched, len(decisions))
+	}
+	var lane llmSummary
+	lane.add(report)
+	lane.line(stdout)
+	if rc == 0 {
+		fmt.Fprintf(stdout, "report: %s\n", console(o.output))
+	}
+	if explainIncomplete(stderr, console(pkg), report) {
+		rc = 2
+	}
+	return rc, nil
 }
 
-// preflight is the SARIF block of cli.main: the report must not overwrite its source or its
-// operator policy, and the policy must be a regular JSON object of at most 512 KiB outside the
-// scanned package. Every failure is reported before the scan starts.
-func (o *options) preflight(pkg, root string) (map[string]any, error) {
-	report, err := resolvePath(o.sarif)
+// preflight runs before the input is read or unpacked: the report must lie outside the package
+// path and must not overwrite its source or its operator policy, and the policy must be a regular
+// JSON object of at most 512 KiB outside the package path. A URL or git address is no local
+// path, so the comparisons against the source wait for contained on the unpacked root.
+func (o *options) preflight(pkg string) (map[string]any, error) {
+	report, err := resolvePath(o.output)
 	if err != nil {
 		return nil, err
 	}
-	source, err := resolvePath(pkg)
-	if err != nil {
+	if _, err := sarif.CheckTarget(o.output); err != nil { // a missing directory or a special file fails here, before the scan
 		return nil, err
 	}
-	if report == source || sameFile(report, source) {
-		return nil, errors.New("Report cannot overwrite its source")
+	source := ""
+	if _, err := os.Lstat(pkg); err == nil {
+		if source, err = resolvePath(pkg); err != nil {
+			return nil, err
+		}
+		if report == source || sameFile(report, source) {
+			return nil, errors.New("Report cannot overwrite its source")
+		}
+		if sarif.IsWithinSource(report, source) {
+			return nil, errors.New("Report must be outside the scanned package")
+		}
 	}
 	if o.policy == "" {
 		return nil, nil
@@ -313,13 +474,14 @@ func (o *options) preflight(pkg, root string) (map[string]any, error) {
 	if policy == report || sameFile(policy, report) {
 		return nil, errors.New("Report cannot overwrite its operator policy")
 	}
-	if root, err = resolvePath(root); err != nil {
-		return nil, err
-	}
-	if policy == source || sameFile(policy, source) || sarif.IsWithinSource(policy, root) {
+	if source != "" && (policy == source || sameFile(policy, source) || sarif.IsWithinSource(policy, source)) {
 		return nil, errors.New("Operator policy must be outside the scanned package")
 	}
-	if st, err := os.Stat(policy); err != nil || !st.Mode().IsRegular() {
+	st, err := os.Stat(policy)
+	if err != nil {
+		return nil, errors.New("Operator policy not found: " + filepath.ToSlash(o.policy))
+	}
+	if !st.Mode().IsRegular() {
 		return nil, errors.New("Operator policy must be a regular file")
 	}
 	f, err := os.Open(policy) // #nosec G304 -- the operator's policy path, checked by preflight before this read
@@ -336,13 +498,44 @@ func (o *options) preflight(pkg, root string) (map[string]any, error) {
 	}
 	var v any
 	if err := json.Unmarshal(contents, &v); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Operator policy is not valid JSON: %w", err)
 	}
 	doc, ok := v.(map[string]any)
 	if !ok {
 		return nil, errors.New("Operator policy must be an object")
 	}
+	if version, _ := doc["version"].(string); version != correlate.PolicyVersion { // before the scan, not as a context error after it
+		return nil, fmt.Errorf("Operator policy version %q is not supported; expected %s", version, correlate.PolicyVersion)
+	}
 	return doc, nil
+}
+
+// contained repeats the two containment checks against the resolved package root once the input
+// is materialised and before any file of it is read: an archive or a download unpacks to a root
+// that is not the path the operator named.
+func (o *options) contained(root string) error {
+	root, err := resolvePath(root)
+	if err != nil {
+		return err
+	}
+	report, err := resolvePath(o.output)
+	if err != nil {
+		return err
+	}
+	if sarif.IsWithinSource(report, root) {
+		return errors.New("Report must be outside the scanned package")
+	}
+	if o.policy == "" {
+		return nil
+	}
+	policy, err := resolvePath(o.policy)
+	if err != nil {
+		return err
+	}
+	if sarif.IsWithinSource(policy, root) {
+		return errors.New("Operator policy must be outside the scanned package")
+	}
+	return nil
 }
 
 // sameFile is a.exists() and b.exists() and a.samefile(b).
@@ -352,110 +545,21 @@ func sameFile(a, b string) bool {
 	return ea == nil && eb == nil && os.SameFile(sa, sb)
 }
 
-func artifactRows(p *ingest.Package) []map[string]any {
-	rows := make([]map[string]any, 0, len(p.Artifacts))
-	for _, a := range p.Artifacts {
-		var exception any
-		if a.Exception != "" {
-			exception = a.Exception
-		}
-		rows = append(rows, map[string]any{"rel": a.Rel, "role": a.Role, "kind": a.Kind, "read": a.Exception == "", "exception": exception})
-	}
-	return rows
-}
-
-// printOne is the human-readable inventory. Artifact paths are attacker-controlled, so every
-// one is escaped: a control character could otherwise rewrite the on-screen inventory to hide a
-// file, the one thing this tool must not allow.
-func printOne(w io.Writer, p *ingest.Package, l ingest.Ledger) {
-	fmt.Fprintf(w, "package: %s\n", pytext.UnicodeEscape(p.Name))
-	fmt.Fprintf(w, "  seen=%d analyzed=%d skipped=%d coverage=%.1f%%\n",
-		l.ArtifactsSeen, l.ArtifactsAnalyzed, l.ArtifactsSkipped, float64(l.CoveragePercent))
-	rels := map[string]bool{}
-	for _, a := range p.Artifacts {
-		rels[a.Rel] = true
-		mark, detail := "read ", ""
-		if a.Exception != "" {
-			mark, detail = "SKIP ", "  ("+a.Exception+")"
-		}
-		fmt.Fprintf(w, "  %s %-40s %s%s\n", mark, pytext.UnicodeEscape(a.Rel), a.Kind, detail)
-	}
-	for _, e := range l.Exceptions {
-		if !rels[e.Path] { // directory-level skips: pruned dirs, symlinks, junctions
-			fmt.Fprintf(w, "  SKIP  %-40s %s\n", pytext.UnicodeEscape(e.Path), e.ReasonCode)
-		}
-	}
-}
-
-func printFindings(w io.Writer, name string, fs []findings.Finding) {
-	fmt.Fprintf(w, "package: %s\n", pytext.UnicodeEscape(name))
-	if len(fs) == 0 {
-		fmt.Fprint(w, "  no findings\n")
-		return
-	}
-	for _, f := range fs {
-		loc := ""
+// console is a path as the console prints it: every Unicode control character (the C0 and C1
+// ranges and DEL) is shown as an escape, so a name cannot rewrite or hide a line, and everything
+// else, backslashes included, stays as typed. Names inside a package still use the stricter
+// pytext.UnicodeEscape.
+func console(p string) string {
+	var b strings.Builder
+	for _, r := range p {
 		switch {
-		case f.Line != nil:
-			loc = fmt.Sprintf("  L%d", *f.Line)
-			if f.Column != nil {
-				loc += fmt.Sprintf(":%d", *f.Column)
-			}
-		case f.Offset != nil:
-			loc = fmt.Sprintf("  @%d", *f.Offset)
-			if f.Length != nil {
-				loc += fmt.Sprintf("+%d", *f.Length)
-			}
-		}
-		fmt.Fprintf(w, "  [%-8s] %-8s %-20s %s: %s%s\n", strings.ToUpper(f.Severity), cmp.Or(f.Vector, "-"), f.Rule,
-			pytext.UnicodeEscape(f.Path), pytext.UnicodeEscape(f.Message), loc)
-	}
-}
-
-// scanKnown is _scan_known: every package under the known agent skill roots, ledger only.
-func scanKnown(asJSON bool, stdout, stderr io.Writer) int {
-	d := ingest.Discover(nil)
-	if asJSON {
-		rows := make([]map[string]any, len(d.Paths))
-		for i, p := range d.Paths {
-			rows[i] = map[string]any{"package": filepath.Base(p), "path": p, "ledger": ingest.BuildLedger(ingest.BuildPackage(p))}
-		}
-		fmt.Fprint(stdout, pytext.Dumps(rows, 2)+"\n")
-	} else {
-		fmt.Fprintf(stdout, "discovered %d skill package(s) under the known roots\n", len(d.Paths))
-		for _, p := range d.Paths {
-			l, flag := ingest.BuildLedger(ingest.BuildPackage(p)), ""
-			if len(l.ShippedCompiledCode) > 0 {
-				flag += fmt.Sprintf("  compiled=%d", len(l.ShippedCompiledCode))
-			}
-			if len(l.AgentIdentityFiles) > 0 {
-				flag += fmt.Sprintf("  identity=%d", len(l.AgentIdentityFiles))
-			}
-			fmt.Fprintf(stdout, "  seen=%-3d analyzed=%-3d cov=%5.1f%%%s  %s\n",
-				l.ArtifactsSeen, l.ArtifactsAnalyzed, float64(l.CoveragePercent), flag, display(p))
+		case unicode.IsControl(r):
+			fmt.Fprintf(&b, `\x%02x`, r)
+		case r == '\u2028' || r == '\u2029': // the line and paragraph separators, which a terminal may break a line on
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteRune(r)
 		}
 	}
-	if reportGaps(stderr, d) {
-		return 2
-	}
-	return 0
-}
-
-// display is a discovered package path as printed: under the home directory as "~/...", then
-// escaped like every attacker-controlled path. Plugin layouts reuse folder names
-// (access/configure), so the path, not the name, identifies a package. The prefix is guarded so
-// "/home/al" does not abbreviate "/home/alice/x".
-func display(p string) string {
-	if home, _ := os.UserHomeDir(); home != "" && (p == home || strings.HasPrefix(p, home+string(os.PathSeparator))) {
-		p = "~" + p[len(home):]
-	}
-	return pytext.UnicodeEscape(p)
-}
-
-// reportGaps prints every traversal gap discovery hit and reports whether there was one.
-func reportGaps(stderr io.Writer, d ingest.Discovery) bool {
-	for _, e := range d.LedgerExceptions {
-		fmt.Fprintf(stderr, "skill discovery incomplete (%s): %s\n", e.ReasonCode, pytext.UnicodeEscape(e.Path))
-	}
-	return len(d.LedgerExceptions) > 0
+	return b.String()
 }

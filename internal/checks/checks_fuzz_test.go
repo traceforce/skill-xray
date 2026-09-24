@@ -60,6 +60,10 @@ func FuzzRunChecks(f *testing.F) {
 		lane.NoParseCrash(t, p)
 		fs := findings.Dedupe(Run(p, "", nil))
 		testutil.NoRecoveredPanic(t, fs)
-		pytext.Dumps(map[string]any{"package": p.Name, "ledger": ledger, "findings": findings.ToMaps(fs)}, 2)
+		rows := make([]map[string]any, 0, len(fs))
+		for _, f := range findings.Sort(fs) {
+			rows = append(rows, f.ToMap())
+		}
+		pytext.Dumps(map[string]any{"package": p.Name, "ledger": ledger, "findings": rows}, 2)
 	})
 }

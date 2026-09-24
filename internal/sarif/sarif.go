@@ -167,6 +167,57 @@ func title(f map[string]any) string {
 	return s
 }
 
+// ruleName is the rule's identifier in the Pascal case SARIF asks of a reportingDescriptor name:
+// skill-xray/preproc-inline-bang becomes PreprocInlineBang.
+func ruleName(rid string) string {
+	var b strings.Builder
+	slug := rid[strings.LastIndexByte(rid, '/')+1:]
+	for _, part := range strings.FieldsFunc(slug, func(r rune) bool { return r == '-' || r == '_' || r == '.' }) {
+		b.WriteString(strings.ToUpper(part[:1]) + part[1:])
+	}
+	return b.String()
+}
+
+// describe is the finding's title followed by its vector, tier and CWE identifiers, so a reader
+// of the report has the whole classification in words without the vector registry.
+// diagnosticText describes the vectorless rules, which report on the analysis itself.
+var diagnosticText = map[string]string{
+	"analysis-incomplete":     "A file or code block the scanner read but could not analyse; the message states the reason. Not a security finding.",
+	"coverage-note":           "A file the scanner skipped or could not model, with the reason. Informational, not a security finding.",
+	"opengrep-analysis-error": "The OpenGrep engine could not fully analyse a selected code block; the message carries the engine's error. Not a security finding.",
+	"opengrep-unavailable":    "Shipped code was selected for the code lane but no usable OpenGrep engine was found; run skill-xray install-opengrep. Not a security finding.",
+	"opengrep-unverified":     "The OpenGrep executable named for the code lane did not match the pinned release, so shipped code was not analysed. Not a security finding.",
+	"findings-capped":         "The analyzer reached its cap on emitted findings; further findings of that kind were not recorded.",
+	"llm-unavailable":         "The LLM lane did not complete; the deterministic findings stand. Not a security finding.",
+}
+
+func describe(f map[string]any) string {
+	if v, _ := f["vector"].(string); v == "" {
+		if rule, _ := f["rule"].(string); diagnosticText[rule] != "" {
+			return diagnosticText[rule]
+		}
+		return "A diagnostic about the analysis itself, not about the skill; the message states what did not complete. Not a security finding."
+	}
+	text := title(f)
+	var tags []string
+	if v, _ := f["vector"].(string); v != "" {
+		tags = append(tags, v)
+	}
+	if t, _ := f["tier"].(string); t != "" {
+		tags = append(tags, "tier "+t)
+	}
+	switch c := f["cwe"].(type) { // a decoded list or the finding's own slice; absent on a diagnostic
+	case []string:
+		tags = append(tags, c...)
+	case []any:
+		tags = append(tags, strs(c)...)
+	}
+	if len(tags) == 0 {
+		return text
+	}
+	return text + " (" + strings.Join(tags, ", ") + ")"
+}
+
 func category(f map[string]any) string {
 	if pytext.Truthy(f["vector"]) {
 		return "security-finding"
@@ -220,7 +271,7 @@ func Build(p *parse.Package, r *scan.ScanReport) (map[string]any, error) {
 	doc := r.ToMap()
 	correlation, _ := doc["correlation"].(map[string]any)
 	if errs, _ := correlation["errors"].([]any); len(errs) > 0 {
-		return nil, errors.New("Cannot emit final SARIF after correlation failure; raw report retained")
+		return nil, errors.New("Cannot emit SARIF after a correlation failure")
 	}
 	identities := map[string]string{}
 	links, _ := correlation["links"].([]any)
@@ -254,15 +305,19 @@ func Build(p *parse.Package, r *scan.ScanReport) (map[string]any, error) {
 	slices.SortStableFunc(links, byID)
 
 	entries, _ := correlation["results"].([]any)
-	titles := map[string][]string{}
+	titles, described := map[string][]string{}, map[string][]string{}
 	for _, e := range entries {
 		entry := e.(map[string]any)
 		rid := entry["rule_id"].(string)
-		titles[rid] = append(titles[rid], title(entry["finding"].(map[string]any)))
+		finding := entry["finding"].(map[string]any)
+		titles[rid] = append(titles[rid], title(finding))
+		described[rid] = append(described[rid], describe(finding))
 	}
 	rules, index := []any{}, map[string]int{}
 	for i, rid := range slices.Sorted(maps.Keys(titles)) {
-		rules = append(rules, map[string]any{"id": rid, "shortDescription": map[string]any{"text": slices.Min(titles[rid])}})
+		rules = append(rules, map[string]any{"id": rid, "name": ruleName(rid),
+			"shortDescription": map[string]any{"text": slices.Min(titles[rid])},
+			"fullDescription":  map[string]any{"text": slices.Min(described[rid])}})
 		index[rid] = i
 	}
 	cache := map[string][]string{}
@@ -355,6 +410,11 @@ func Build(p *parse.Package, r *scan.ScanReport) (map[string]any, error) {
 		"coverage": correlation["coverage"], "contextLimitations": correlation["context_limitations"],
 		"contextErrors": contextErrors, "rawScope": "emitted-results-before-reporting-deduplication",
 		"rawCandidates": raw, "candidateLinks": links,
+	}
+	if usage, _ := doc["llm_usage"].(map[string]any); len(usage) > 0 { // the lane was on: the report says so even when it found nothing
+		properties["llmUsage"] = map[string]any{"calls": usage["calls"], "failures": usage["failures"], "failureReason": usage["failure_reason"], "unavailable": usage["unavailable"],
+			"provider": usage["provider"], "model": usage["model"], "advisoryEnabled": usage["advisory_enabled"],
+			"judgeEnabled": usage["judge_enabled"], "applyEnabled": usage["apply_enabled"]}
 	}
 	if usage, _ := doc["llm_usage"].(map[string]any); pytext.Truthy(usage["judge_enabled"]) {
 		key := "shadow"
@@ -744,24 +804,42 @@ func IsWithinSource(path, root string) bool {
 	}
 }
 
+// CheckTarget refuses a report path that is a symlink, lies inside any of the roots or names a
+// special file, and returns it resolved. Write runs it over the scanned package; system-scan
+// runs it over every discovered package before the first one is read, so a report inside a
+// package is never scanned as part of it.
+func CheckTarget(target string, roots ...string) (string, error) {
+	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("Report must be outside the scanned package")
+	}
+	target, err := Resolve(target)
+	if err != nil {
+		return "", err
+	}
+	for _, root := range roots {
+		root, err := Resolve(root)
+		if err != nil {
+			return "", err
+		}
+		if IsWithinSource(target, root) {
+			return "", errors.New("Report must be outside the scanned package")
+		}
+	}
+	if info, err := os.Stat(target); err == nil && !info.Mode().IsRegular() {
+		return "", errors.New("Report must be a regular file")
+	}
+	if info, err := os.Stat(filepath.Dir(target)); err != nil || !info.IsDir() {
+		return "", errors.New("Report directory is missing or not a directory: " + filepath.ToSlash(filepath.Dir(target)))
+	}
+	return target, nil
+}
+
 // Write is write_sarif: refuse a destination inside the scanned package, validate, then replace
 // the target atomically through a temporary file in its directory.
 func Write(document any, target, sourceRoot string) error {
-	root, err := Resolve(sourceRoot)
+	target, err := CheckTarget(target, sourceRoot)
 	if err != nil {
 		return err
-	}
-	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("SARIF output must be outside the scanned package")
-	}
-	if target, err = Resolve(target); err != nil {
-		return err
-	}
-	if IsWithinSource(target, root) {
-		return errors.New("SARIF output must be outside the scanned package")
-	}
-	if info, err := os.Stat(target); err == nil && !info.Mode().IsRegular() {
-		return errors.New("SARIF output must be a regular file")
 	}
 	data, err := Encode(document)
 	if err != nil {

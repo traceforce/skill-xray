@@ -626,6 +626,28 @@ func TestNativeRuleTitleUsesExistingRegistryTitle(t *testing.T) {
 	doc := build(t, p, reportFor(t, p, candidates(candidate()), nil))
 	rule := m(l(m(m(run(doc)["tool"])["driver"])["rules"])[0])
 	assert.Equal(t, props(m(results(doc)[0]))["title"], m(rule["shortDescription"])["text"])
+	assert.Equal(t, ruleName(rule["id"].(string)), rule["name"])
+	assert.True(t, strings.HasPrefix(m(rule["fullDescription"])["text"].(string), m(rule["shortDescription"])["text"].(string)))
+}
+
+// A rule is named in Pascal case and described with its vector, tier and CWE identifiers in
+// words, so the report reads without the registry.
+// A diagnostic rule tells a reader without the registry that it reports on the analysis, not on
+// the skill.
+func TestDiagnosticRulesDescribeThemselves(t *testing.T) {
+	for rule := range diagnosticText {
+		assert.Contains(t, describe(map[string]any{"rule": rule, "vector": ""}), ".", rule)
+	}
+	assert.Contains(t, describe(map[string]any{"rule": "analysis-incomplete", "vector": ""}), "Not a security finding")
+}
+
+func TestRuleNameAndDescription(t *testing.T) {
+	assert.Equal(t, "PreprocInlineBang", ruleName("skill-xray/preproc-inline-bang"))
+	assert.Equal(t, "AnalysisIncomplete", ruleName("skill-xray/analysis-incomplete"))
+	assert.Equal(t, "Load-time preprocessing execution (SXV-001, tier T2, CWE-94, CWE-829)", describe(map[string]any{
+		"title": "Load-time preprocessing execution", "vector": "SXV-001", "tier": "T2", "cwe": []string{"CWE-94", "CWE-829"}}))
+	assert.Equal(t, diagnosticText["analysis-incomplete"], describe(map[string]any{"rule": "analysis-incomplete"}))
+	assert.Contains(t, describe(map[string]any{"rule": "opengrep-timeout"}), "Not a security finding", "an unlisted diagnostic gets the generic text")
 }
 
 // test_directive_preserves_known_column (4 rows)

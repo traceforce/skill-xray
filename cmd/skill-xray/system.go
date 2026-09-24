@@ -7,12 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/traceforce/skill-xray/internal/findings"
 	"github.com/traceforce/skill-xray/internal/ingest"
-	"github.com/traceforce/skill-xray/internal/opengrep"
 	"github.com/traceforce/skill-xray/internal/parse"
 	"github.com/traceforce/skill-xray/internal/pytext"
 	"github.com/traceforce/skill-xray/internal/sarif"
@@ -20,22 +20,22 @@ import (
 )
 
 type systemOptions struct {
-	json               bool
-	sarif, opengrepBin string
-	roots              []string
+	llmFlags
+	output, opengrepBin string
+	roots               []string
 }
 
 func (s *systemOptions) bind(c *cobra.Command) {
 	f := c.Flags()
-	f.BoolVar(&s.json, "json", false, "emit the results as JSON")
-	f.StringVar(&s.sarif, "sarif", "", "write one validated SARIF document outside every scanned package")
+	f.StringVarP(&s.output, "output", "o", defaultReport, "write one validated SARIF document here, with one run per package; the path must be outside every scanned package and its directory must exist")
 	f.StringVar(&s.opengrepBin, "opengrep-bin", "", "explicit pinned OpenGrep binary")
-	f.StringArrayVar(&s.roots, "root", nil, "scan the packages under this directory instead of the known agent skill roots (repeatable)")
+	f.StringArrayVar(&s.roots, "root", nil, "scan the packages under this directory instead of the known agent skill roots (repeatable); it must exist and be a directory")
+	s.llmFlags.bind(c)
 }
 
 // headline is a package's one-word verdict: BLOCKING for a high or critical finding with a vector,
 // FINDINGS for any other finding with a vector or a gap at medium or above, CLEAN otherwise; a low
-// note stays in the ledger and the JSON without moving the verdict.
+// note stays in the ledger and the report without moving the verdict.
 func headline(fs []findings.Finding) string {
 	switch {
 	case slices.ContainsFunc(fs, func(f findings.Finding) bool {
@@ -48,110 +48,132 @@ func headline(fs []findings.Finding) string {
 	return "CLEAN"
 }
 
-// run is system-scan: every package under the roots, analyzed in turn as "scan --analyze" would.
-// The exit is 0 when every package was analyzed and discovery was complete, else 2.
-func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer) (int, error) {
-	if changed("sarif") && s.sarif == "" {
-		return 2, errors.New("--sarif requires a non-empty path")
+// reportHeadline is the verdict as the report states it: a result the operator policy or a
+// validated review suppressed does not count, and a demoted one counts at its effective
+// severity, so the console agrees with the dispositions in the report. When the correlation
+// failed, the report has no results and the preserved findings stand, so an incomplete scan
+// never reads as clean.
+func reportHeadline(report *scan.ScanReport) string {
+	v := reportedHeadline(report)
+	if v == "CLEAN" && len(report.ContextErrors) > 0 { // an analysis a context error cut short never reads as clean
+		return "FINDINGS"
 	}
-	roots := s.roots
-	if roots == nil {
-		roots = ingest.KnownSkillRoots
+	return v
+}
+
+func reportedHeadline(report *scan.ScanReport) string {
+	if report.Correlation == nil || len(report.Correlation.Errors) > 0 {
+		return headline(report.Findings)
+	}
+	var fs []findings.Finding
+	for _, r := range report.Correlation.Results {
+		if r.Decision != nil && r.Disposition == "suppressed" {
+			continue
+		}
+		vector, _ := r.Finding["vector"].(string)
+		severity, _ := r.Finding["severity"].(string)
+		if r.Decision != nil && r.EffectiveSeverity != "" {
+			severity = r.EffectiveSeverity
+		}
+		fs = append(fs, findings.Finding{Vector: vector, Severity: severity})
+	}
+	return headline(fs)
+}
+
+// run is system-scan: every package under the roots, analyzed in turn as "scan" would, into one
+// report with a run per package. The exit is 0 when every package was analyzed and discovery
+// was complete, else 2.
+func (s *systemOptions) run(changed func(string) bool, stdout, stderr io.Writer) (int, error) {
+	if changed("output") && s.output == "" {
+		return 2, errors.New("--output requires a non-empty path")
+	}
+	client, err := s.client()
+	if err != nil {
+		return 2, err
 	}
 	d := ingest.Discover(s.roots)
+	protected := slices.Clone(d.Paths)
+	for _, root := range s.roots { // a file named as a root is a discovery exception, and the report must not replace it
+		if st, err := os.Stat(root); err == nil && !st.IsDir() {
+			protected = append(protected, root)
+		}
+	}
+	if _, err := sarif.CheckTarget(s.output, protected...); err != nil { // before any package is read, so a report inside one is never scanned
+		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(err.Error()))
+		return 2, nil
+	}
 	rc := 0
 	var sarifErr error
 	var merged map[string]any
-	packages := make([]map[string]any, 0, len(d.Paths))
 	counts := map[string]int{}
+	var lane llmSummary
 	for _, path := range d.Paths {
 		p := ingest.BuildPackage(path)
 		parsed := parse.Parse(p)
-		report, err := scanReport(parsed, scan.Options{OpengrepExe: s.opengrepBin})
+		report, err := scanReport(parsed, s.scanOptions(client, s.opengrepBin, nil))
 		if err != nil {
-			panic(err) // no LLM options, so none of scan_report's argument errors
+			panic(err) // the flag checks in client exclude scan_report's argument errors
 		}
-		fs, v := report.Findings, headline(report.Findings)
+		v := reportHeadline(report)
 		counts[v]++
-		if incomplete(report, fs) {
-			rc = 2
-		}
-		if s.sarif != "" && sarifErr == nil {
+		if sarifErr == nil {
 			doc, err := buildSarif(parsed, report)
 			if err == nil {
 				err = sarif.Validate(doc)
 			}
 			switch {
-			case err != nil:
-				sarifErr = err
+			case err != nil: // the other packages keep their report; this one is named here and by its exit code
+				fmt.Fprintf(stderr, "no SARIF run for %s: %s\n", display(path), pytext.UnicodeEscape(err.Error()))
+				rc = 2
 			case merged == nil:
 				merged = doc
 			default:
 				merged["runs"] = append(merged["runs"].([]any), doc["runs"].([]any)...)
 			}
 		}
-		ledger := ingest.BuildLedger(p)
-		if s.json {
-			packages = append(packages, map[string]any{"package": p.Name, "path": path, "verdict": v, "ledger": ledger,
-				"analysis": map[string]any{"opengrepVersion": opengrep.Version}, "findings": findings.ToMaps(fs)})
-			continue
-		}
-		fmt.Fprintf(stdout, "%-8s  seen=%-3d analyzed=%-3d cov=%5.1f%%  %s\n",
-			v, ledger.ArtifactsSeen, ledger.ArtifactsAnalyzed, float64(ledger.CoveragePercent), display(path))
-		printFindings(stdout, p.Name, fs)
-	}
-	if s.sarif != "" {
-		if merged == nil {
-			merged = map[string]any{"version": "2.1.0", "$schema": sarif.SchemaID(), "runs": []any{}}
-		}
-		if sarifErr == nil {
-			sarifErr = writeRuns(merged, s.sarif, d.Paths)
-		}
-		if sarifErr != nil {
-			fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(sarifErr.Error()))
+		verdictLine(stdout, v, ingest.BuildLedger(p), display(path))
+		if explainIncomplete(stderr, display(path), report) { // after the verdict line it explains
+			counts["incomplete"]++
 			rc = 2
 		}
+		lane.add(report)
 	}
-	if s.json {
-		doc := map[string]any{"schema_version": "system-scan-v1", "roots": roots,
-			"discovery": map[string]any{"paths": d.Paths, "ledgerExceptions": d.LedgerExceptions},
-			"packages":  packages,
-			"summary": map[string]any{"packages": len(d.Paths), "blocking": counts["BLOCKING"],
-				"withFindings": counts["FINDINGS"], "clean": counts["CLEAN"]}}
-		fmt.Fprint(stdout, pytext.Dumps(doc, 2)+"\n")
+	lane.line(stdout)
+	if merged == nil {
+		merged = map[string]any{"version": "2.1.0", "$schema": sarif.SchemaID(), "runs": []any{}}
+	}
+	if sarifErr == nil {
+		sarifErr = writeRuns(merged, s.output, protected)
+	}
+	if sarifErr != nil {
+		fmt.Fprintf(stderr, "cannot write SARIF: %s\n", pytext.UnicodeEscape(sarifErr.Error()))
+		rc = 2
 	} else {
-		fmt.Fprintf(stdout, "packages: %d, blocking: %d, with findings: %d, clean: %d, discovery exceptions: %d\n",
-			len(d.Paths), counts["BLOCKING"], counts["FINDINGS"], counts["CLEAN"], len(d.LedgerExceptions))
+		fmt.Fprintf(stdout, "report: %s\n", console(s.output))
 	}
+	if len(d.Paths) == 0 {
+		where := "the known agent skill roots"
+		if s.roots != nil {
+			where = console(strings.Join(s.roots, ", "))
+		}
+		fmt.Fprintf(stderr, "note: no skill packages found under %s\n", where)
+	}
+	fmt.Fprintf(stdout, "packages: %d, blocking: %d, with findings: %d, clean: %d, incomplete: %d, discovery exceptions: %d\n",
+		len(d.Paths), counts["BLOCKING"], counts["FINDINGS"], counts["CLEAN"], counts["incomplete"], len(d.LedgerExceptions))
 	if reportGaps(stderr, d) {
 		rc = 2
 	}
 	return rc, nil
 }
 
-// writeRuns writes the merged document under sarif.Write's rules: the target is never a symlink,
-// never inside any scanned package and never a special file, the encoding is canonical and
-// capped at 64 MiB, and the target is replaced atomically through a temporary file beside it.
-// Each run was validated on its own, since the validator reads a single-run document.
+// writeRuns writes the merged document under sarif.Write's rules, sarif.CheckTarget first: the
+// encoding is canonical and capped at 64 MiB, and the target is replaced atomically through a
+// temporary file beside it. Each run was validated on its own, since the validator reads a
+// single-run document.
 func writeRuns(doc map[string]any, target string, packageRoots []string) error {
-	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("SARIF output must be outside the scanned package")
-	}
-	target, err := sarif.Resolve(target)
+	target, err := sarif.CheckTarget(target, packageRoots...)
 	if err != nil {
 		return err
-	}
-	for _, root := range packageRoots {
-		root, err := sarif.Resolve(root)
-		if err != nil {
-			return err
-		}
-		if sarif.IsWithinSource(target, root) {
-			return errors.New("SARIF output must be outside the scanned package")
-		}
-	}
-	if info, err := os.Stat(target); err == nil && !info.Mode().IsRegular() {
-		return errors.New("SARIF output must be a regular file")
 	}
 	data := []byte(pytext.Canonical(doc) + "\n")
 	if len(data) > 64<<20 {
@@ -174,4 +196,18 @@ func writeRuns(doc map[string]any, target string, packageRoots []string) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), target)
+}
+
+// display is a discovered package path as printed: under the home directory as "~/...", then
+// with control characters escaped. Plugin layouts reuse folder names (access/configure), so the
+// path, not the name, identifies a package. The prefix is guarded so "/home/al" does not
+// abbreviate "/home/alice/x".
+func display(p string) string { return console(p) } // the discovered path as it is, so it pastes into scan
+
+// reportGaps prints every traversal gap discovery hit and reports whether there was one.
+func reportGaps(stderr io.Writer, d ingest.Discovery) bool {
+	for _, e := range d.LedgerExceptions {
+		fmt.Fprintf(stderr, "skill discovery incomplete (%s): %s\n", e.ReasonCode, pytext.UnicodeEscape(e.Path))
+	}
+	return len(d.LedgerExceptions) > 0
 }

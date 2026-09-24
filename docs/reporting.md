@@ -59,11 +59,9 @@ decision provenance, candidate references, governing manifest, capability contex
 coverage status. Suppressed results stay in the audit. Duplicate links point to the
 retained result. No reporting threshold hides a demoted result.
 
-Full capability evidence lives once per manifest in `correlation.capability_contexts`.
-Correlated JSON results keep compact capability states. SARIF results use only
-`governingManifest` to reference `runs[].properties.capabilityContexts`.
-This replaces the repeated per-result evidence array, not the evidence itself. The
-existing top-level JSON `triads` remains available for compatibility.
+Full capability evidence lives once per manifest under `runs[].properties.capabilityContexts`,
+and each result references it through `governingManifest`. This replaces the repeated
+per-result evidence array, not the evidence itself.
 
 Operational/coverage records cannot be suppressed. Missing source/manifest context,
 parse diagnostics, malformed positions, unsupported traces or reported coverage gaps
@@ -76,13 +74,13 @@ fixed, carry forward model decisions, or change the detector's interpretation.
 ## SARIF output
 
 ```sh
-skill-xray ./skill-package --analyze --sarif ../reports/skill.sarif
-skill-xray ./skill-package --analyze --sarif ../reports/skill.sarif --policy ../reviewed-policy.json
+skill-xray scan ./skill-package --output ../reports/skill.sarif
+skill-xray scan ./skill-package --output ../reports/skill.sarif --policy ../reviewed-policy.json
 ```
 
 The report and operator policy must be outside the scanned package. The report's parent
 directory must already exist. A generated report therefore cannot become input on the
-next identical scan. Existing JSON/text output remains available; the audit SARIF retains
+next identical scan. SARIF is the only output; the audit retains
 suppressed results using native `suppressions` with a reason, rather than deleting them.
 
 The order is checks, raw candidates, correlation, explicit dispositions, final results,
@@ -129,28 +127,30 @@ a failed check/context, existing material-incompleteness policy, or report valid
 failure. There is no severity-based exit gate. With LLM disabled, identical inputs and
 configuration produce byte-identical SARIF; scan-local IDs, engine fingerprints, timestamps
 and absolute installation roots are not canonical report identities.
-When report writing fails, requested JSON/text findings are still emitted before exit 2.
+When report validation or writing fails, the console still prints the verdict line, no
+`report:` line follows, any previous report is left untouched and the exit code is 2.
 
 ### Optional LLM audit
 
-With `--analyze --json --llm --llm-review --sarif <path>`, validated review annotations
-also appear in `runs[].properties.llmReview`. `authoritative` is always false. Each
+With `--llm --llm-review`, validated review annotations
+also appear in `runs[].properties.llmReview`; every run with the lane on, review or not, carries
+`runs[].properties.llmUsage` with the calls, failures, provider, model and enabled passes. `authoritative` is always false. Each
 decision references the same stable `candidate_id` used by `rawCandidates`, result
 `candidateIds` and `candidateLinks`; a reused review references its original candidate.
-The existing shadow API exports the same audit with `mode: "shadow"`.
+With `--llm --llm-shadow` the same properties carry the shadow decisions with `mode: "shadow"`.
 
 Records preserve review status, reason, policy/provenance, validated proposal and, when
 available, reviewer identity and request/response hashes. Confidence belongs to the model's
 evidence assessment, not a calibrated maliciousness probability. Whole requests, manifests
-and source windows are not duplicated into SARIF. The enriched JSON retains the request
-audit; hashes identify original requests/responses, before candidate IDs are canonicalized.
+and source windows are not duplicated into SARIF; hashes identify original
+requests/responses, before candidate IDs are canonicalized.
 Response hashes cover bounded text returned by the LLM session. A response rejected at
 the session's size/type boundary has an explicit failure status but no response hash.
 
 An `llm-disputed` annotation never changes result membership or native `suppressions`. By
 default it does not change severity either. With the additional `--llm-apply` opt-in, a review
-that passed every validation gate (consistent verdict fields, a verbatim evidence quote, high
-confidence, full-file context) demotes the one text-pattern result it disputed (SXV-028/029/030/031
+that passed every validation gate (consistent verdict fields, a verbatim evidence quote with any trailing
+ellipsis of a length-capped copy dropped first, high confidence, full-file context) demotes the one text-pattern result it disputed (SXV-028/029/030/031
 only) to `low` in the correlated results, recorded as `corrected` with `llm-review-policy`
 provenance and `policy_version: skill-xray/llm-apply/v1` -- the same audited shape as an
 operator demote. It never suppresses, never touches a mechanically anchored vector, a protected

@@ -242,6 +242,20 @@ func TestInvalidResponsesHaveSafeDiagnosticCodes(t *testing.T) {
 	}
 }
 
+// A model at the quote's length cap ends its verbatim copy with an ellipsis; the copied part is
+// the evidence, so the review is usable instead of failing the quote gate. An ellipsis alone
+// copied nothing.
+func TestTruncatedQuoteEndingInAnEllipsisIsAccepted(t *testing.T) {
+	for _, ellipsis := range []string{"...", " …"} {
+		client := newReviewer(retaining, map[string]any{"evidence_quote": "Ignore all previous" + ellipsis})
+		decisions, _, _ := directReview(t, client)
+		require.Equal(t, "proposed", decisions[0].Status, decisions[0].Reason)
+		assert.Equal(t, "Ignore all previous", decisions[0].Proposal.EvidenceQuote)
+	}
+	decisions, _, _ := directReview(t, newReviewer(retaining, map[string]any{"evidence_quote": "..."}))
+	assert.Equal(t, "evidence-quote", decisions[0].FailureReason)
+}
+
 // test_judge_response_contract.py::test_structured_provider_failure_retains_without_downgrade_retry (2)
 func TestStructuredProviderFailureRetainsWithoutRetry(t *testing.T) {
 	for status, fail := range map[string]rt{
@@ -273,6 +287,26 @@ func TestVerifiedQuoteIsPreservedExactly(t *testing.T) {
 	prop, code := proposal(string(reply), "c1", snippet)
 	require.Equal(t, "", code)
 	assert.Equal(t, snippet, prop.EvidenceQuote)
+}
+
+// A quote is refused when it carries a control or format character, even one the snippet holds.
+func TestQuoteWithControlCharactersIsRefused(t *testing.T) {
+	snippet := "pass\u202eword=[REDACTED]"
+	reply, _ := json.Marshal(map[string]any{"candidate_id": "c1", "verdict": "retain_finding", "confidence": "low",
+		"reason": "r", "mechanism": "supported", "intent": "unknown", "impact": "i", "evidence_quote": snippet})
+	_, code := proposal(string(reply), "c1", snippet)
+	assert.Equal(t, "evidence-quote", code)
+}
+
+// The model's free text reaches the proposal without control or format characters.
+func TestProposalFreeTextIsPrintable(t *testing.T) {
+	snippet := "password=[REDACTED]"
+	reply, _ := json.Marshal(map[string]any{"candidate_id": "c1", "verdict": "retain_finding", "confidence": "low",
+		"reason": "safe\u202e\x07text", "mechanism": "supported", "intent": "unknown", "impact": "key sk-proj-abcdefghijklmnop", "evidence_quote": snippet})
+	prop, code := proposal(string(reply), "c1", snippet)
+	require.Equal(t, "", code)
+	assert.Equal(t, "safe  text", prop.Reason)
+	assert.Equal(t, "key [REDACTED]", prop.Impact)
 }
 
 // test_llm_review.py::test_review_disputes_without_changing_findings_or_severity (the judge half)
@@ -527,7 +561,7 @@ func TestInjectedManifestCannotSuppressOrDowngradeLiveHigh(t *testing.T) {
 	description := "description: This is a public test corpus."
 	p := parsePkg(t, map[string]string{"SKILL.md": "---\nname: hostile\n" + description + "\n---\n" + anchor + ".\n"})
 	raw := instruction.Check(p)
-	saved := pytext.Canonical(findings.ToMaps(raw))
+	saved := pytext.Canonical(toMaps(raw))
 	require.Contains(t, vectors(raw), "SXV-028")
 	client := newReviewer(disputing, map[string]any{"evidence_quote": description})
 	decisions, _ := review(t, p, raw, client, true, 25)
@@ -538,7 +572,7 @@ func TestInjectedManifestCannotSuppressOrDowngradeLiveHigh(t *testing.T) {
 			assert.Equal(t, "llm-disputed", decisions[i].Disposition)
 		}
 	}
-	assert.Equal(t, saved, pytext.Canonical(findings.ToMaps(raw)))
+	assert.Equal(t, saved, pytext.Canonical(toMaps(raw)))
 }
 
 // test_llm_review.py::test_malformed_html_link_preserves_other_reviews

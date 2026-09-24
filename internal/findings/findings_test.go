@@ -207,7 +207,10 @@ func TestGolden(t *testing.T) {
 		})
 	}
 	t.Run("findings_to_dicts", func(t *testing.T) {
-		maps := ToMaps(g.Inputs)
+		var maps []map[string]any
+		for _, f := range Sort(g.Inputs) {
+			maps = append(maps, f.ToMap())
+		}
 		for i, f := range g.Sorted {
 			if maps[i]["message"] != f.Message || maps[i]["severity"] != f.Severity {
 				t.Errorf("row %d: %v vs %v", i, maps[i], f)

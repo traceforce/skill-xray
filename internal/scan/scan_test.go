@@ -303,7 +303,8 @@ func TestInvalidOperatorPolicyRetainsResultsWithVisibleFailure(t *testing.T) {
 	report, err := Report(p, Options{DispositionPolicy: map[string]any{"ignore": "SXV-008"}})
 	require.NoError(t, err)
 	assert.Equal(t, []findings.Finding{finding}, report.Findings)
-	assert.Equal(t, []string{"disposition-policy-error: ValueError"}, report.ContextErrors)
+	require.Len(t, report.ContextErrors, 1)
+	assert.True(t, strings.HasPrefix(report.ContextErrors[0], "disposition-policy-error: ValueError: "), report.ContextErrors[0])
 	assert.Equal(t, "reported", report.Correlation.Results[0].Disposition)
 }
 
