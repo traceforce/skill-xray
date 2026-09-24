@@ -517,7 +517,7 @@ func run(argv []string, stdout, stderr io.Writer) int
 | `golang.org/x/net` | v0.55.0 (cached, go 1.25) | parse (`html` tokenizer with `Raw()` offsets replacing `html.parser`) | New. Rung 3 fails (no stdlib HTML tokenizer); rung 5: x/net is the maintained tokenizer with byte-accurate `Raw()`; hand-writing a tolerant tokenizer is ~300 lines with its own edge cases. |
 
 Vendored source (not a module): `internal/uba` = x/text `unicode/bidi/core.go` + `bracket.go`
-(BSD-3; add the x/text LICENSE to `THIRD_PARTY_NOTICES`), because the public `Paragraph.Order()`
+(BSD-3; the x/text LICENSE is in `NOTICE`), because the public `Paragraph.Order()`
 cannot force base level 0 nor apply L2 (obfuscation §4.2).
 
 Removed from `go.mod` (`go mod tidy` will drop them): `github.com/owenrumney/go-sarif/v2` (the
@@ -546,6 +546,8 @@ Each step lists what it unblocks. Steps on one line can proceed in parallel.
 8. **`tools/parity`** can be built from step 1 (it runs the Python side and the corpus dump without any Go product code) and gates every step from 3 onward: IR dump parity after step 3, findings parity per group as each check lands, SARIF byte parity after step 7. `make parity` is the definition of done.
 
 ## 6. `tools/parity` design
+
+> Historical. The parity harness, the Python scanner and the CLI flags this section names were retired in pull request 46 once the port had matched the Python output record for record; sections 6 and 7 record how that was established and are not a description of the current tool.
 
 Layout (module `skillxray`, all Go code under `tools/parity`, Python helpers beside it; nothing
 under `skill-xray/` is modified):
@@ -579,7 +581,7 @@ of this file.
    still valid inputs: both CLIs run them with production limits.
 2. `corpus/msb-test/<benchmark_id>/SKILL.md`: `msb_materialize.py --data <snapshot dir>
    --split test`. Reads `primary.parquet` (`benchmark_id`, `text`) and
-   `splits/source_disjoint.parquet` exactly as the Python runner did and `tools/bench run` does, checks the snapshot
+   `splits/source_disjoint.parquet` exactly as the Python runner did (`tools/bench run` reads only the JSONL export named by `--data`), checks the snapshot
    against `benchmark-reports/frozen-dataset/MSB_FROZEN.json` (`id_list_sha256.test` =
    `3cf59383…0b7bb`, 1,384 ids from `msb_frozen_ids.json`), writes each text with
    `encoding="utf-8", errors="surrogatepass", newline=""` into a directory named like
