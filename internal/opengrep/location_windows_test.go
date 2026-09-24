@@ -56,6 +56,29 @@ func TestLinkOnWindowsPathIsJudgedByItsOwnRights(t *testing.T) {
 	assert.NoError(t, trustedComponent(target, dirInfo))
 }
 
+// The engine file is refused when Users hold only the attribute right, since that right alone
+// lets FSCTL_SET_REPARSE_POINT turn the file into a link where symbolic links need no privilege;
+// a directory with the same grant is accepted, since the call refuses a directory that is not
+// empty and a directory on the path never is.
+func TestAttributeRightOnTheEngineFileIsRefused(t *testing.T) {
+	base := t.TempDir()
+	file := filepath.Join(base, "opengrep.exe")
+	require.NoError(t, os.WriteFile(file, []byte("MZ"), 0o644))
+	dir := filepath.Join(base, "dir")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "child"), []byte("c"), 0o644))
+	for _, p := range []string{file, dir} {
+		out, err := exec.Command("icacls", p, "/grant", "*S-1-5-32-545:(WA)").CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	fileInfo, err := os.Lstat(file)
+	require.NoError(t, err)
+	assert.ErrorContains(t, trustedComponent(file, fileInfo), "is writable by S-1-5-32-545")
+	dirInfo, err := os.Lstat(dir)
+	require.NoError(t, err)
+	assert.NoError(t, trustedComponent(dir, dirInfo))
+}
+
 // A UNC engine path reaches the system under the UNC device, not as an invalid extended path.
 func TestExtendedPathKeepsUNCShares(t *testing.T) {
 	assert.Equal(t, `\\?\UNC\server\share\opengrep.exe`, extendedPath(`\\server\share\opengrep.exe`))

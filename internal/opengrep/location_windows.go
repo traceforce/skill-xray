@@ -33,13 +33,15 @@ const (
 // root grants every authenticated user that much. A link, symlink or junction, is replaced by
 // rewriting where it points: FSCTL_SET_REPARSE_POINT accepts a handle opened for writing data
 // (the directory's "add file" bit), appending data or writing attributes, any one alone, so a
-// link takes the file rights plus the attribute right. x/sys does not name FILE_DELETE_CHILD.
+// link takes the file rights plus the attribute right. The same call turns the engine file
+// itself into a link where symbolic links need no privilege, so a file takes the attribute
+// right too; a directory on the path holds the next component, and the call refuses a
+// directory that is not empty, so a directory does not. x/sys does not name FILE_DELETE_CHILD.
 const (
 	fileDeleteChild = 0x40
 	takeover        = windows.DELETE | windows.WRITE_DAC | windows.WRITE_OWNER | windows.GENERIC_WRITE | windows.GENERIC_ALL
-	fileWrite       = windows.FILE_WRITE_DATA | windows.FILE_APPEND_DATA | takeover
+	fileWrite       = windows.FILE_WRITE_DATA | windows.FILE_APPEND_DATA | windows.FILE_WRITE_ATTRIBUTES | takeover
 	dirWrite        = fileDeleteChild | takeover
-	linkWrite       = fileWrite | windows.FILE_WRITE_ATTRIBUTES
 )
 
 // trustedComponent refuses a component of the engine's path that a user other than this one or
@@ -69,11 +71,8 @@ func trustedComponent(path string, info os.FileInfo) error {
 	if dacl == nil {
 		return fmt.Errorf("%s has no access control list", path)
 	}
-	var rights windows.ACCESS_MASK = fileWrite
-	switch {
-	case info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0: // a symlink or a junction, as Lstat reports them
-		rights = linkWrite
-	case info.IsDir():
+	var rights windows.ACCESS_MASK = fileWrite // a file, or a symlink or junction, which Lstat does not report as a directory
+	if info.IsDir() {
 		rights = dirWrite
 	}
 	for i := range uint32(dacl.AceCount) {
