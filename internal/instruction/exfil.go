@@ -27,6 +27,13 @@ import (
 // exfilWindow bounds the preceding prose (code points) searched for the acquisition.
 const exfilWindow = 4000
 
+// exfilAddrSpan is the longest address text (code points) read past the window an address must
+// start in; a URL longer than this is cut, never missed.
+const exfilAddrSpan = 2048
+
+// exfilMaxAddrs bounds the addresses one delivery verb collects.
+const exfilMaxAddrs = 8
+
 var (
 	exfilAddrRE = regexp.MustCompile(`(?i)[\w.+-]+@[\w-]+(?:\.[\w-]+)+|https?://[^\s'"<>)\]]+`)
 	exfilVerb   = `(?:send(?:s|ing)?|sent|e-?mail(?:s|ed|ing)?|mail(?:s|ed|ing)?|forward(?:s|ed|ing)?|` +
@@ -242,16 +249,24 @@ func exfilRecipient(addr string) (r recipient, ok bool) {
 // past a sender mark.
 func exfilAddresses(sentence string, pos int, x *runeIndex) [][]int {
 	var out [][]int
-	limit, last := x.rune(pos)+60, pos
-	for _, m := range exfilAddrRE.FindAllStringIndex(sentence[pos:], -1) {
-		start, end := pos+m[0], pos+m[1]
+	limit, last, total := x.rune(pos)+60, pos, x.rune(len(sentence))
+	for {
+		// The next address must start within limit, so only that window plus one address length is
+		// read; scanning the whole rest of the block for every verb was quadratic.
+		m := exfilAddrRE.FindStringIndex(sentence[last:x.byte(min(limit+exfilAddrSpan, total))])
+		if m == nil {
+			return out
+		}
+		start, end := last+m[0], last+m[1]
 		if x.rune(start) > limit || exfilSenderMarkRE.MatchString(sentence[last:start]) {
 			return out
 		}
 		out = append(out, []int{start, end})
+		if len(out) == exfilMaxAddrs { // a recipient list is a handful; a chain of thousands is a block of deliveries, each read by its own verb
+			return out
+		}
 		limit, last = x.rune(end)+40, end
 	}
-	return out
 }
 
 // delivery is one item of _exfil_deliveries; positions are code points in the sentence.
@@ -376,8 +391,8 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				if anyAcquisition && acquired == nil {
 					continue
 				}
-				sentenceBefore := x.cut(d.start)
-				if negated(x.cut(d.end)) || exfilContrastRE.MatchString(sentenceBefore) {
+				sentenceBefore := lastRunes(x.cut(d.start), exfilWindow) // bounded, so a block of many deliveries stays linear
+				if negated(lastRunes(x.cut(d.end), exfilWindow)) || exfilContrastRE.MatchString(sentenceBefore) {
 					continue
 				}
 				// a disclosure, not an order: third-person delivery verb or a product subject

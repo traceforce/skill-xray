@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -815,4 +816,25 @@ func TestValidateAcceptsFloatDecodedDocument(t *testing.T) {
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal(encode(t, build(t, p, reportFor(t, p, candidates(candidate()), nil))), &doc))
 	require.NoError(t, Validate(doc))
+}
+
+// A Windows junction that points into a subdirectory of the package is inside the package: the
+// resolver does not follow junctions, so the identity of every directory under the root is
+// compared, not only the root's.
+func TestJunctionIntoPackageSubdirectoryIsInside(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("junctions are a Windows construct")
+	}
+	base := t.TempDir()
+	pkg := filepath.Join(base, "pkg")
+	refs := filepath.Join(pkg, "refs")
+	require.NoError(t, os.MkdirAll(refs, 0o755))
+	link := filepath.Join(base, "outside", "into")
+	require.NoError(t, os.MkdirAll(filepath.Dir(link), 0o755))
+	out, err := exec.Command("cmd", "/c", "mklink", "/J", link, refs).CombinedOutput()
+	require.NoError(t, err, string(out))
+	assert.True(t, IsWithinSource(filepath.Join(link, "report.sarif"), pkg))
+	_, err = CheckTarget(filepath.Join(link, "report.sarif"), pkg)
+	assert.ErrorContains(t, err, "outside the scanned package")
+	assert.False(t, IsWithinSource(filepath.Join(base, "outside", "report.sarif"), pkg), "a sibling directory stays outside")
 }

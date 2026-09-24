@@ -785,7 +785,9 @@ func Resolve(path string) (string, error) {
 }
 
 // IsWithinSource is is_within_source over resolved paths: lexically under root, or an existing
-// ancestor with root's filesystem identity (case and Unicode aliases the lexical test misses).
+// ancestor with the filesystem identity of root or of a directory inside it (case and Unicode
+// aliases the lexical test misses, and a Windows junction, which the resolver does not follow,
+// pointing into the package).
 func IsWithinSource(path, root string) bool {
 	if rel, err := filepath.Rel(root, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return true
@@ -794,14 +796,40 @@ func IsWithinSource(path, root string) bool {
 	if err != nil {
 		return false
 	}
+	var inside []os.FileInfo // the identities of every directory under root, read once, on the first miss
 	for p := path; ; p = filepath.Dir(p) {
-		if info, err := os.Stat(p); err == nil && os.SameFile(info, rootInfo) {
-			return true
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
+			if os.SameFile(info, rootInfo) {
+				return true
+			}
+			if inside == nil {
+				inside = directoriesUnder(root)
+			}
+			for _, d := range inside {
+				if os.SameFile(info, d) {
+					return true
+				}
+			}
 		}
 		if filepath.Dir(p) == p {
 			return false
 		}
 	}
+}
+
+// directoriesUnder is the identity of every directory below root, links not followed; a root
+// that cannot be walked yields what was read.
+func directoriesUnder(root string) []os.FileInfo {
+	var out []os.FileInfo
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && p != root && d.IsDir() {
+			if info, err := os.Stat(p); err == nil {
+				out = append(out, info)
+			}
+		}
+		return nil
+	})
+	return out
 }
 
 // CheckTarget refuses a report path that is a symlink, lies inside any of the roots or names a
