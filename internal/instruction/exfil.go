@@ -31,8 +31,12 @@ const exfilWindow = 4000
 // start in; a URL longer than this is cut, never missed.
 const exfilAddrSpan = 2048
 
-// exfilMaxAddrs bounds the accepted recipients one delivery verb collects.
-const exfilMaxAddrs = 8
+// exfilMaxAddrs bounds the accepted recipients one delivery verb collects, and exfilMaxAddrScan
+// the addresses of any kind it reads for them.
+const (
+	exfilMaxAddrs    = 8
+	exfilMaxAddrScan = 64
+)
 
 var (
 	exfilAddrRE = regexp.MustCompile(`(?i)[\w.+-]+@[\w-]+(?:\.[\w-]+)+|https?://[^\s'"<>)\]]+`)
@@ -266,7 +270,7 @@ func exfilAddresses(sentence string, pos int, x *runeIndex) [][]int {
 		if _, ok := exfilRecipient(sentence[start:end]); ok { // placeholders do not use up the list
 			accepted++
 		}
-		if accepted == exfilMaxAddrs { // a recipient list is a handful; a chain of thousands is a block of deliveries, each read by its own verb
+		if accepted == exfilMaxAddrs || len(out) == exfilMaxAddrScan { // a recipient list is a handful; a chain of thousands is a block of deliveries, each read by its own verb
 			return out
 		}
 		limit, last = x.rune(end)+40, end
