@@ -77,7 +77,7 @@ jobs:
               binary=skill-xray.exe
             fi
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags='-s -w' -o "dist/$name/$binary" ./cmd/skill-xray
-            cp LICENSE README.md THIRD_PARTY_NOTICES "dist/$name/"
+            cp LICENSE NOTICE README.md "dist/$name/"
             if [ "$os" = windows ]; then
               (cd dist && zip -qr "$name.zip" "$name")
             else
