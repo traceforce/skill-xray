@@ -65,7 +65,7 @@ The console line is `VERDICT  seen=N read=N cov=P%  package`, with the verdict a
 
 ### system-scan
 
-Discover every skill package under the roots the common coding agents load skills from, analyze each one as `scan` would, write one report with one run per package, and print a verdict per package: `BLOCKING` for a high or critical finding with a vector, `FINDINGS` for any other finding with a vector or an analysis gap at medium or above, `CLEAN` otherwise. A low coverage note stays in the ledger and the report without moving the verdict.
+Discover every skill package under the roots the common coding agents load skills from, analyze each one as `scan` would, write one report with one run per package, and print a verdict per package: `BLOCKING` for a high or critical finding with a vector, `FINDINGS` for any other finding with a vector or an analysis gap at medium or above, `CLEAN` otherwise. A package whose analysis raised a context error reads `FINDINGS`, never `CLEAN`, and exits 2. A low coverage note stays in the ledger and the report without moving the verdict.
 
 ```bash
 ./bin/skill-xray system-scan

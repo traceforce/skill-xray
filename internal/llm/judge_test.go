@@ -289,6 +289,15 @@ func TestVerifiedQuoteIsPreservedExactly(t *testing.T) {
 	assert.Equal(t, snippet, prop.EvidenceQuote)
 }
 
+// A quote is refused when it carries a control or format character, even one the snippet holds.
+func TestQuoteWithControlCharactersIsRefused(t *testing.T) {
+	snippet := "pass\u202eword=[REDACTED]"
+	reply, _ := json.Marshal(map[string]any{"candidate_id": "c1", "verdict": "retain_finding", "confidence": "low",
+		"reason": "r", "mechanism": "supported", "intent": "unknown", "impact": "i", "evidence_quote": snippet})
+	_, code := proposal(string(reply), "c1", snippet)
+	assert.Equal(t, "evidence-quote", code)
+}
+
 // The model's free text reaches the proposal without control or format characters.
 func TestProposalFreeTextIsPrintable(t *testing.T) {
 	snippet := "password=[REDACTED]"

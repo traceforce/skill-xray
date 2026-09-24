@@ -54,6 +54,14 @@ func headline(fs []findings.Finding) string {
 // failed, the report has no results and the preserved findings stand, so an incomplete scan
 // never reads as clean.
 func reportHeadline(report *scan.ScanReport) string {
+	v := reportedHeadline(report)
+	if v == "CLEAN" && len(report.ContextErrors) > 0 { // an analysis a context error cut short never reads as clean
+		return "FINDINGS"
+	}
+	return v
+}
+
+func reportedHeadline(report *scan.ScanReport) string {
 	if report.Correlation == nil || len(report.Correlation.Errors) > 0 {
 		return headline(report.Findings)
 	}

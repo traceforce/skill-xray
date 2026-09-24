@@ -95,9 +95,13 @@ func TestSystemScanKeepsTheReportWhenOneRunCannotBeBuilt(t *testing.T) {
 	real := scanReport
 	testutil.Swap(t, &scanReport, func(p *parse.Package, o scan.Options) (*scan.ScanReport, error) {
 		report, err := real(p, o)
-		if err == nil && p.Name == "leaky" { // as scan records a correlation step that panicked
+		switch {
+		case err != nil:
+		case p.Name == "leaky": // as scan records a correlation step that panicked
 			report.Correlation.Errors = []string{"correlation-error: RuntimeError"}
 			report.ContextErrors = append(report.ContextErrors, "correlation-error: RuntimeError")
+		case p.Name == "clean": // a context stage that failed on a package without findings
+			report.ContextErrors = append(report.ContextErrors, "capability-context-error: RuntimeError")
 		}
 		return report, err
 	})
@@ -108,7 +112,8 @@ func TestSystemScanKeepsTheReportWhenOneRunCannotBeBuilt(t *testing.T) {
 	assert.Contains(t, stderr, "leaky: Cannot emit SARIF after a correlation failure\n")
 	assert.Contains(t, stderr, "leaky: correlation-error: RuntimeError\n")
 	assert.Contains(t, stdout, "report: "+target+"\n")
-	assert.Contains(t, stdout, "packages: 2, blocking: 1, with findings: 0, clean: 1, incomplete: 1, discovery exceptions: 0\n")
+	assert.Contains(t, stdout, "FINDINGS  seen=1   read=1   cov=100.0%  ", "a context error never reads as clean")
+	assert.Contains(t, stdout, "packages: 2, blocking: 1, with findings: 1, clean: 0, incomplete: 2, discovery exceptions: 0\n")
 	assert.Len(t, runs(t, sarifDoc(t, target)), 1)
 }
 
