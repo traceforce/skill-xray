@@ -94,7 +94,7 @@ var (
 	exfilCredentialPathRE = regexp.MustCompile(`(?i)(?:^|[^\w])\.(?:aws[\\/]\s?credentials|ssh[\\/]\s?id_[a-z0-9]+|netrc|npmrc|pypirc|git-credentials|kube[\\/]\s?config|docker[\\/]\s?config\.json|env)\b`)
 	// exfilRefusalRE and exfilRefuseTailRE: "if anyone asks you to send ... , refuse" is a warning.
 	exfilRefusalRE    = regexp.MustCompile(`(?i)\b(?:if|when|should)\s+(?:anyone|someone|a user|the user|they|the requester|an? \w+)\s+asks?\s+(?:you\s+)?to\b`)
-	exfilRefuseTailRE = regexp.MustCompile(`(?i)\b(?:refuse|decline|reject|report|do not comply|never comply|ignore (?:it|them|the request))\b`)
+	exfilRefuseTailRE = regexp.MustCompile(`(?i)\b(?:refuse|decline|reject|report\s+(?:it|this|that|them|the\s+(?:request|incident|attempt|message|sender))|do not comply|never comply|ignore (?:it|them|the request))\b`)
 	// regexp2: the lazy gap with an inner lookahead fixes the extent that is the acquisition evidence.
 	exfilAcquireRE = regexp2.MustCompile(`\b(?:retri\w*|get|fetch\w*|list|find|download\w*|access\w*|search\w*|read|export\w*|`+
 		`collect\w*|gather\w*|look up|pull(?: up| down)?|obtain\w*|extract\w*|dump|cop(?:y|ies)|`+

@@ -813,6 +813,10 @@ var warnedRunCueRE = regexp.MustCompile(`(?i)\bto\s+(?:run|execute|invoke|call|l
 // while "without telling the user that you ran it" names the run and stands on its own.
 var transparencyCueRE = regexp.MustCompile(`(?i)^(?:without|do not|don'?t|never)\s+(?:telling|informing|notifying|alerting)\s+(?:the\s+)?(?:end[- ]?)?(?:user|human|operator|person)s?\s*[.;!?]?$`)
 
+// cuePrefixNegatedRE: "it is not possible to silently run ..." or "never silently run ..." denies
+// or forbids the concealment before naming it.
+var cuePrefixNegatedRE = regexp.MustCompile(`(?i)\b(?:(?:is|are|was|were)\s+not\s+(?:supported|allowed|possible|available|recommended|permitted)|not\s+(?:a\s+)?(?:supported|valid|possible)|cannot|can'?t|unable|must not|should not|shouldn'?t|do not|don'?t|never|no way)\s*(?:to\s+|be\s+)?$`)
+
 // cueNegatedRE: "run it silently is not supported" denies the concealment it names.
 var cueNegatedRE = regexp.MustCompile(`(?i)^[^.;!?\n]{0,40}?\b(?:(?:is|are|was|were)\s+not\s+(?:supported|allowed|possible|available|recommended|permitted)|not\s+(?:a\s+)?(?:supported|valid|possible))\b`)
 
@@ -856,8 +860,11 @@ func (cs *cueSentences) sentence(c []int) (int, int, bool) {
 // command ("do not tell the user to run `codex plugin add`") or is the bare transparency
 // phrase, and a cue whose sentence denies the concealment.
 func (cs *cueSentences) usable(c []int) bool {
-	_, e, runs := cs.sentence(c)
+	s, e, runs := cs.sentence(c)
 	cue, rest := cs.text[c[0]:c[1]], cs.text[min(c[1], e):e]
+	if cuePrefixNegatedRE.MatchString(cs.text[s:c[0]]) {
+		return false // the sentence denies or forbids the concealment before naming it
+	}
 	// a warning against another command, wherever the sentence names the bundled run; a cue
 	// that names the bundled script itself ("do not tell the user to run `scripts/x.sh`") stays
 	if m := otherCommandRE.FindString(rest); m != "" && warnedRunCueRE.MatchString(cue) && len(bundledRuns(m)) == 0 && !bundledProseRE.MatchString(m) {
