@@ -13,7 +13,7 @@ The scanner works offline with deterministic rules. A pinned [OpenGrep](https://
 ### Prerequisites
 
 - A released binary needs nothing else.
-- Building from source needs [Go 1.26](https://go.dev/dl/); the module pins the `go1.26.6` toolchain and fetches it when needed.
+- Building from source needs [Go 1.26](https://go.dev/dl/), `git` and `make`; the module pins the `go1.26.6` toolchain and fetches it when needed, and `go build` works without make.
 - Scanning a git repository URL needs `git` on the PATH.
 
 ### Download a release
@@ -132,7 +132,7 @@ Three more flags turn the lane into a reviewer of the static text-pattern findin
 | `--llm --llm-review --llm-apply` | a validated dispute may demote that one finding to `low`, recorded as `corrected`; the finding is not suppressed and its severity is not raised |
 | `... --llm-additive` | also run the semantic SXV-038 check after the review; without it, shadow and review turn that check off |
 
-`--llm-shadow` and `--llm-review` exclude each other. A scan makes at most 25 model calls and sends at most 1 MiB of text. Do not gate CI on a disputed finding. The text the model reads while it reviews is written by the skill's author, and an author who wants a finding dismissed can write prose that argues for dismissing it.
+`--llm-shadow` and `--llm-review` exclude each other. A scan makes at most 25 model calls and sends at most 1 MiB of text per package, and `system-scan` spends that budget again for every package it finds. Do not gate CI on a disputed finding. The text the model reads while it reviews is written by the skill's author, and an author who wants a finding dismissed can write prose that argues for dismissing it.
 
 ### Scan every skill installed on this machine
 
@@ -186,7 +186,7 @@ When you have reviewed a finding and decided it is a false positive for this pac
 skill-xray scan ./my-skill --output reports/my-skill.sarif --policy reviews/my-skill-policy.json
 ```
 
-A policy is a JSON file with a `version` of `skill-xray/scoped-policy/v1` and a `decisions` list. Each decision names one result by four fields copied from the report: `rule_id` is the result's `ruleId`, `path` is its first `locations[0].physicalLocation.artifactLocation.uri`, `fingerprint` is `partialFingerprints["skill-xray/evidence/v1"]` and `context_digest` is `properties.contextDigest`. `action` is `suppress`, or `demote` with a lower `effective_severity`; `reason` is free text kept in the report.
+A policy is a JSON file with a `version` of `skill-xray/scoped-policy/v1` and a `decisions` list. Each decision names one result by four fields copied from the report: `rule_id` is the result's `ruleId`, `path` is its first `locations[0].physicalLocation.artifactLocation.uri` with its percent-encoding decoded (`dir/a%20b.py` in the report is `dir/a b.py` in the policy), `fingerprint` is `partialFingerprints["skill-xray/evidence/v1"]` and `context_digest` is `properties.contextDigest`. `action` is `suppress`, or `demote` with a lower `effective_severity`; `reason` is free text kept in the report.
 
 ```json
 {
@@ -239,7 +239,7 @@ A file that was read but that no lane could analyze, for example a PowerShell, z
 
 ## Output format
 
-`scan` and `system-scan` write one [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) document, validated against the OASIS schema embedded in the binary before anything is written. `scan` writes one run; `system-scan` writes one file with one run per package. Each result carries a readable rule ID, a stable fingerprint, a severity, bounded evidence, source locations, and a `properties.category` of `security-finding` or `analysis-diagnostic`. Each run also records, under its properties, what it ran with and what it saw: the OpenGrep version and ruleset digest, the package name and content digest, the coverage status, the capability context, the raw candidates and how they became results, and, with the LLM lane on, `llmUsage` and `llmReview`. [docs/reporting.md](docs/reporting.md) describes each field.
+`scan` and `system-scan` write one [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) document, validated against the OASIS schema embedded in the binary before anything is written. `scan` writes one run; `system-scan` writes one file with one run per package. Each result carries a readable rule ID, a stable fingerprint, a severity, bounded evidence, source locations, and a `properties.category` of `security-finding` or `analysis-diagnostic`. Each run also records, under its properties, what it ran with and what it saw: the OpenGrep version and ruleset digest, the package name and content digest, the coverage status, the capability context, the raw candidates and how they became results, and, with the LLM lane on, `llmUsage`, plus `llmReview` in shadow or review mode. [docs/reporting.md](docs/reporting.md) describes each field.
 
 The report and the policy file must be outside the scanned package, and the report's directory must exist. `scan` checks both before any file of the package is read and refuses with `cannot prepare SARIF: Report directory is missing or not a directory: <path>` or `cannot prepare SARIF: Report must be outside the scanned package`; `system-scan` reports the second as `cannot write SARIF: ...` after discovery. A policy that is missing, inside the package or not valid JSON is refused the same way with `Operator policy ...` in place of `Report ...`. Nothing is written on a refusal and the exit code is 2. The writer validates the document first, then replaces the target through a temporary file in the same directory, so a failed run leaves an earlier report untouched. Reports over 64 MiB fail instead of being truncated.
 
