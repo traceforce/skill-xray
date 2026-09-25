@@ -889,7 +889,7 @@ func replay(t *testing.T, name string) []findings.Finding {
 	require.NoError(t, err)
 	rep := doc.(map[string]any)
 	fs := FindingsFromReport(rep, targets, p, []string{"<temporary>", "<rules>", "<temporary>\\targets"}, nil)
-	fs = findings.CapFindings(append(fs, coverageFromReport(rep, targets)...))
+	fs = findings.CapFindings(append(fs, coverageFromReport(p, rep, targets)...))
 	assert.Equal(t, rec.Findings, asJSON(t, fs), name)
 	return fs
 }

@@ -87,12 +87,8 @@ func Check(p *parse.Package, o Options) (out []findings.Finding) {
 	return append(out, run(p, o)...)
 }
 
-func gap(rule, message string) []findings.Finding {
-	return []findings.Finding{coverage(rule, message, "")}
-}
-
-// packageGap is a gap about the whole package, anchored to its manifest so that every result
-// carries a location a SARIF consumer can show.
+// packageGap is a gap about the whole package (every engine failure is one), anchored to its
+// manifest so that every result carries a location a SARIF consumer can show.
 func packageGap(p *parse.Package, rule, message string) []findings.Finding {
 	rel := ""
 	for _, a := range p.Artifacts {
@@ -131,29 +127,29 @@ func run(p *parse.Package, o Options) []findings.Finding {
 	if o.Rules != "" {
 		rulePath, _ := filepath.Abs(o.Rules)
 		if info, err := os.Stat(rulePath); err != nil || !info.Mode().IsRegular() {
-			return gap("opengrep-rules-unavailable", "Executable code was selected, but the local OpenGrep rules are unavailable.")
+			return packageGap(p, "opengrep-rules-unavailable", "Executable code was selected, but the local OpenGrep rules are unavailable.")
 		}
 		b, err := os.ReadFile(rulePath) // #nosec G304 -- the explicit rule file, Stat checked as a regular file above
 		if err != nil {
-			return couldNotStart(err)
+			return couldNotStart(p, err)
 		}
 		rules = b
 	}
 	root, err := os.MkdirTemp("", "skill-xray-opengrep-")
 	if err != nil {
-		return couldNotStart(err)
+		return couldNotStart(p, err)
 	}
 	defer os.RemoveAll(root)
 	sourceRoot := filepath.Join(root, "targets")
 	reportPath := filepath.Join(root, "opengrep-report.json")
 	targets := map[string]Selected{}
 	if err := os.Mkdir(sourceRoot, 0o750); err != nil {
-		return couldNotStart(err)
+		return couldNotStart(p, err)
 	}
 	for i, item := range selected {
 		name := fmt.Sprintf("%04d%s", i, item.Suffix)
 		if err := os.WriteFile(filepath.Join(sourceRoot, name), []byte(item.Text), 0o600); err != nil {
-			return couldNotStart(err)
+			return couldNotStart(p, err)
 		}
 		targets[name] = item
 	}
@@ -162,7 +158,7 @@ func run(p *parse.Package, o Options) []findings.Finding {
 	// keeps the ids bare, for the embedded rules and an explicit file alike
 	rulePath := filepath.Join(root, "rules.yml")
 	if err := os.WriteFile(rulePath, rules, 0o600); err != nil { // #nosec G703 -- rulePath is a constant name under the engine's temp root
-		return couldNotStart(err)
+		return couldNotStart(p, err)
 	}
 	argv := []string{binary, "scan", "--json", "--dataflow-traces",
 		"--disable-version-check", "--disable-nosem", "--no-git-ignore",
@@ -172,11 +168,11 @@ func run(p *parse.Package, o Options) []findings.Finding {
 		"--output", reportPath, "--config", rulePath, sourceRoot}
 	env, err := engineEnv(root)
 	if err != nil {
-		return couldNotStart(err)
+		return couldNotStart(p, err)
 	}
 	stderr, err := os.OpenFile(filepath.Join(root, "opengrep-stderr.txt"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304 -- a constant name under the engine's temp root
 	if err != nil {
-		return couldNotStart(err)
+		return couldNotStart(p, err)
 	}
 	timeout := o.Timeout
 	if timeout == 0 {
@@ -194,7 +190,7 @@ func run(p *parse.Package, o Options) []findings.Finding {
 		return packageGap(p, "opengrep-timeout", "OpenGrep exceeded the package analysis deadline.")
 	}
 	if err != nil {
-		return couldNotStart(err)
+		return couldNotStart(p, err)
 	}
 	if status != 0 {
 		captured, _ := os.ReadFile(stderr.Name())
@@ -203,14 +199,14 @@ func run(p *parse.Package, o Options) []findings.Finding {
 			detail = "no diagnostic output"
 		}
 		detail = strings.ReplaceAll(strings.ReplaceAll(detail, root, "<temporary>"), rulePath, "<rules>")
-		return gap("opengrep-execution-error", fmt.Sprintf("OpenGrep exited with status %d: %s", status, pytext.Head(detail, 500)))
+		return packageGap(p, "opengrep-execution-error", fmt.Sprintf("OpenGrep exited with status %d: %s", status, pytext.Head(detail, 500)))
 	}
 	info, err := os.Stat(reportPath)
 	if err != nil {
-		return gap("opengrep-invalid-output", "OpenGrep completed without producing its JSON report.")
+		return packageGap(p, "opengrep-invalid-output", "OpenGrep completed without producing its JSON report.")
 	}
 	if info.Size() > int64(maxReportBytes) {
-		return gap("opengrep-output-limit", fmt.Sprintf("OpenGrep's JSON report exceeded the %d-byte limit.", maxReportBytes))
+		return packageGap(p, "opengrep-output-limit", fmt.Sprintf("OpenGrep's JSON report exceeded the %d-byte limit.", maxReportBytes))
 	}
 	data, err := os.ReadFile(reportPath) // #nosec G304 -- a constant name under the engine's temp root
 	var doc any
@@ -218,18 +214,18 @@ func run(p *parse.Package, o Options) []findings.Finding {
 		doc, err = decodeReport(data)
 	}
 	if err != nil {
-		return gap("opengrep-invalid-output", "OpenGrep completed without returning valid JSON.")
+		return packageGap(p, "opengrep-invalid-output", "OpenGrep completed without returning valid JSON.")
 	}
 	report, ok := doc.(map[string]any)
 	if !ok {
-		return gap("opengrep-invalid-output", "OpenGrep returned an unexpected JSON document.")
+		return packageGap(p, "opengrep-invalid-output", "OpenGrep returned an unexpected JSON document.")
 	}
 	found := FindingsFromReport(report, targets, p, []string{root, rulePath, sourceRoot}, o.Observations)
-	return findings.CapFindings(append(found, coverageFromReport(report, targets)...))
+	return findings.CapFindings(append(found, coverageFromReport(p, report, targets)...))
 }
 
-func couldNotStart(err error) []findings.Finding {
-	return gap("opengrep-execution-error", "OpenGrep could not start: "+pytext.OSErrorName(err))
+func couldNotStart(p *parse.Package, err error) []findings.Finding {
+	return packageGap(p, "opengrep-execution-error", "OpenGrep could not start: "+pytext.OSErrorName(err))
 }
 
 // execRunner is subprocess.run: stdout discarded, stderr to the file, no shell.
@@ -250,11 +246,11 @@ func execRunner(ctx context.Context, argv []string, dir string, env []string, st
 
 // coverageFromReport is _coverage_from_report: every selected target must appear in
 // paths.scanned.
-func coverageFromReport(report map[string]any, targets map[string]Selected) []findings.Finding {
+func coverageFromReport(p *parse.Package, report map[string]any, targets map[string]Selected) []findings.Finding {
 	paths, _ := report["paths"].(map[string]any)
 	scannedList, ok := paths["scanned"].([]any)
 	if !ok {
-		return gap("opengrep-invalid-output", "OpenGrep did not report which selected targets it scanned.")
+		return packageGap(p, "opengrep-invalid-output", "OpenGrep did not report which selected targets it scanned.")
 	}
 	scanned := map[string]bool{}
 	for _, p := range scannedList {

@@ -824,6 +824,9 @@ func sentenceBounds(text string, start, end int) (int, int) {
 		s--
 	}
 	e := end
+	if e > s && strings.IndexByte(".!?", text[e-1]) >= 0 {
+		e-- // a cue that consumed its full stop ends its own sentence
+	}
 	for e < len(text) && !(strings.IndexByte(".!?\n", text[e]) >= 0 && (e+1 >= len(text) || text[e+1] == ' ' || text[e+1] == '\n')) {
 		e++
 	}
@@ -841,7 +844,7 @@ type cueSentences struct {
 }
 
 func (cs *cueSentences) sentence(c []int) (int, int, bool) {
-	if !cs.valid || c[0] < cs.s || c[1] > cs.e {
+	if !cs.valid || c[0] < cs.s || c[0] >= cs.e {
 		cs.s, cs.e = sentenceBounds(cs.text, c[0], c[1])
 		cs.runs = len(bundledRuns(cs.text[cs.s:cs.e])) > 0 || bundledProseRE.MatchString(cs.text[cs.s:cs.e])
 		cs.valid = true
@@ -854,7 +857,7 @@ func (cs *cueSentences) sentence(c []int) (int, int, bool) {
 // phrase, and a cue whose sentence denies the concealment.
 func (cs *cueSentences) usable(c []int) bool {
 	_, e, runs := cs.sentence(c)
-	cue, rest := cs.text[c[0]:c[1]], cs.text[c[1]:e]
+	cue, rest := cs.text[c[0]:c[1]], cs.text[min(c[1], e):e]
 	if !runs && ((warnedRunCueRE.MatchString(cue) && otherCommandRE.MatchString(rest)) || transparencyCueRE.MatchString(cue)) {
 		return false
 	}

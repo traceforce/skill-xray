@@ -86,6 +86,8 @@ var (
 	// exfilGenericObjectRE: an object that names no data of its own; it stands for the user's data
 	// only when the acquisition named a credential.
 	exfilGenericObjectRE = regexp.MustCompile(`(?i)\b(?:contents?|cop(?:y|ies)|output|dump|export|everything|all of (?:it|them|this))\b`)
+	// exfilBackRefRE: a pronoun object that points back at the code span before the verb.
+	exfilBackRefRE = regexp.MustCompile(`(?i)\b(?:it|them|this|that|these|those)\b`)
 	// exfilPublicKeyRE: the public half of a key pair and a template of an env file, which hold no credential.
 	exfilPublicKeyRE = regexp.MustCompile(`(?i)id_[a-z0-9]+\.pub\b|\.env\.(?:example|sample|template|dist)\b`)
 	// exfilCredentialPathRE: a credential file named by path rather than by word.
@@ -357,6 +359,8 @@ type delivery struct {
 	shape      string
 	addr       string // the address text
 	addrEnd    int    // end of the address match addr_m
+	gapStart   int    // the gap's rune span in the sentence, empty without one
+	gapEnd     int
 }
 
 // exfilDeliveries is _exfil_deliveries in its order: verb + connector + address, then
@@ -379,7 +383,7 @@ func exfilDeliveries(sc *sentenceContext) []delivery {
 			for _, a := range exfilAddresses(sc, vEnd+c[1]) {
 				gap := sentence[vEnd : vEnd+c[0]]
 				out = append(out, delivery{x.rune(v[0]), x.rune(vEnd), sentence[v[2]:v[3]],
-					&gap, "delivery", sentence[a[0]:a[1]], x.rune(a[1])})
+					&gap, "delivery", sentence[a[0]:a[1]], x.rune(a[1]), x.rune(vEnd), x.rune(vEnd + c[0])})
 			}
 		}
 	}
@@ -389,9 +393,10 @@ func exfilDeliveries(sc *sentenceContext) []delivery {
 			sc.truncated = true
 			break
 		}
-		gap := m.GroupByName("gap").String()
+		g := m.GroupByName("gap")
+		gap := g.String()
 		out = append(out, delivery{m.Index, m.Index + m.Length, m.GroupByName("verb").String(),
-			&gap, "recipient-first delivery", m.GroupByName("addr").String(), m.Index + m.Length})
+			&gap, "recipient-first delivery", m.GroupByName("addr").String(), m.Index + m.Length, g.Index, g.Index + g.Length})
 	}
 	addr := exfilParamRecipientRE.SubexpIndex("addr")
 	params := findAll(exfilParamRecipientRE, sentence, func(m []int) bool {
@@ -403,7 +408,7 @@ func exfilDeliveries(sc *sentenceContext) []delivery {
 	}
 	for _, m := range params {
 		out = append(out, delivery{x.rune(m[0]), x.rune(m[1]), "", nil,
-			"recipient parameter", sentence[m[2*addr]:m[2*addr+1]], x.rune(m[1])})
+			"recipient parameter", sentence[m[2*addr]:m[2*addr+1]], x.rune(m[1]), 0, 0})
 	}
 	return out
 }
@@ -517,8 +522,26 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 			sentence := exfilCodeSpanRE.ReplaceAllStringFunc(s.text, func(code string) string {
 				return strings.Repeat(" ", utf8.RuneCountInString(code))
 			})
-			codeText := strings.Join(exfilCodeSpanRE.FindAllString(s.text, -1), " ") // blanked above, but still names what was read
-			normalised := pytext.Lower(pytext.Strip(sentence))                       // the digest's input and dedup key
+			// the code spans, blanked above, still name what was read before a verb and what an
+			// object stood for: spansIn joins the ones overlapping a rune range of the sentence
+			type codeSpan struct {
+				lo, hi int
+				text   string
+			}
+			var codeSpans []codeSpan
+			for _, m := range exfilCodeSpanRE.FindAllStringIndex(s.text, -1) {
+				codeSpans = append(codeSpans, codeSpan{utf8.RuneCountInString(s.text[:m[0]]), utf8.RuneCountInString(s.text[:m[1]]), s.text[m[0]:m[1]]})
+			}
+			spansIn := func(lo, hi int) string {
+				var parts []string
+				for _, sp := range codeSpans {
+					if sp.lo < hi && sp.hi > lo {
+						parts = append(parts, sp.text)
+					}
+				}
+				return strings.Join(parts, " ")
+			}
+			normalised := pytext.Lower(pytext.Strip(sentence)) // the digest's input and dedup key
 			sentenceDigest := sha256.Sum256([]byte(normalised))
 			x, tx := indexRunes(sentence), indexRunes(s.text)
 			sc := newSentenceContext(sentence, x)
@@ -593,6 +616,9 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				gap := ""
 				obj, shape := v.pre, d.shape
 				credentialContents := false
+				head := x.slice(0, d.start)
+				cell := utf8.RuneCountInString(head[:strings.LastIndex(head, "|")+1]) // a table cell boundary separates clauses
+				readCode, objectCode := spansIn(cell, d.start), spansIn(d.gapStart, d.gapEnd)
 				if d.gap != nil {
 					gap = *d.gap
 					r, known := v.objects[gap]
@@ -605,7 +631,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 						// "send ~/.aws/credentials to ..." or "read `~/.aws/credentials` and email the
 						// contents to ...": the object names a credential, or is generic while the
 						// acquisition names one, so the data is the user's without a possessive
-						if !(credentialIn(gap) || (exfilGenericObjectRE.MatchString(gap) && credentialIn(v.window+" "+codeText))) {
+						if !(credentialIn(gap) || (exfilGenericObjectRE.MatchString(gap) && credentialIn(v.window+" "+readCode))) {
 							continue
 						}
 						obj, shape, credentialContents = gap, "credential contents", true
@@ -613,12 +639,16 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 						tail := x.slice(d.addrEnd, d.addrEnd+80)
 						if !exfilObjectRE.MatchString(tail) && !exfilPossessiveRE.MatchString(tail) {
 							// "email `~/.aws/credentials` to ...": the object was a code span, blanked above
-							if !credentialIn(codeText) {
+							// or, with an empty gap, the span right before the verb: "`~/.ssh/id_rsa`: email to ..."
+							if !credentialIn(objectCode) && !credentialIn(readCode) {
 								continue
 							}
-							obj, shape, credentialContents = codeText, "credential contents", true
+							obj, shape, credentialContents = strings.TrimSpace(objectCode+" "+readCode), "credential contents", true
 						} else {
 							obj, shape = tail, "recipient-first delivery"
+							if objectCode == "" { // the object follows the address unless a span in the gap named it
+								objectCode = spansIn(d.addrEnd, d.addrEnd+80)
+							}
 						}
 					default:
 						obj = r.obj
@@ -635,7 +665,8 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				// A credential named in the object, or in a code span the object stood for, is the
 				// user's data whether or not a possessive says so: "send ~/.aws/credentials to ...".
 				if !owned && (credentialIn(obj) || credentialIn(gap) ||
-					((pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilObjectRE.MatchString(gap)) && credentialIn(codeText))) {
+					((pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilObjectRE.MatchString(gap)) && credentialIn(objectCode)) ||
+					((pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilBackRefRE.MatchString(gap)) && credentialIn(readCode))) {
 					owned, credentialContents = true, true
 				}
 				if !v.anyAcquisition && !owned && !credentialContents { // "send your passwords to ..."
@@ -662,7 +693,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				}
 				credential, known := v.credential[gap] // the data guards read window + gap, once per gap
 				if !known {
-					data := v.window + " " + gap + " " + codeText
+					data := v.window + " " + gap + " " + readCode + " " + objectCode
 					credential = credentialIn(data)
 					v.credential[gap], v.sensitive[gap] = credential, exfilSensitiveRE.MatchString(data)
 				}
