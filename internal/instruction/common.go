@@ -360,7 +360,7 @@ var (
 	// imperativeIntroRE: "do the following:" or "follow the steps below:" at the start of its
 	// clause orders what comes next, it does not cite it; "attackers use phrasing like the
 	// following:" describes, and negatedIntroRE keeps "do not apply the following:" a citation.
-	imperativeIntroRE = regexp.MustCompile(`(?i)(?:^|[.!?:;,]\s+|\b(?:then|now|first|next|finally|please|always|just|and|so|you (?:must|should|need to|have to|will|can|may))\s*,?\s+)[*_]{0,3}(?:do|follow|proceed|read|run|complete|perform|apply|use|execute|take|repeat)\s+(?:\w+\s+){0,3}(?:the following|as follows|the steps below|below)\b\s*[:.]?\s*[*_]{0,3}\s*\z`)
+	imperativeIntroRE = regexp.MustCompile(`(?i)(?:^|[.!?:;,]\s+|\b(?:then|now|first|next|finally|please|always|just|and|so|you (?:must|should|need to|have to|will|can|may))\s*,?\s+)[*_]{0,3}(?:do|follow|proceed|read|run|complete|perform|apply|use|execute|take|repeat)\s+(?:\w+\s+){0,3}(?:the following|as follows|the steps below|below)\b`)
 	negatedIntroRE    = regexp.MustCompile(`(?i)\bnot\b|\bnever\b|n't\b`)
 	// _SENTENCE_END_RE (?<=[.!?])\s+ without the lookbehind: the split point is one past the match start.
 	sentenceEndRE = regexp.MustCompile(`[.!?]\s+`)

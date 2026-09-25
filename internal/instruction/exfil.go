@@ -641,10 +641,13 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 						if !exfilObjectRE.MatchString(tail) && !exfilPossessiveRE.MatchString(tail) {
 							// "email `~/.aws/credentials` to ...": the object was a code span, blanked above
 							// or, with an empty gap, the span right before the verb: "`~/.ssh/id_rsa`: email to ..."
-							if !credentialIn(objectCode) && !credentialIn(readCode) {
+							if objectCode == "" {
+								objectCode = readCode // no span in the gap: the one before the verb is the object
+							}
+							if !credentialIn(objectCode) {
 								continue
 							}
-							obj, shape, credentialContents = strings.TrimSpace(objectCode+" "+readCode), "credential contents", true
+							obj, shape, credentialContents = objectCode, "credential contents", true
 						} else {
 							obj, shape = tail, "recipient-first delivery"
 							if objectCode == "" { // the object follows the address unless a span in the gap named it
@@ -667,7 +670,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				// user's data whether or not a possessive says so: "send ~/.aws/credentials to ...".
 				if !owned && (credentialIn(obj) || credentialIn(gap) ||
 					((pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilObjectRE.MatchString(gap)) && credentialIn(objectCode)) ||
-					((pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilBackRefRE.MatchString(gap)) && credentialIn(readCode))) {
+					(objectCode == "" && (pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilBackRefRE.MatchString(gap)) && credentialIn(readCode))) {
 					owned, credentialContents = true, true
 				}
 				if !v.anyAcquisition && !owned && !credentialContents { // "send your passwords to ..."
