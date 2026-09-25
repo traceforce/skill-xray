@@ -9,10 +9,12 @@ package instruction
 
 import (
 	"cmp"
+	"crypto/sha256"
 	"fmt"
 	"maps"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -26,6 +28,21 @@ import (
 
 // exfilWindow bounds the preceding prose (code points) searched for the acquisition.
 const exfilWindow = 4000
+
+// exfilWholeSentence is the longest sentence (bytes) whose text up to a delivery verb is read
+// whole for the negation, contrast, disclosure, second-person and framing checks; a run-on
+// sentence past it reads the last exfilWindow code points, so a block with no sentence end
+// stays bounded. Prose never reaches it.
+const exfilWholeSentence = 16384
+
+// exfilMaxChain bounds the addresses one connector's recipient chain collects, placeholders
+// included: a real recipient list is a few dozen at most, and a chain of thousands is a block
+// of deliveries, each read by its own verb.
+const exfilMaxChain = 128
+
+// exfilMaxVerbs bounds the delivery verbs whose surroundings one artifact has analysed; past
+// it the lane stops and says so, since each analysis reads a window of exfilWindow code points.
+const exfilMaxVerbs = 512
 
 var (
 	exfilAddrRE = regexp.MustCompile(`(?i)[\w.+-]+@[\w-]+(?:\.[\w-]+)+|https?://[^\s'"<>)\]]+`)
@@ -237,19 +254,87 @@ func exfilRecipient(addr string) (r recipient, ok bool) {
 	return recipient{addr, host, pytext.Lower(local), placeholder}, true
 }
 
-// exfilAddresses is _exfil_addresses: address matches (byte spans) after a connector ending at
-// byte pos: the first within 60 code points, each next within 40 of the previous match, none
-// past a sender mark.
-func exfilAddresses(sentence string, pos int, x *runeIndex) [][]int {
-	var out [][]int
-	limit, last := x.rune(pos)+60, pos
-	for _, m := range exfilAddrRE.FindAllStringIndex(sentence[pos:], -1) {
-		start, end := pos+m[0], pos+m[1]
-		if x.rune(start) > limit || exfilSenderMarkRE.MatchString(sentence[last:start]) {
-			return out
+// recipientInfo is a recipient as the guards see it, read once per address text of a sentence.
+type recipientInfo struct {
+	recipient
+	ok                                        bool
+	lower                                     string
+	service, shared, telemetryHost, drop, api bool
+}
+
+// sentenceContext is what every delivery of a sentence shares: the address spans found once,
+// each address's recipient and the sender-mark test between consecutive spans, read on demand,
+// so a block of thousands of deliveries never rereads them for every verb.
+type sentenceContext struct {
+	sentence  string
+	x         *runeIndex
+	spans     [][]int
+	rcps      map[string]*recipientInfo
+	marks     []int8 // per span, a sender mark between the previous span and it: 0 unread, 1 yes, 2 no
+	capped    bool   // a chain reached exfilMaxChain with another address in reach
+	truncated bool   // more delivery verbs than exfilMaxVerbs were left unread
+}
+
+func newSentenceContext(sentence string, x *runeIndex) *sentenceContext {
+	spans := exfilAddrRE.FindAllStringIndex(sentence, -1)
+	return &sentenceContext{sentence: sentence, x: x, spans: spans, rcps: map[string]*recipientInfo{}, marks: make([]int8, len(spans))}
+}
+
+// recipientOf is exfilRecipient plus the host and local guards, once per address text.
+func (sc *sentenceContext) recipientOf(addr string) *recipientInfo {
+	if ri, ok := sc.rcps[addr]; ok {
+		return ri
+	}
+	ri := &recipientInfo{}
+	if ri.recipient, ri.ok = exfilRecipient(addr); ri.ok {
+		ri.lower = pytext.Lower(ri.addr)
+		ri.service = exfilServiceHostRE.MatchString(ri.host)
+		ri.shared = exfilRoleLocalRE.MatchString(ri.local) || exfilDevHostRE.MatchString(ri.host)
+		ri.telemetryHost = exfilTelemetryHostRE.MatchString(ri.host)
+		ri.drop = codelane.DropHostRE.MatchString(ri.host)
+		ri.api = exfilAPIPrefixRE.MatchString(ri.host)
+	}
+	sc.rcps[addr] = ri
+	return ri
+}
+
+// markBefore reports a sender mark between span i-1 and span i.
+func (sc *sentenceContext) markBefore(i int) bool {
+	if sc.marks[i] == 0 {
+		sc.marks[i] = 2
+		if exfilSenderMarkRE.MatchString(sc.sentence[sc.spans[i-1][1]:sc.spans[i][0]]) {
+			sc.marks[i] = 1
 		}
-		out = append(out, []int{start, end})
-		limit, last = x.rune(end)+40, end
+	}
+	return sc.marks[i] == 1
+}
+
+// exfilAddresses is _exfil_addresses: the address spans (bytes) after a connector ending at
+// byte pos: the first within 60 code points, each next within 40 of the previous span, none past
+// a sender mark, at most exfilMaxChain. Scanning the rest of the sentence for every verb was
+// quadratic; the spans are the sentence's, found once.
+func exfilAddresses(sc *sentenceContext, pos int) [][]int {
+	var out [][]int
+	x, spans := sc.x, sc.spans
+	limit, first := x.rune(pos)+60, sort.Search(len(spans), func(i int) bool { return spans[i][0] >= pos })
+	for i := first; i < len(spans); i++ {
+		start, end := spans[i][0], spans[i][1]
+		if x.rune(start) > limit {
+			break
+		}
+		if i == first {
+			if exfilSenderMarkRE.MatchString(sc.sentence[pos:start]) {
+				break
+			}
+		} else if sc.markBefore(i) {
+			break
+		}
+		if len(out) == exfilMaxChain { // an address in reach is left unread: the artifact says so
+			sc.capped = true
+			break
+		}
+		out = append(out, spans[i])
+		limit = x.rune(end) + 40
 	}
 	return out
 }
@@ -266,25 +351,34 @@ type delivery struct {
 
 // exfilDeliveries is _exfil_deliveries in its order: verb + connector + address, then
 // ditransitive verbs, then recipient parameters.
-func exfilDeliveries(sentence string, x *runeIndex) []delivery {
+func exfilDeliveries(sc *sentenceContext) []delivery {
 	var out []delivery
+	sentence, x := sc.sentence, sc.x
 	verbs := findAll(exfilVerbRE, sentence, func(m []int) bool {
 		// The article pattern is end-anchored and at most five bytes plus one of boundary
 		// context, so the last six bytes decide it; the whole prefix per verb was O(n²).
 		return pytext.WordBoundary(sentence, m[0]) && !exfilArticleRE.MatchString(sentence[max(0, m[0]-6):m[0]])
 	})
+	if len(verbs) > exfilMaxVerbs { // nothing past the budget is analysed, so nothing past it is read
+		verbs, sc.truncated = verbs[:exfilMaxVerbs], true
+	}
 	for _, v := range verbs {
 		vEnd := v[1]
 		limit := x.byte(x.rune(vEnd) + 120)
 		for _, c := range exfilConnRE.FindAllStringIndex(sentence[vEnd:limit], -1) {
-			for _, a := range exfilAddresses(sentence, vEnd+c[1], x) {
+			for _, a := range exfilAddresses(sc, vEnd+c[1]) {
 				gap := sentence[vEnd : vEnd+c[0]]
 				out = append(out, delivery{x.rune(v[0]), x.rune(vEnd), sentence[v[2]:v[3]],
 					&gap, "delivery", sentence[a[0]:a[1]], x.rune(a[1])})
 			}
 		}
 	}
+	ditransitive := 0
 	for m, _ := exfilDitransRE.FindStringMatch(sentence); m != nil; m, _ = exfilDitransRE.FindNextMatch(m) {
+		if ditransitive++; ditransitive > exfilMaxVerbs {
+			sc.truncated = true
+			break
+		}
 		gap := m.GroupByName("gap").String()
 		out = append(out, delivery{m.Index, m.Index + m.Length, m.GroupByName("verb").String(),
 			&gap, "recipient-first delivery", m.GroupByName("addr").String(), m.Index + m.Length})
@@ -294,6 +388,9 @@ func exfilDeliveries(sentence string, x *runeIndex) []delivery {
 		prev, _ := utf8.DecodeLastRuneInString(sentence[:m[0]])
 		return pytext.WordBoundary(sentence, m[0]) && (m[0] == 0 || !strings.ContainsRune("?&/;", prev))
 	})
+	if len(params) > exfilMaxVerbs {
+		params, sc.truncated = params[:exfilMaxVerbs], true
+	}
 	for _, m := range params {
 		out = append(out, delivery{x.rune(m[0]), x.rune(m[1]), "", nil,
 			"recipient parameter", sentence[m[2*addr]:m[2*addr+1]], x.rune(m[1])})
@@ -301,11 +398,75 @@ func exfilDeliveries(sentence string, x *runeIndex) []delivery {
 	return out
 }
 
+// exfilKey is the (recipient, sentence) a delivery is reported for once: the recipient lowered
+// and the digest of the normalised sentence, so a lookup never hashes the sentence itself.
+type exfilKey struct {
+	addr     string
+	sentence [sha256.Size]byte
+}
+
+// verbContext is the analysis of the prose around one delivery verb, the same for every
+// delivery the verb reaches, so it is computed once per verb; the data guards are per gap.
+type verbContext struct {
+	pre, verb             string // the 80 code points before the verb, and the verb lowered
+	before, window        string
+	acquired              *span
+	anyAcquisition        bool
+	sentenceBefore        string
+	throughVerb           string
+	acqSentence           string
+	wholeAcq              bool // acqSentence is the whole sentence: no acquisition was found
+	negatedOrContrasted   lazyBool
+	youBefore             lazyBool
+	disclosureBefore      lazyBool
+	disclosureAcq         lazyBool
+	telemetryAcq          lazyBool
+	possessiveAcq         lazyBool
+	introBefore           lazyBool
+	defensive             lazyBool
+	credential, sensitive map[string]bool // by gap: exfilCredentialRE and exfilSensitiveRE over window + gap
+	objects               map[string]objectResolution
+	owned                 map[string]bool // by object
+}
+
+// lazyBool is a check run the first time a guard reaches it, never for a delivery an earlier
+// guard dropped.
+type lazyBool struct{ done, value bool }
+
+func (l *lazyBool) get(check func() bool) bool {
+	if !l.done {
+		l.value, l.done = check(), true
+	}
+	return l.value
+}
+
+// objectResolution is what a delivery's gap, verb and preceding text make of its object; tail
+// means a blank gap left the decision to the text after the address, skip that there is none.
+type objectResolution struct {
+	obj, shape string
+	tail, skip bool
+}
+
+// objectOf resolves the object of a delivery with a gap, as the cases of _data_exfil_findings do.
+func objectOf(gap, verb, pre string) objectResolution {
+	switch {
+	case exfilObjectRE.MatchString(gap) || exfilPossessiveRE.MatchString(gap):
+		return objectResolution{obj: gap}
+	case exfilObjectRE.MatchString(verb): // "back them up", "hand it over"
+		return objectResolution{obj: verb}
+	case exfilPassiveRE.MatchString(pre) && (exfilObjectRE.MatchString(pre) || exfilPossessiveRE.MatchString(pre)):
+		return objectResolution{obj: pre, shape: "passive delivery"}
+	case pytext.Strip(gap) == "":
+		return objectResolution{tail: true} // "share with X a copy": the text after the address decides
+	}
+	return objectResolution{skip: true}
+}
+
 // dataExfilFindings is _data_exfil_findings: SXV-043 over one instruction-lane artifact.
 func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 	var out []findings.Finding
-	seen := map[[2]string]bool{}
-	total := 0
+	seen := map[exfilKey]bool{}
+	total, analysed, exhausted, chainCapped := 0, 0, false, false
 	previous, prevTail, exampleSection := "", "", false
 	for _, b := range proseBlocks(a) {
 		raw := FlattenProse(b.Text)
@@ -327,96 +488,165 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				return strings.Repeat(" ", utf8.RuneCountInString(code))
 			})
 			normalised := pytext.Lower(pytext.Strip(sentence)) // the digest's input and dedup key
+			sentenceDigest := sha256.Sum256([]byte(normalised))
 			x, tx := indexRunes(sentence), indexRunes(s.text)
-			for _, d := range exfilDeliveries(sentence, x) {
-				rcp, ok := exfilRecipient(d.addr)
-				if !ok {
+			sc := newSentenceContext(sentence, x)
+			deliveries := exfilDeliveries(sc)
+			chainCapped, exhausted = chainCapped || sc.capped, exhausted || sc.truncated
+			verbs := map[[2]int]*verbContext{}
+			var wholeDisclosure, wholeTelemetry, wholePossessive *bool // the whole sentence, read once when a verb has no acquisition
+			once := func(cell **bool, re *regexp.Regexp) bool {
+				if *cell == nil {
+					v := re.MatchString(sentence)
+					*cell = &v
+				}
+				return **cell
+			}
+			for _, d := range deliveries {
+				ri := sc.recipientOf(d.addr)
+				if !ri.ok {
 					continue
 				}
+				rcp := ri.recipient
 				// Dedup a delivery already emitted for this (recipient, sentence) before the
 				// expensive window/acquisition scan: a duplicate produces no output, and the
 				// intervening guards only ever `continue`, so skipping early cannot change results.
-				key := [2]string{pytext.Lower(rcp.addr), normalised}
+				key := exfilKey{ri.lower, sentenceDigest}
 				if seen[key] {
 					continue
 				}
-				pre := x.slice(max(0, d.start-80), d.start)
-				tail := x.slice(d.addrEnd, d.addrEnd+80)
-				obj, shape := pre, d.shape
-				if d.gap != nil {
-					switch gap := *d.gap; {
-					case exfilObjectRE.MatchString(gap) || exfilPossessiveRE.MatchString(gap):
-						obj = gap
-					case exfilObjectRE.MatchString(d.verb): // "back them up", "hand it over"
-						obj = d.verb
-					case exfilPassiveRE.MatchString(pre) && (exfilObjectRE.MatchString(pre) || exfilPossessiveRE.MatchString(pre)):
-						shape = "passive delivery"
-					case pytext.Strip(gap) == "" && (exfilObjectRE.MatchString(tail) || exfilPossessiveRE.MatchString(tail)):
-						obj, shape = tail, "recipient-first delivery" // "share with X a copy"
-					default:
+				// The prose around the verb is the same for every delivery it reaches, so it is
+				// analysed once per verb: the block so far plus the tail of the previous paragraph or
+				// list item, bounded to the last exfilWindow code points (Python's [...][-4000:]),
+				// before being the same window without the previous tail; and the sentence up to
+				// the verb, bounded the same way, so a block of thousands of deliveries stays linear.
+				v := verbs[[2]int{d.start, d.end}]
+				if v == nil {
+					if analysed == exfilMaxVerbs {
+						exhausted = true
 						continue
 					}
+					analysed++
+					v = &verbContext{credential: map[string]bool{}, sensitive: map[string]bool{},
+						objects: map[string]objectResolution{}, owned: map[string]bool{}}
+					verbs[[2]int{d.start, d.end}] = v
+					v.pre, v.verb = x.slice(max(0, d.start-80), d.start), pytext.Lower(d.verb)
+					head := raw[:s.byteStart+tx.byte(d.start)]
+					v.before = lastRunes(head, exfilWindow)
+					v.window = v.before
+					if bc := utf8.RuneCountInString(v.before); bc < exfilWindow {
+						v.window = lastRunes(prevTail+" ", exfilWindow-bc) + v.before
+					}
+					// Negation is judged sentence by sentence: an acquisition counts unless its own
+					// sentence negates it, and the delivery sentence must not negate or contrast it.
+					v.acquired, v.anyAcquisition = firstAcquisition(v.window)
+					// The negation, contrast, disclosure, second-person and framing checks read the
+					// sentence up to the verb whole, once per verb; only a run-on sentence past
+					// exfilWholeSentence reads the last window, so a block with no sentence end stays
+					// bounded.
+					v.sentenceBefore, v.throughVerb = x.cut(d.start), x.cut(d.end)
+					if len(sentence) > exfilWholeSentence {
+						v.sentenceBefore, v.throughVerb = lastRunes(v.sentenceBefore, exfilWindow), lastRunes(v.throughVerb, exfilWindow)
+					}
+					if v.acquired != nil {
+						v.acqSentence = cutRunes(v.window, v.acquired.end)
+						if i := strings.LastIndex(v.acqSentence, ". "); i >= 0 {
+							v.acqSentence = v.acqSentence[i+2:]
+						}
+					} else { // the whole sentence stands in for the acquisition's
+						v.acqSentence, v.wholeAcq = sentence, true
+					}
 				}
-				// The block so far, plus the tail of the previous paragraph or list item, bounded
-				// to the last _EXFIL_WINDOW code points (Python's [...][-4000:] without building the
-				// whole prefix each delivery). before is the same window without the previous tail.
-				head := raw[:s.byteStart+tx.byte(d.start)]
-				before := lastRunes(head, exfilWindow)
-				window := before
-				if bc := utf8.RuneCountInString(before); bc < exfilWindow {
-					window = lastRunes(prevTail+" ", exfilWindow-bc) + before
+				// The object and shape: from the gap, the verb or the text before it, resolved once
+				// per gap; only a blank gap reads the text after the address, per delivery.
+				gap := ""
+				obj, shape := v.pre, d.shape
+				if d.gap != nil {
+					gap = *d.gap
+					r, known := v.objects[gap]
+					if !known {
+						r = objectOf(gap, d.verb, v.pre)
+						v.objects[gap] = r
+					}
+					switch {
+					case r.skip:
+						continue
+					case r.tail:
+						tail := x.slice(d.addrEnd, d.addrEnd+80)
+						if !exfilObjectRE.MatchString(tail) && !exfilPossessiveRE.MatchString(tail) {
+							continue
+						}
+						obj, shape = tail, "recipient-first delivery"
+					default:
+						obj = r.obj
+						if r.shape != "" {
+							shape = r.shape
+						}
+					}
 				}
-				// Negation is judged sentence by sentence: an acquisition counts unless its own
-				// sentence negates it, and the delivery sentence must not negate or contrast it.
-				acquired, anyAcquisition := firstAcquisition(window)
-				owned := exfilPossessiveRE.MatchString(obj) || (yourRE.MatchString(obj) && exfilSensitiveRE.MatchString(obj))
-				if !anyAcquisition && !owned { // "send your passwords to ..."
+				owned, known := v.owned[obj]
+				if !known {
+					owned = exfilPossessiveRE.MatchString(obj) || (yourRE.MatchString(obj) && exfilSensitiveRE.MatchString(obj))
+					v.owned[obj] = owned
+				}
+				if !v.anyAcquisition && !owned { // "send your passwords to ..."
 					continue
 				}
-				if anyAcquisition && acquired == nil {
+				if v.anyAcquisition && v.acquired == nil {
 					continue
 				}
-				sentenceBefore := x.cut(d.start)
-				if negated(x.cut(d.end)) || exfilContrastRE.MatchString(sentenceBefore) {
+				if v.negatedOrContrasted.get(func() bool { return negated(v.throughVerb) || exfilContrastRE.MatchString(v.sentenceBefore) }) {
 					continue
 				}
 				// a disclosure, not an order: third-person delivery verb or a product subject
-				verb := pytext.Lower(d.verb)
-				thirdPerson := strings.HasSuffix(verb, "s") && verb != "cc's" && verb != "bcc's" && !youRE.MatchString(sentenceBefore)
-				acqSentence := sentence
-				if acquired != nil {
-					acqSentence = cutRunes(window, acquired.end)
-					if i := strings.LastIndex(acqSentence, ". "); i >= 0 {
-						acqSentence = acqSentence[i+2:]
+				thirdPerson := strings.HasSuffix(v.verb, "s") && v.verb != "cc's" && v.verb != "bcc's" &&
+					!v.youBefore.get(func() bool { return youRE.MatchString(v.sentenceBefore) })
+				disclosureAcq := func() bool {
+					if v.wholeAcq {
+						return once(&wholeDisclosure, exfilDisclosureRE)
 					}
+					return exfilDisclosureRE.MatchString(v.acqSentence)
 				}
-				if thirdPerson || exfilDisclosureRE.MatchString(acqSentence) || exfilDisclosureRE.MatchString(sentenceBefore) {
+				if thirdPerson || v.disclosureAcq.get(disclosureAcq) ||
+					v.disclosureBefore.get(func() bool { return exfilDisclosureRE.MatchString(v.sentenceBefore) }) {
 					continue
 				}
-				data := window + " "
-				if d.gap != nil {
-					data += *d.gap
+				credential, known := v.credential[gap] // the data guards read window + gap, once per gap
+				if !known {
+					data := v.window + " " + gap
+					credential = exfilCredentialRE.MatchString(data)
+					v.credential[gap], v.sensitive[gap] = credential, exfilSensitiveRE.MatchString(data)
 				}
-				if exfilServiceHostRE.MatchString(rcp.host) && !exfilCredentialRE.MatchString(data) {
+				sensitive := v.sensitive[gap]
+				if ri.service && !credential {
 					continue
 				}
-				shared := exfilRoleLocalRE.MatchString(rcp.local) || exfilDevHostRE.MatchString(rcp.host)
-				if shared && !exfilSensitiveRE.MatchString(data) {
+				if ri.shared && !sensitive {
 					continue
 				}
-				if exfilTelemetryHostRE.MatchString(rcp.host) &&
-					(exfilTelemetryDataRE.MatchString(obj) || exfilTelemetryDataRE.MatchString(acqSentence)) &&
-					!exfilSensitiveRE.MatchString(data) && !exfilCredentialRE.MatchString(data) &&
-					!exfilPossessiveRE.MatchString(sentence) && !exfilPossessiveRE.MatchString(acqSentence) &&
-					!codelane.DropHostRE.MatchString(rcp.host) {
+				telemetryAcq := func() bool {
+					if v.wholeAcq {
+						return once(&wholeTelemetry, exfilTelemetryDataRE)
+					}
+					return exfilTelemetryDataRE.MatchString(v.acqSentence)
+				}
+				possessiveAcq := func() bool {
+					if v.wholeAcq {
+						return once(&wholePossessive, exfilPossessiveRE)
+					}
+					return exfilPossessiveRE.MatchString(v.acqSentence)
+				}
+				if ri.telemetryHost && (exfilTelemetryDataRE.MatchString(obj) || v.telemetryAcq.get(telemetryAcq)) &&
+					!sensitive && !credential && !once(&wholePossessive, exfilPossessiveRE) && !v.possessiveAcq.get(possessiveAcq) && !ri.drop {
 					continue
 				}
-				soft := rcp.placeholderLocal || exampleSection || exfilAPIPrefixRE.MatchString(rcp.host)
-				if soft && !exfilCredentialRE.MatchString(data) {
+				soft := rcp.placeholderLocal || exampleSection || ri.api
+				if soft && !credential {
 					continue
 				}
-				if sxv042ExampleIntroRE.MatchString(sentenceBefore) || introPrev ||
-					exfilQuoteIntroRE.MatchString(sentenceBefore) || isDefensiveFrame(before) {
+				if introPrev || v.introBefore.get(func() bool {
+					return sxv042ExampleIntroRE.MatchString(v.sentenceBefore) || exfilQuoteIntroRE.MatchString(v.sentenceBefore)
+				}) || v.defensive.get(func() bool { return isDefensiveFrame(v.before) }) {
 					continue
 				}
 				seen[key] = true
@@ -426,8 +656,8 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				}
 				line, col := SourcePosition(b.Text, b.Start, s.start+d.start)
 				acquisition := "first-person object"
-				if acquired != nil {
-					acquisition = cutRunes(pytext.Strip(acquired.text), 80)
+				if v.acquired != nil {
+					acquisition = cutRunes(pytext.Strip(v.acquired.text), 80)
 				}
 				out = append(out, findings.Finding{
 					Vector: "SXV-043", Rule: "data-exfil-directive", Severity: "high", Path: a.Rel,
@@ -448,6 +678,16 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 	}
 	if total > findingCap {
 		out = append(out, capNote(a.Rel, "SXV-043", total-findingCap))
+	}
+	if chainCapped {
+		out = append(out, findings.Finding{Rule: "analysis-incomplete", Severity: "high", Path: a.Rel,
+			Message:  fmt.Sprintf("a recipient list in %s runs past %d addresses; the rest was not read", a.Rel, exfilMaxChain),
+			Evidence: map[string]any{"reason": "exfil_chain_cap", "addresses": exfilMaxChain}})
+	}
+	if exhausted {
+		out = append(out, findings.Finding{Rule: "analysis-incomplete", Severity: "high", Path: a.Rel,
+			Message:  fmt.Sprintf("the data-exfil lane stopped after %d delivery verbs in %s; later deliveries were not evaluated", exfilMaxVerbs, a.Rel),
+			Evidence: map[string]any{"reason": "exfil_verb_budget", "verbs": exfilMaxVerbs}})
 	}
 	return out
 }

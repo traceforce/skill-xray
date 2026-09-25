@@ -784,8 +784,17 @@ func Resolve(path string) (string, error) {
 	}
 }
 
-// IsWithinSource is is_within_source over resolved paths: lexically under root, or an existing
-// ancestor with root's filesystem identity (case and Unicode aliases the lexical test misses).
+// maxIdentityEntries bounds the directories read under a root for the identity comparison,
+// as discovery's entry budget does.
+const maxIdentityEntries = 100000
+
+// IsWithinSource is is_within_source over resolved paths: lexically under root; an existing
+// ancestor, the path itself included, with root's filesystem identity (case and Unicode
+// aliases the lexical test misses, or a link the resolver did not follow to the root or to a
+// file named as a root); or a directory ancestor reached through such a link, a Windows
+// junction, or lying on another volume, a subst drive, whose identity is a directory's inside
+// root. Only those two cases read the directories under root, once and bounded; a root that
+// cannot be read whole is treated as containing the path.
 func IsWithinSource(path, root string) bool {
 	if rel, err := filepath.Rel(root, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return true
@@ -794,14 +803,60 @@ func IsWithinSource(path, root string) bool {
 	if err != nil {
 		return false
 	}
+	otherVolume := !strings.EqualFold(filepath.VolumeName(path), filepath.VolumeName(root))
+	var inside []os.FileInfo
+	walked, complete := false, true
 	for p := path; ; p = filepath.Dir(p) {
-		if info, err := os.Stat(p); err == nil && os.SameFile(info, rootInfo) {
-			return true
+		if info, err := os.Stat(p); err == nil {
+			if os.SameFile(info, rootInfo) {
+				return true
+			}
+			l, err := os.Lstat(p)
+			link := err == nil && l.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0
+			if rootInfo.IsDir() && info.IsDir() && (link || otherVolume) { // a file named as a root has no directories to compare
+				if !walked {
+					inside, complete = directoriesUnder(root)
+					walked = true
+				}
+				if !complete {
+					return true
+				}
+				for _, d := range inside {
+					if os.SameFile(info, d) {
+						return true
+					}
+				}
+			}
 		}
 		if filepath.Dir(p) == p {
 			return false
 		}
 	}
+}
+
+// directoriesUnder is the identity of every directory below root, read through root's own
+// path, so a root that is itself a junction is entered, with links below it not followed;
+// complete is false when the read stopped at the budget or a directory or its identity could
+// not be read.
+func directoriesUnder(root string) (out []os.FileInfo, complete bool) {
+	complete = true
+	entries := 0
+	err := fs.WalkDir(os.DirFS(root), ".", func(p string, d fs.DirEntry, err error) error {
+		if entries++; err != nil || entries > maxIdentityEntries {
+			complete = false
+			return fs.SkipAll
+		}
+		if p != "." && d.IsDir() {
+			info, err := os.Stat(filepath.Join(root, filepath.FromSlash(p)))
+			if err != nil { // an identity that cannot be read is one that cannot be compared: fail closed
+				complete = false
+				return fs.SkipAll
+			}
+			out = append(out, info)
+		}
+		return nil
+	})
+	return out, complete && err == nil
 }
 
 // CheckTarget refuses a report path that is a symlink, lies inside any of the roots or names a

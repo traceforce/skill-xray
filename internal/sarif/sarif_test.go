@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -815,4 +816,60 @@ func TestValidateAcceptsFloatDecodedDocument(t *testing.T) {
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal(encode(t, build(t, p, reportFor(t, p, candidates(candidate()), nil))), &doc))
 	require.NoError(t, Validate(doc))
+}
+
+// A Windows junction that points into a subdirectory of the package is inside the package: the
+// resolver does not follow junctions, so the identity of every directory under the root is
+// compared, not only the root's.
+func TestJunctionIntoPackageSubdirectoryIsInside(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("junctions are a Windows construct")
+	}
+	base := t.TempDir()
+	pkg := filepath.Join(base, "pkg")
+	refs := filepath.Join(pkg, "refs")
+	require.NoError(t, os.MkdirAll(refs, 0o755))
+	link := filepath.Join(base, "outside", "into")
+	require.NoError(t, os.MkdirAll(filepath.Dir(link), 0o755))
+	out, err := exec.Command("cmd", "/c", "mklink", "/J", link, refs).CombinedOutput()
+	require.NoError(t, err, string(out))
+	assert.True(t, IsWithinSource(filepath.Join(link, "report.sarif"), pkg))
+	_, err = CheckTarget(filepath.Join(link, "report.sarif"), pkg)
+	assert.ErrorContains(t, err, "outside the scanned package")
+	assert.False(t, IsWithinSource(filepath.Join(base, "outside", "report.sarif"), pkg), "a sibling directory stays outside")
+}
+
+// A package named through a junction is entered by its own path for the identity comparison, so
+// a report path routed through another junction into one of its subdirectories is refused; and
+// a file named as a root is refused as the report even when the path reaches it through a
+// junction to its directory.
+func TestJunctionRootAndJunctionAliasOfAFileRootAreInside(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("junctions are a Windows construct")
+	}
+	junction := func(link, target string) {
+		require.NoError(t, os.MkdirAll(filepath.Dir(link), 0o755))
+		out, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	refs := filepath.Join(real, "refs")
+	require.NoError(t, os.MkdirAll(refs, 0o755))
+	rootLink := filepath.Join(base, "links", "pkg")
+	junction(rootLink, real)
+	into := filepath.Join(base, "out", "into")
+	junction(into, refs)
+	resolvedRoot, err := Resolve(rootLink)
+	require.NoError(t, err)
+	assert.True(t, IsWithinSource(filepath.Join(into, "report.sarif"), resolvedRoot))
+	_, err = CheckTarget(filepath.Join(into, "report.sarif"), rootLink)
+	assert.ErrorContains(t, err, "outside the scanned package")
+	assert.NoFileExists(t, filepath.Join(refs, "report.sarif"))
+	fileRoot := filepath.Join(base, "root.md")
+	require.NoError(t, os.WriteFile(fileRoot, []byte("original"), 0o644))
+	alias := filepath.Join(base, "out", "alias")
+	junction(alias, base)
+	assert.True(t, IsWithinSource(filepath.Join(alias, "root.md"), fileRoot), "the report path is the root file itself")
+	assert.False(t, IsWithinSource(filepath.Join(alias, "other.md"), fileRoot), "a sibling of the root file stays outside")
 }
