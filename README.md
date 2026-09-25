@@ -13,7 +13,7 @@ The scanner works offline with deterministic rules. A pinned [OpenGrep](https://
 ### Prerequisites
 
 - A released binary needs nothing else.
-- Building from source needs [Go 1.26](https://go.dev/dl/), `git` and `make`; the module pins the `go1.26.6` toolchain and fetches it when needed, and `go build` works without make.
+- Building from source needs [Go 1.26](https://go.dev/dl/); the module pins the `go1.26.6` toolchain and fetches it when needed. The clone below uses `git`, and `make` only wraps `go build`.
 - Scanning a git repository URL needs `git` on the PATH.
 
 ### Download a release
