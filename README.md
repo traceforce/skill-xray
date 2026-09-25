@@ -4,7 +4,7 @@
 
 Skill X-Ray is a static security scanner for AI agent skill packages. A skill package is a folder with a `SKILL.md` manifest and, often, bundled `scripts/`, `references/`, a `hooks.json` or a `.mcp.json`. Coding agents such as Claude Code, Cursor, Codex, Gemini CLI and OpenCode load these folders and act on them: the instructions go straight into the agent's context and the scripts run with the agent's privileges, so a bad skill can read your data or run code on your machine. Skill X-Ray reads a package before you install it and never executes anything in it.
 
-It is the sibling of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same job for MCP servers; if an MCP server is what you need to scan, use that one. Like MCP X-Ray it writes a [SARIF](https://sarifweb.azurewebsites.net/) report you can feed into any security tooling or CI pipeline, and it can scan one skill or every skill installed on your machine in one go.
+It is the sibling of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same job for MCP servers; if an MCP server is what you need to scan, use that one. Like MCP X-Ray it writes a [SARIF](https://sarifweb.azurewebsites.net/) report that SARIF-aware tools and CI pipelines can read, and it can scan one skill or every skill in the folders the common coding agents load from, in one go.
 
 The scanner works offline with deterministic rules. A pinned [OpenGrep](https://github.com/opengrep/opengrep) engine covers bundled Python, POSIX shell (bash, sh, dash), JavaScript and TypeScript. An optional LLM pass, called the LLM lane in this file and in the report, adds a semantic check on top. It is off unless you ask for it, and when it is on it sends the skill text to the provider you configure.
 
@@ -12,7 +12,7 @@ The scanner works offline with deterministic rules. A pinned [OpenGrep](https://
 
 ### Prerequisites
 
-- A released binary needs nothing else.
+- A released binary runs on its own. The code engine is a separate download, described below.
 - Building from source needs [Go 1.26](https://go.dev/dl/); the module pins the `go1.26.6` toolchain and fetches it when needed. The clone below uses `git`, and `make` only wraps `go build`.
 - Scanning a git repository URL needs `git` on the PATH.
 
@@ -235,7 +235,7 @@ skill-xray version
 
 Every exit 2 comes with a reason on stderr: an `analysis incomplete:` line naming the package, the diagnostic and the file for each gap; a `skill discovery incomplete (<reason>):` line for a `system-scan` root that could not be walked; a `no SARIF run for <package>:` line when one package's run could not be built; or a `cannot ...` or `skill-xray: error:` line for everything else. A package whose analysis hit an internal error is reported as `FINDINGS`, not as `CLEAN`.
 
-A file that was read but that no lane could analyze, for example a PowerShell, zsh, ksh or fish script or an unparseable Python code fence, appears as a high `analysis-incomplete` result in the report and sets exit code 2 like any other high gap. It was read, so it does not lower the coverage number.
+A script the scanner recognises but no lane can analyze, which means one in PowerShell, batch, zsh, Ruby or Perl, or an unparseable Python code fence, appears as a high `analysis-incomplete` result in the report and sets exit code 2 like any other high gap. It was read, so it does not lower the coverage number. A source file in any other language, such as Go, PHP, Rust, ksh or fish, is not treated as a script: the report records it as a low `coverage-note` with the reason `unmodeled_content`, it does not set exit code 2, and the package can still read `CLEAN` on the console. Read the report's coverage notes before trusting a `CLEAN` on a package that ships such files.
 
 The code engine gets 45 seconds per package. A package whose code takes longer, for example one shipping more than a thousand scripts, gets a high `opengrep-timeout` gap and exit code 2 in place of its code findings, so a package can read `FINDINGS` on a slow machine where a fast one reads `BLOCKING`.
 
@@ -245,7 +245,7 @@ The code engine gets 45 seconds per package. A package whose code takes longer, 
 
 The report and the policy file must be outside the scanned package, and the report's directory must exist. `scan` checks both before any file of the package is read and refuses with `cannot prepare SARIF: Report directory is missing or not a directory: <path>` or `cannot prepare SARIF: Report must be outside the scanned package` (a report path that is itself a symlink gets the second message); `system-scan` reports the second as `cannot write SARIF: ...` after discovery. A directory you cannot write to is found out only when the report is written, after the scan, as `cannot write SARIF: ...`. A policy that is missing, inside the package or not valid JSON is refused the same way with `Operator policy ...` in place of `Report ...`. Nothing is written on a refusal and the exit code is 2. The writer validates the document first, then replaces the target through a temporary file in the same directory, so a failed run leaves an earlier report untouched. Reports over 64 MiB fail instead of being truncated. A scan you interrupt writes no report and can leave the engine's working directory, `skill-xray-opengrep-*`, in the system temp folder.
 
-Output is canonical ASCII JSON with sorted keys, so with the LLM lane off the same input and configuration produce a byte-identical report on every platform. The one known exception is a zip whose member names end in a space or a dot, which Windows renames on extraction. Source evidence can contain credentials, so treat reports as sensitive.
+Output is canonical ASCII JSON with sorted keys, so with the LLM lane off the same input and configuration produce a byte-identical report; the Windows and Linux builds were compared and agree. The one known exception is a zip whose member names end in a space or a dot, which Windows renames on extraction. Source evidence can contain credentials, so treat reports as sensitive.
 
 ## Examples
 
@@ -305,7 +305,7 @@ The file walker, the part of the scanner that reads the package off disk, treats
 - it caps per-file size, file count and total bytes read, so a crafted package cannot make it run out of memory. Time is bounded only through those caps: a 1 MiB Markdown file takes about a minute, so give a scan of a very large package a CI timeout;
 - it does not follow a symlink or NTFS junction inside the package, wherever it points; each is recorded in the ledger as unread. The package root you name may itself be a symlink;
 - it does not open a FIFO, device or socket;
-- it inventories shipped compiled and native code (`.pyc`, `.pyo`, `.pyd`, `.so`, versioned `.so.N`, `.dylib`, `.dll`, `.exe`, `.wasm`, `.jar`, `.war`, `.class`, `.node`, `.o`, `.a`) as one `analysis-incomplete` result per file with the reason `shipped_compiled`, so a full coverage number can never hide code nobody reviewed;
+- it inventories shipped compiled and native code (`.pyc`, `.pyo`, `.pyd`, `.so`, versioned `.so.N`, `.dylib`, `.dll`, `.exe`, `.wasm`, `.jar`, `.war`, `.class`, `.node`, `.o`, `.a`) as one `analysis-incomplete` result per file with the reason `shipped_compiled`, so a full coverage number does not hide compiled code;
 - it reports content it cannot review with the reason `unreviewable_content`. An `.svg` is a low `coverage-note`, because an agent never reads it as instructions. A `.pdf` or a nested archive is a high `analysis-incomplete` gap with exit code 2, because an agent may be told to read or unpack it;
 - raw HTML inside a Markdown file is a high `analysis-incomplete` gap with the reason `raw_html` when it carries text or a link label, or when it could not be read whole. Markup with no text, such as a centered image block, is a low note;
 - it records every file it does not read, with a reason. A skipped file lowers the reported coverage unless it is an inert asset, compiled code or an excluded directory (`.git`, `.hg`, `.svn`, `.venv`, `venv`, `.mypy_cache`, `.pytest_cache`, `.idea`, `.tox`, `.ruff_cache`); a bundled `node_modules`, `dist`, `build`, `vendor` or `target` is pruned too and does lower it.
