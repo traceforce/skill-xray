@@ -801,13 +801,17 @@ var (
 		`(?:[^.!?\n]|\.(?=\S))){0,80}?`
 )
 
-// bundledRuns is _BUNDLED_RUN_RE.finditer.
-// otherCommandRE: a command named after a concealment cue that is not a shipped script.
-var otherCommandRE = regexp.MustCompile(`(?i)^[^!?\n]*?(?:\x60[^\x60\n]+\x60|\b(?:npm|npx|pnpm|yarn|pip3?|pipx|uv|brew|apt(?:-get)?|cargo|go|git|gh|docker|make|codex|claude|cursor|gemini)\b)`)
+// otherCommandRE: the command right after a cue that ends in "to run": a code span or a tool
+// word there is what the sentence warns against, not the shipped script named elsewhere.
+var otherCommandRE = regexp.MustCompile(`(?i)^\s*(?:the\s+|a\s+|an\s+|this\s+)?(?:\x60[^\x60\n]+\x60|\b(?:npm|npx|pnpm|yarn|pip3?|pipx|uv|brew|apt(?:-get)?|cargo|go|git|gh|docker|make|codex|claude|cursor|gemini)\b)`)
 
-// transparencyCueRE: the sentence-end concealment phrase, which needs a run in its own
-// sentence; "changes are applied without telling the user" describes a program, not a run.
-var transparencyCueRE = regexp.MustCompile(`(?i)^(?:without|do not|don'?t|never)\s+(?:telling|informing|notifying|alerting)\b`)
+// warnedRunCueRE: a cue that ends by telling the user (not) to run something.
+var warnedRunCueRE = regexp.MustCompile(`(?i)\bto\s+(?:run|execute|invoke|call|launch|start)\s*$`)
+
+// transparencyCueRE: the sentence-end concealment phrase alone, which needs a run in its own
+// sentence; "changes are applied without telling the user" describes a program, not a run,
+// while "without telling the user that you ran it" names the run and stands on its own.
+var transparencyCueRE = regexp.MustCompile(`(?i)^(?:without|do not|don'?t|never)\s+(?:telling|informing|notifying|alerting)\s+(?:the\s+)?(?:end[- ]?)?(?:user|human|operator|person)s?\s*[.;!?]?$`)
 
 // cueNegatedRE: "run it silently is not supported" denies the concealment it names.
 var cueNegatedRE = regexp.MustCompile(`(?i)^[^.;!?\n]{0,40}?\b(?:(?:is|are|was|were)\s+not\s+(?:supported|allowed|possible|available|recommended|permitted)|not\s+(?:a\s+)?(?:supported|valid|possible))\b`)
@@ -826,30 +830,38 @@ func sentenceBounds(text string, start, end int) (int, int) {
 	return s, e
 }
 
-// warnsAboutAnotherCommand is true when a concealment cue's sentence names no bundled run and
-// names another command after the cue: "do not tell the user to run `codex plugin add`" warns
-// against a command, it does not hide the shipped script named elsewhere in the block.
-func warnsAboutAnotherCommand(text string, start, end int) bool {
-	s, e := sentenceBounds(text, start, end)
-	if len(bundledRuns(text[s:e])) > 0 || bundledProseRE.MatchString(text[s:e]) {
-		return false
-	}
-	return otherCommandRE.MatchString(text[end:e])
+// cueSentences judges concealment cues by their own sentence. Cues arrive in text order, so the
+// sentence found for one cue serves every cue inside it, and a sentence of many cues costs one
+// scan rather than one per cue.
+type cueSentences struct {
+	text  string
+	s, e  int
+	runs  bool // the sentence names a bundled run
+	valid bool
 }
 
-// usableCovertCue drops a cue that is a warning about another command, a transparency phrase
-// with no run in its sentence, or a concealment the sentence denies.
-func usableCovertCue(text string, c []int) bool {
-	if warnsAboutAnotherCommand(text, c[0], c[1]) {
-		return false
+func (cs *cueSentences) sentence(c []int) (int, int, bool) {
+	if !cs.valid || c[0] < cs.s || c[1] > cs.e {
+		cs.s, cs.e = sentenceBounds(cs.text, c[0], c[1])
+		cs.runs = len(bundledRuns(cs.text[cs.s:cs.e])) > 0 || bundledProseRE.MatchString(cs.text[cs.s:cs.e])
+		cs.valid = true
 	}
-	s, e := sentenceBounds(text, c[0], c[1])
-	if transparencyCueRE.MatchString(text[c[0]:c[1]]) && len(bundledRuns(text[s:e])) == 0 && !bundledProseRE.MatchString(text[s:e]) {
-		return false
-	}
-	return !cueNegatedRE.MatchString(text[c[1]:e])
+	return cs.s, cs.e, cs.runs
 }
 
+// usable drops a cue whose sentence names no bundled run and either warns against another
+// command ("do not tell the user to run `codex plugin add`") or is the bare transparency
+// phrase, and a cue whose sentence denies the concealment.
+func (cs *cueSentences) usable(c []int) bool {
+	_, e, runs := cs.sentence(c)
+	cue, rest := cs.text[c[0]:c[1]], cs.text[c[1]:e]
+	if !runs && ((warnedRunCueRE.MatchString(cue) && otherCommandRE.MatchString(rest)) || transparencyCueRE.MatchString(cue)) {
+		return false
+	}
+	return !cueNegatedRE.MatchString(rest)
+}
+
+// bundledRuns is _BUNDLED_RUN_RE.finditer.
 func bundledRuns(s string) [][]int {
 	return findAll(bundledRunRE, s, func(m []int) bool {
 		if m[2] >= 0 {
@@ -945,8 +957,9 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 		// brands every run in the section, an override sentence only its own block
 		var coverts [][]int
 		var sectionCue []int
+		cues := &cueSentences{text: j}
 		for _, c := range covertRunCueRE.FindAllStringIndex(j, -1) {
-			if quoted(j, c[0], c[1], false) || !usableCovertCue(j, c) {
+			if quoted(j, c[0], c[1], false) || !cues.usable(c) {
 				continue
 			}
 			coverts = append(coverts, c)

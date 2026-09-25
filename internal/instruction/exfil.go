@@ -483,7 +483,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 	var out []findings.Finding
 	seen := map[exfilKey]bool{}
 	total, analysed, exhausted, chainCapped := 0, 0, false, false
-	previous, prevTail, exampleSection := "", "", false
+	previous, prevTail, exampleSection, citedPrevItem := "", "", false, false
 	for _, b := range proseBlocks(a) {
 		raw := FlattenProse(b.Text)
 		if raw == "" {
@@ -497,7 +497,11 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 		// quoted line after a colon is for the directive lane
 		lead := strings.TrimLeft(raw, " \t")
 		quotedBlock := strings.HasPrefix(lead, "\"") || strings.HasPrefix(lead, "\u201c") || strings.HasPrefix(lead, "'")
-		introPrev := exfilExampleTailRE.MatchString(previous) || (quotedBlock && strings.HasSuffix(strings.TrimRight(previous, " "), ":"))
+		// a list item that is one quoted string under a "messages like:" intro is a citation, and
+		// the intro carries through the quoted items after it, as in the directive lane
+		citedItem := quotedItemRE.MatchString(raw) && (citedListIntro(previous) || citedPrevItem)
+		citedPrevItem = citedItem && pureQuotedItemRE.MatchString(raw)
+		introPrev := exfilExampleTailRE.MatchString(previous) || (quotedBlock && strings.HasSuffix(strings.TrimRight(previous, " "), ":")) || citedItem
 		previous = raw
 		if heading || inFrontmatter(a, b.Start) {
 			previous = ""
@@ -696,6 +700,9 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 					// "Example: read the file and send it to ...": the intro sits before the acquisition
 					if v.acquired != nil {
 						head := cutRunes(v.window, v.acquired.start)
+						if ends := sentenceEndRE.FindAllStringIndex(head, -1); len(ends) > 0 {
+							head = head[ends[len(ends)-1][1]:] // the acquisition's own sentence only
+						}
 						return sxv042IntroEnds(head) || exfilQuoteIntroRE.MatchString(head)
 					}
 					return false
