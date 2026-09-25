@@ -66,7 +66,7 @@ skill-xray scan https://github.com/example/my-skill.git
 
 The target can be a directory, a single file such as `SKILL.md`, a `.zip` archive, an `https://` URL to a zip or to a single file, or a git repository given as an `https://` address ending in `.git`. `ssh://`, `git@` and `git://` addresses are refused with `git ingest supports https:// repository URLs only`. A plain `http://` address is refused as `not a directory, file, .zip, URL or git repo`, because only `https://` counts as a URL. Tar archives are refused with `unpack it and scan the directory`, so unpack those first.
 
-Directory, file and zip scans never touch the network. URL and git scans do, and they stop with exit code 2 rather than carry on when a download is too large, holds too many files, or resolves to a private or local address.
+Directory, file and zip scans never touch the network. URL and git scans do, and they stop with exit code 2 rather than carry on when the URL redirects, the download is too large, holds too many files, or resolves to a private or local address. Give a URL that points directly at the file: a GitHub archive link such as `.../archive/refs/heads/main.zip` redirects and is refused, while its target `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/main` downloads.
 
 `scan` treats whatever you point it at as one package. A folder that holds several skills becomes one merged run named after that folder, so use `system-scan --root` for a folder of skills. A folder with no `SKILL.md` still scans and can read `CLEAN`; stderr then says `note: no SKILL.md found under <path>; nothing was evaluated as a skill manifest`, so look for that line before trusting a `CLEAN` on something you unpacked by hand.
 
