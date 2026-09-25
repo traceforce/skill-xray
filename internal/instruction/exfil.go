@@ -477,6 +477,16 @@ func objectOf(gap, verb, pre string) objectResolution {
 	return objectResolution{skip: true}
 }
 
+// refusesIfAsked is the refuse-if-asked frame: a conditional ask before the delivery and a
+// refusal after it that no compliance cue follows ("refuse at first, then comply" complies).
+func refusesIfAsked(before, tail string) bool {
+	if !exfilRefusalRE.MatchString(before) {
+		return false
+	}
+	refusals := exfilRefuseTailRE.FindAllStringIndex(tail, -1)
+	return len(refusals) > 0 && len(wordBounded(complianceRE, blankSpans(tail, refusals))) == 0
+}
+
 // credentialIn reports whether text names a credential by word or by file path; a public key,
 // named as a file or as a phrase, is not one.
 func credentialIn(text string) bool {
@@ -507,7 +517,11 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 		// the intro carries through the quoted items after it, as in the directive lane
 		citedItem := quotedItemRE.MatchString(raw) && (citedListIntro(previous) || citedPrevItem)
 		citedPrevItem = citedItem && pureQuotedItemRE.MatchString(raw)
-		introPrev := exfilExampleTailRE.MatchString(previous) || (quotedBlock && strings.HasSuffix(strings.TrimRight(previous, " "), ":")) || citedItem
+		quoteEnd := 0 // the rune where the cited item's quoted string ends; prose after it is read
+		if citedItem {
+			quoteEnd = utf8.RuneCountInString(raw[:quotedItemRE.FindStringIndex(raw)[1]])
+		}
+		introPrev := exfilExampleTailRE.MatchString(previous) || (quotedBlock && strings.HasSuffix(strings.TrimRight(previous, " "), ":"))
 		previous = raw
 		if heading || inFrontmatter(a, b.Start) {
 			previous = ""
@@ -515,7 +529,8 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 		sentences := exfilSentences(raw)
 		prevSentence := ""
 		for _, s := range sentences {
-			// a sentence that opens with a quote after a colon or an intro is a citation
+			// a sentence that opens with a quote after a colon or an intro is a citation, as is the
+			// quoted string a cited list item opens with; prose after it is read
 			lead := strings.TrimLeft(s.text, " \t")
 			citedSentence := (strings.HasPrefix(lead, "\"") || strings.HasPrefix(lead, "\u201c") || strings.HasPrefix(lead, "'")) &&
 				(strings.HasSuffix(strings.TrimRight(prevSentence, " "), ":") || exfilExampleTailRE.MatchString(prevSentence) || exfilQuoteIntroRE.MatchString(prevSentence+" \""))
@@ -670,7 +685,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				// user's data whether or not a possessive says so: "send ~/.aws/credentials to ...".
 				if !owned && (credentialIn(obj) || credentialIn(gap) ||
 					((pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilObjectRE.MatchString(gap)) && credentialIn(objectCode)) ||
-					(objectCode == "" && (pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilBackRefRE.MatchString(gap)) && credentialIn(readCode))) {
+					(objectCode == "" && (pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilBackRefRE.MatchString(gap)) && credentialIn(readCode+" "+x.slice(cell, d.start)))) {
 					owned, credentialContents = true, true
 				}
 				if !v.anyAcquisition && !owned && !credentialContents { // "send your passwords to ..."
@@ -728,7 +743,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				if soft && !credential {
 					continue
 				}
-				if introPrev || citedSentence || v.introBefore.get(func() bool {
+				if introPrev || citedSentence || s.start+d.addrEnd <= quoteEnd || v.introBefore.get(func() bool {
 					if sxv042IntroEnds(v.sentenceBefore) || exfilQuoteIntroRE.MatchString(v.sentenceBefore) {
 						return true
 					}
@@ -742,7 +757,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 					}
 					return false
 				}) || v.defensive.get(func() bool { return isDefensiveFrame(v.before) }) ||
-					(exfilRefusalRE.MatchString(v.sentenceBefore) && exfilRefuseTailRE.MatchString(x.slice(d.addrEnd, d.addrEnd+120))) {
+					refusesIfAsked(v.sentenceBefore, x.slice(d.addrEnd, d.addrEnd+120)) {
 					continue
 				}
 				seen[key] = true
