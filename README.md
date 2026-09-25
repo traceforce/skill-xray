@@ -237,13 +237,27 @@ Every exit 2 comes with a reason on stderr: an `analysis incomplete:` line namin
 
 A file that was read but that no lane could analyze, for example a PowerShell, zsh, ksh or fish script or an unparseable Python code fence, appears as a high `analysis-incomplete` result in the report and sets exit code 2 like any other high gap. It was read, so it does not lower the coverage number.
 
+The code engine gets 45 seconds per package. A package whose code takes longer, for example one shipping more than a thousand scripts, gets a high `opengrep-timeout` gap and exit code 2 in place of its code findings, so a package can read `FINDINGS` on a slow machine where a fast one reads `BLOCKING`.
+
 ## Output format
 
 `scan` and `system-scan` write one [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) document, validated against the OASIS schema embedded in the binary before anything is written. `scan` writes one run; `system-scan` writes one file with one run per package. Each result carries a readable rule ID, a stable fingerprint, a severity, bounded evidence, source locations, and a `properties.category` of `security-finding` or `analysis-diagnostic`. Each run also records, under its properties, what it ran with and what it saw: the OpenGrep version and ruleset digest, the package name and content digest, the coverage status, the capability context, the raw candidates and how they became results, and, with the LLM lane on, `llmUsage`, plus `llmReview` in shadow or review mode. [docs/reporting.md](docs/reporting.md) describes each field.
 
-The report and the policy file must be outside the scanned package, and the report's directory must exist. `scan` checks both before any file of the package is read and refuses with `cannot prepare SARIF: Report directory is missing or not a directory: <path>` or `cannot prepare SARIF: Report must be outside the scanned package`; `system-scan` reports the second as `cannot write SARIF: ...` after discovery. A policy that is missing, inside the package or not valid JSON is refused the same way with `Operator policy ...` in place of `Report ...`. Nothing is written on a refusal and the exit code is 2. The writer validates the document first, then replaces the target through a temporary file in the same directory, so a failed run leaves an earlier report untouched. Reports over 64 MiB fail instead of being truncated.
+The report and the policy file must be outside the scanned package, and the report's directory must exist. `scan` checks both before any file of the package is read and refuses with `cannot prepare SARIF: Report directory is missing or not a directory: <path>` or `cannot prepare SARIF: Report must be outside the scanned package` (a report path that is itself a symlink gets the second message); `system-scan` reports the second as `cannot write SARIF: ...` after discovery. A directory you cannot write to is found out only when the report is written, after the scan, as `cannot write SARIF: ...`. A policy that is missing, inside the package or not valid JSON is refused the same way with `Operator policy ...` in place of `Report ...`. Nothing is written on a refusal and the exit code is 2. The writer validates the document first, then replaces the target through a temporary file in the same directory, so a failed run leaves an earlier report untouched. Reports over 64 MiB fail instead of being truncated. A scan you interrupt writes no report and can leave the engine's working directory, `skill-xray-opengrep-*`, in the system temp folder.
 
-Output is canonical ASCII JSON with sorted keys, so with the LLM lane off the same input and configuration produce a byte-identical report. Source evidence can contain credentials, so treat reports as sensitive.
+Output is canonical ASCII JSON with sorted keys, so with the LLM lane off the same input and configuration produce a byte-identical report on every platform. The one known exception is a zip whose member names end in a space or a dot, which Windows renames on extraction. Source evidence can contain credentials, so treat reports as sensitive.
+
+## Examples
+
+```bash
+# A skill you downloaded and are about to install
+skill-xray scan ~/Downloads/deploy-helper
+# BLOCKING  seen=6   read=6   cov=100.0%  /home/me/Downloads/deploy-helper
+# report: findings.sarif.json
+
+# A CI job: the report goes next to the checkout, a reviewed policy quiets one known false positive
+skill-xray scan ./skills/release-notes --output ../reports/release-notes.sarif --policy ./reviews/release-notes.json
+```
 
 ## Configuration
 
@@ -262,18 +276,6 @@ Without `--llm` the LLM variables are ignored. `--llm` without a provider and a 
 ### If the `llm:` line says `HTTP 404`
 
 The model or the endpoint was not found; the line says so and points at `SKILLXRAY_LLM_MODEL` and `SKILLXRAY_LLM_BASE_URL`. On a vendor's own endpoint, pick a model the key can call. On a custom base URL, check the path as well.
-
-## Examples
-
-```bash
-# A skill you downloaded and are about to install
-skill-xray scan ~/Downloads/deploy-helper
-# BLOCKING  seen=6   read=6   cov=100.0%  /home/me/Downloads/deploy-helper
-# report: findings.sarif.json
-
-# A CI job: the report goes next to the checkout, a reviewed policy quiets one known false positive
-skill-xray scan ./skills/release-notes --output ../reports/release-notes.sarif --policy ./reviews/release-notes.json
-```
 
 ## Detection vectors
 
@@ -300,7 +302,7 @@ The run properties keep the audit: `rawCandidates` holds the emitted candidates,
 
 The file walker, the part of the scanner that reads the package off disk, treats every package as hostile, so:
 
-- it caps per-file size, file count and total bytes read, so a crafted package cannot make it hang or run out of memory;
+- it caps per-file size, file count and total bytes read, so a crafted package cannot make it run out of memory. Time is bounded only through those caps: a 1 MiB Markdown file takes about a minute, so give a scan of a very large package a CI timeout;
 - it does not follow a symlink or NTFS junction inside the package, wherever it points; each is recorded in the ledger as unread. The package root you name may itself be a symlink;
 - it does not open a FIFO, device or socket;
 - it inventories shipped compiled and native code (`.pyc`, `.pyo`, `.pyd`, `.so`, versioned `.so.N`, `.dylib`, `.dll`, `.exe`, `.wasm`, `.jar`, `.war`, `.class`, `.node`, `.o`, `.a`) as one `analysis-incomplete` result per file with the reason `shipped_compiled`, so a full coverage number can never hide code nobody reviewed;
@@ -308,7 +310,7 @@ The file walker, the part of the scanner that reads the package off disk, treats
 - raw HTML inside a Markdown file is a high `analysis-incomplete` gap with the reason `raw_html` when it carries text or a link label, or when it could not be read whole. Markup with no text, such as a centered image block, is a low note;
 - it records every file it does not read, with a reason. A skipped file lowers the reported coverage unless it is an inert asset, compiled code or an excluded directory (`.git`, `.hg`, `.svn`, `.venv`, `venv`, `.mypy_cache`, `.pytest_cache`, `.idea`, `.tox`, `.ruff_cache`); a bundled `node_modules`, `dist`, `build`, `vendor` or `target` is pruned too and does lower it.
 
-Every run carries the coverage status, `no-reported-gap` or `incomplete`, and each gap is a result of its own.
+Every run carries the coverage status, `no-reported-gap` or `incomplete`, and each gap is a result of its own. The status also reads `incomplete` when a result carries a limitation, for example a code-engine taint trace the scanner could not validate, so a run can be `incomplete` with every file read; the `cov=` number on the verdict line counts files only.
 
 ## Develop
 
