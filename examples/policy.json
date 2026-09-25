@@ -1,0 +1,13 @@
+{
+  "version": "skill-xray/scoped-policy/v1",
+  "decisions": [
+    {
+      "rule_id": "skill-xray/opengrep-shell-fetch-pipe-exec",
+      "path": "SKILL.md",
+      "fingerprint": "e62235ad130122d2f0246b546ae1f27d3dc3f5debc63366a389e2996f44c0e63",
+      "context_digest": "eca3f3206a35e4b02381722a16627116190ddf42d3623e3d49fff990f9810b31",
+      "action": "suppress",
+      "reason": "Reviewed: the installer URL is our own release server and the script is pinned by the release checksum step"
+    }
+  ]
+}
