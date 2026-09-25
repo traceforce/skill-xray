@@ -2,11 +2,11 @@
 
 ## Overview
 
-Skill X-Ray is a static security scanner for AI agent skill packages. A skill package is a folder with a `SKILL.md` manifest and, often, bundled `scripts/`, `references/`, a `hooks.json` or a `.mcp.json`. Coding agents such as Claude Code, Cursor, Codex, Gemini CLI and OpenCode load these folders and act on them: the instructions go straight into the agent's context and the scripts run with the agent's privileges, so a bad skill can read your data or run code on your machine. Skill X-Ray reads a package before you install it, reports what its instructions and scripts would do, and never executes anything in it.
+Skill X-Ray is a static security scanner for AI agent skill packages. A skill package is a folder with a `SKILL.md` manifest and, often, bundled `scripts/`, `references/`, a `hooks.json` or a `.mcp.json`. Coding agents such as Claude Code, Cursor, Codex, Gemini CLI and OpenCode load these folders and act on them: the instructions go straight into the agent's context and the scripts run with the agent's privileges, so a bad skill can read your data or run code on your machine. Skill X-Ray reads a package before you install it, reports what it finds in its instructions and scripts, and never executes anything in it.
 
 It is the sibling of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same job for MCP servers. Like MCP X-Ray it writes a [SARIF](https://sarifweb.azurewebsites.net/) report that SARIF-aware tools and CI pipelines can read, and it can scan one skill or every skill in the folders the common coding agents load from.
 
-The scanner works offline with deterministic rules. A pinned [OpenGrep](https://github.com/opengrep/opengrep) engine, called the code engine below, covers bundled Python, POSIX shell (bash, sh, dash), JavaScript and TypeScript. An optional LLM lane adds a semantic check on top. It is off unless you ask for it, and when it is on it sends the skill text to the provider you configure.
+The scanner works offline with deterministic rules. A pinned [OpenGrep](https://github.com/opengrep/opengrep) engine, called the code engine below, covers bundled Python, POSIX shell (bash, sh, dash), JavaScript and TypeScript. An optional LLM pass, called the LLM lane below, adds a semantic check on top. It is off unless you ask for it, and when it is on it sends the skill text to the provider you configure.
 
 ## Installation
 
@@ -24,7 +24,7 @@ Each release on the [Releases](https://github.com/traceforce/skill-xray/releases
 skill-xray install-opengrep
 ```
 
-This downloads OpenGrep 1.29.0 for your platform, checks its size and SHA-256 against the values built into the binary, and stores it in the user cache. It is safe to run again. Without an engine the scanner still runs, but a package that ships code gets a high `opengrep-unavailable` gap in its report and exit code 2. An engine you point at explicitly that is missing, does not match the pin or sits in a directory another user could change gives the same kind of gap under the name `opengrep-unverified`. The cache paths and the order in which the scanner looks for an engine are in [docs/cli.md](docs/cli.md#code-engine).
+This downloads OpenGrep 1.29.0 for your platform, checks its size and SHA-256 against the values built into the binary, and stores it in the user cache. It is safe to run again. Without an engine the scanner still runs, but a package that ships code gets a high `opengrep-unavailable` gap in its report and exit code 2. The cache paths, the order in which the scanner looks for an engine, and what happens when an engine you point at fails the check are in [docs/cli.md](docs/cli.md#code-engine).
 
 ### Build from source
 
@@ -41,7 +41,7 @@ Without make, `go build -o bin/ ./cmd/skill-xray` does the same as `make all`. T
 
 There are four commands. `scan` analyzes one skill package, `system-scan` analyzes every skill installed on the machine, `install-opengrep` fetches the code engine, and `version` prints the version. Both scans write one SARIF report and print one verdict line per package.
 
-On Windows the same commands run from PowerShell or cmd. Write `$env:SKILLXRAY_LLM_PROVIDER = "anthropic"` where a bash example says `export SKILLXRAY_LLM_PROVIDER=anthropic`, and give `scan` a full path such as `$HOME\Downloads\deploy-helper` rather than `~/Downloads/deploy-helper`, because PowerShell does not expand `~` in that position. `--root ~/.claude/skills` works as written.
+On Windows the same commands run from PowerShell. Write `$env:SKILLXRAY_LLM_PROVIDER = "anthropic"` where a bash example says `export SKILLXRAY_LLM_PROVIDER=anthropic`, and give `scan` a full path such as `$HOME\Downloads\deploy-helper` rather than `~/Downloads/deploy-helper`, because PowerShell does not expand `~` in that position. `--root ~/.claude/skills` works as written, since the tool expands `~` in roots itself.
 
 ### Scan one skill
 
@@ -72,7 +72,7 @@ skill-xray scan https://github.com/example/my-skill.git
 - Unpinned remote installs, obfuscated or minified scripts, permission understatement, and writes that persist into agent configuration
 - Every analysis gap, kept visible as a result rather than dropped
 
-The full list with severities is under [Detection vectors](#detection-vectors).
+Examples with their severities are under [Detection vectors](#detection-vectors); the complete list of vectors is in `internal/findings/vectors.go`.
 
 The console shows one line per package and the report path:
 
@@ -81,7 +81,9 @@ BLOCKING  seen=4   read=4   cov=100.0%  ./my-skill
 report: findings.sarif.json
 ```
 
-`seen` is the number of files found, `read` the number read as text, and `cov` the share that was read. `BLOCKING` means at least one high or critical finding that names a vector, the class of behavior a rule detects. `FINDINGS` means any other finding that names a vector, or an analysis gap at medium severity or above. `CLEAN` means neither. The findings themselves are in the report, not on the console.
+`seen` is the number of files found, `read` the number read as text, and `cov` the share that was read. `BLOCKING` means at least one high or critical finding that names a vector, the class of behavior a rule detects. `FINDINGS` means any other finding that names a vector, or an analysis gap (a file or a part of one the scanner could not analyze) at medium severity or above. `CLEAN` means neither. The findings themselves are in the report, not on the console.
+
+A folder with no `SKILL.md` still scans and can read `CLEAN`; stderr then says `note: no SKILL.md found`, so look for that line before trusting a `CLEAN` on something you unpacked by hand. A folder that holds several skills becomes one merged run, so use `system-scan --root` for a folder of skills.
 
 Directory, file and zip scans never touch the network unless `--llm` is on. URL and git scans stop with exit code 2 when the URL redirects, the download is too large or holds too many files, or the host resolves to a private or local address. Only `https://` URLs count; `http://`, `ssh://` and tar archives are refused. [docs/cli.md](docs/cli.md#targets) lists every accepted target and refusal message.
 
@@ -108,7 +110,7 @@ export SKILLXRAY_LLM_BASE_URL=https://llm.example.com/v1
 skill-xray scan ./my-skill --llm
 ```
 
-With `--llm` alone the lane runs a semantic prompt-injection check (SXV-038). Its results are advisory and capped at medium severity: they can move a clean package to `FINDINGS` but not to `BLOCKING`, and they do not remove or lower a deterministic finding. If the provider is down or rejects the key, the deterministic scan still completes and the `llm:` console line names the failure:
+With `--llm` alone the lane runs a semantic prompt-injection check (SXV-038). Its results are advisory and capped at medium severity: they can move a clean package to `FINDINGS` but not to `BLOCKING`, and they do not remove or lower a deterministic finding. The `llm:` console line says what the lane did; if the provider is down or rejects the key, the deterministic scan still completes and that line names the failure:
 
 ```
 llm: 3 model calls; semantic check (SXV-038) ran
@@ -118,12 +120,12 @@ Three more flags turn the lane into a reviewer of the static text-pattern findin
 
 | flags | effect |
 |---|---|
-| `--llm --llm-shadow` | the model reviews the text-pattern findings and its proposals are recorded in the report; nothing changes |
+| `--llm --llm-shadow` | the model reviews the text-pattern findings; the report records its proposals and every result stays as it is |
 | `--llm --llm-review` | as shadow, but a validated false-positive proposal is annotated as `llm-disputed`; nothing is removed or downgraded |
 | `--llm --llm-review --llm-apply` | a validated dispute may demote that one finding to `low`, recorded as `corrected`; the finding is not suppressed and its severity is not raised |
 | `--llm --llm-shadow --llm-additive` or `--llm --llm-review --llm-additive` | also run the semantic SXV-038 check after the review; without it, shadow and review turn that check off |
 
-`--llm-shadow` and `--llm-review` exclude each other. A scan makes at most 25 model calls and sends at most 1 MiB of text per package, and `system-scan` spends that budget again for every package it finds. Do not gate CI on a disputed finding: the text the model reads while it reviews is written by the skill's author. How a review decision is made and audited is in [docs/cli.md](docs/cli.md#llm-review).
+`--llm-shadow` and `--llm-review` exclude each other. A scan makes at most 25 model calls and sends at most 1 MiB of text per package, and `system-scan` spends that budget again for every package it finds. Do not gate CI on a disputed finding: the text the model reads while it reviews is written by the skill's author, who can write prose that argues for dismissing a finding. How a review decision is made and audited is in [docs/cli.md](docs/cli.md#llm-review).
 
 ### Scan every skill installed on this machine
 
@@ -143,7 +145,7 @@ skill-xray system-scan --root ./vendored-skills --root ~/.claude/skills
 skill-xray system-scan --llm
 ```
 
-The known roots are `~/.claude/skills`, `~/.claude/plugins`, `~/.config/opencode/skills`, `~/.cursor/skills`, `~/.gemini/skills`, `~/.codex/skills`, `~/.copilot/skills`, `~/.agents/skills`, and in the current project `.claude/skills`, `.opencode/skills`, `.cursor/skills`, `.gemini/skills`, `.codex/skills`, `.github/skills` and `.agents/skills`. A package is a directory holding a `SKILL.md` or one of the plugin markers `.claude-plugin`, `.codex-plugin`, `plugin.json`, `.mcp.json` or `hooks.json`.
+The known roots are the skill folders of Claude Code, Cursor, Codex, Gemini CLI, OpenCode and Copilot under your home directory, plus the project-local ones; [docs/cli.md](docs/cli.md#discovery) lists the paths and the plugin markers that make a folder a package.
 
 ```
 CLEAN     seen=3   read=3   cov=100.0%  /home/me/.claude/skills/notes
@@ -200,7 +202,7 @@ The console then adds a line such as `policy: 1 suppressed, 0 demoted, 0 of 1 de
 
 ### Install the code engine
 
-`install-opengrep` downloads the pinned OpenGrep build for your platform, verifies it and stores it in the user cache. It is safe to run again.
+The same command as under [Download a release](#download-a-release); safe to run again.
 
 ```bash
 skill-xray install-opengrep
@@ -223,7 +225,7 @@ skill-xray version
 | 0 | the scan and the report completed. Findings, even critical ones, do not change the exit code; read the verdict or the report for those |
 | 2 | something did not complete: a usage error, a refused or failed input, a report that could not be written, a package whose analysis hit an internal error, a high-severity analysis gap, or for `system-scan` a root that could not be walked |
 
-Every exit 2 comes with a reason on stderr. A script the scanner recognises but cannot analyze, which means one in PowerShell, batch, zsh, Ruby or Perl, or an unparseable Python code fence, is a high `analysis-incomplete` result and sets exit code 2. A source file in any other language, such as Go, PHP, Rust, ksh or fish, is only a low `coverage-note` in the report: it does not set exit code 2 and the package can still read `CLEAN`, so read the report's coverage notes before trusting a `CLEAN` on a package that ships such files. The code engine gets 45 seconds per package; a package whose code takes longer gets a high `opengrep-timeout` gap and exit code 2 in place of its code findings.
+Every exit 2 comes with a reason on stderr. A script the scanner recognizes but cannot analyze, which means one in PowerShell, batch, zsh, Ruby or Perl, or an unparseable Python code fence, is a high `analysis-incomplete` result and sets exit code 2. A source file in any other language, such as Go, PHP, Rust, ksh or fish, is only a low `coverage-note` in the report: it does not set exit code 2 and the package can still read `CLEAN`, so read the report's coverage notes before trusting a `CLEAN` on a package that ships such files. The code engine gets 45 seconds per package; a package whose code takes longer gets a high `opengrep-timeout` gap and exit code 2 in place of its code findings.
 
 ## Output format
 
@@ -256,8 +258,8 @@ Sample reports are in [examples/findings](examples/findings/): `deploy-helper.sa
 | variable | meaning |
 |---|---|
 | `SKILLXRAY_LLM_PROVIDER` | `anthropic`, `openai` or `openai-compatible`; required for `--llm` |
-| `SKILLXRAY_LLM_API_KEY` | the API key; on a vendor's own endpoint `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is accepted as a fallback, but not on a custom base URL |
-| `SKILLXRAY_LLM_MODEL` | the model; defaults to `claude-haiku-4-5` for anthropic and `gpt-4.1-mini` for openai; required for openai-compatible |
+| `SKILLXRAY_LLM_API_KEY` | the API key; the vendor variables named under Supported providers are accepted as a fallback on the vendor's own endpoint, but not on a custom base URL |
+| `SKILLXRAY_LLM_MODEL` | the model; the defaults are under Supported providers; required for openai-compatible |
 | `SKILLXRAY_LLM_BASE_URL` | an https endpoint origin, with no userinfo, query or fragment; defaults to the vendor endpoint; required for openai-compatible |
 | `SKILL_XRAY_OPENGREP_BIN` | an OpenGrep binary to use instead of the cache; it must match the pinned size and SHA-256 and sit in a directory only you or an administrator can change. Note the underscore after `SKILL`, unlike the `SKILLXRAY_LLM_*` variables |
 
@@ -277,26 +279,18 @@ Each deterministic finding names a vector (`SXV-nnn`, the class of behavior it d
 
 | vector | reports | severity |
 |---|---|---|
-| SXV-009 / SXV-041 | an installer-style fetch piped to a shell, such as `curl -fsSL https://cli.vendor.com/install.sh \| sh`, reported as an unpinned remote install. Only the plain vendor shape matches: one HTTPS URL to a named installer path or bare host, with no credentials in the URL, no TLS bypass, no raw IP, no paste site, tunnel, shortener or placeholder host, and no shell substitution inside the fetch | medium |
+| SXV-009 / SXV-041 | an installer-style fetch piped to a shell, such as `curl -fsSL https://cli.vendor.com/install.sh \| sh`, reported as an unpinned remote install; only the plain vendor shape matches, one HTTPS URL to an installer path with no credentials, TLS bypass, raw IP, paste site or shell substitution in the fetch | medium |
 | SXV-032 | a read of the skill's own install directory under an agent's skills tree, which is its own files, not another agent's state | medium |
 | SXV-033 | the skill's description claims less permission than its files use (permission understatement); a capability signal, not on its own a malicious one | medium |
 | SXV-042 | a prose directive to run a script shipped with the skill, framed as hidden from the user (`covert-bundled-script-run`) or as an unconditional precondition of every task (`coerced-bundled-preflight`) | high; medium with a single coercion cue |
 | SXV-043 | a prose directive to obtain the user's data and send it to an e-mail address or URL hard-coded in the skill text | high |
 | SXV-044 | a shipped JavaScript or TypeScript script that is one machine-generated line: an obfuscator's hex identifiers and escaped string tables (`obfuscated-script`), or a minifier's output outside a declared `.min.js` (`minified-script`) | high; medium when only minified |
 
-Every report also records what the package claims about its execution and network needs, what its manifest declares, and what its code was observed doing. Unknown is not treated as safe, and a claim or a grant never authorizes behavior.
+Every report also records what the package claims about its execution and network needs, what its manifest declares, and what its code was observed doing. Unknown is not treated as safe, and neither a claim in the description nor a permission grant in the manifest authorizes behavior.
 
 ## Coverage
 
-The file walker, the part of the scanner that reads the package off disk, treats every package as hostile:
-
-- It caps per-file size (1 MiB), file count (5000) and total bytes read (256 MiB), so a crafted package cannot make it run out of memory. Time is not capped the same way: a Markdown file at the 1 MiB cap takes between ten seconds and a minute to analyze, so give a scan of a very large package a CI timeout.
-- It does not follow a symlink or NTFS junction inside the package and does not open a FIFO, device or socket; each is recorded as unread.
-- It inventories shipped compiled and native code (`.pyc`, `.so`, `.dll`, `.exe`, `.wasm`, `.jar` and the like) as one `analysis-incomplete` result per file, so a full coverage number does not hide compiled code.
-- A `.pdf`, a nested archive, or raw HTML with text inside a Markdown file is a high `analysis-incomplete` gap with exit code 2, because an agent may be told to read or unpack it. An `.svg` is a low note.
-- Every run carries the coverage status, `no-reported-gap` or `incomplete`, and each gap is a result of its own. The status also reads `incomplete` when a result carries a limitation, so a run can be `incomplete` with every file read; the `cov=` number on the verdict line counts files only.
-
-The full ledger rules, including the excluded directories, are in [docs/cli.md](docs/cli.md#coverage-ledger).
+The file walker treats every package as hostile. It caps per-file size (1 MiB), file count (5000) and total bytes read (256 MiB), so a crafted package cannot make it run out of memory; time is not capped the same way, and a Markdown file at the 1 MiB cap takes between ten seconds and a minute to analyze, so give a scan of a very large package a CI timeout. It does not follow a symlink or NTFS junction inside the package and does not open a FIFO, device or socket; each is recorded as unread. Shipped compiled code, a `.pdf`, a nested archive and raw HTML with text inside Markdown are each reported as a gap, and every run carries a coverage status, `no-reported-gap` or `incomplete`, with each gap a result of its own. The full ledger rules are in [docs/cli.md](docs/cli.md#coverage-ledger).
 
 ## Develop
 
@@ -309,9 +303,9 @@ make fuzz      # every fuzz target for FUZZTIME (default 30s); a crasher lands i
 make clean     # remove bin/
 ```
 
-CI runs on Linux, macOS and Windows. A pushed tag `v<version>` runs the release workflow: it checks that the tag names the version in `internal/metadata`, runs the CI matrix on the tagged commit, and only then builds the five platform archives and publishes them with their checksums.
+CI runs on Linux, macOS and Windows, and a pushed tag `v<version>` runs the release workflow ([docs/cli.md](docs/cli.md#ci-and-release)).
 
-`tools/bench` runs the scanner over an export of [MaliciousSkillBench](https://huggingface.co/datasets/ProtectSkills/MaliciousSkillBench) and scores the rows; the headline score counts a record as detected only when a high or critical finding names a vector from the behavior tiers, so a benign skill that merely asks for a lot is not a false positive. The benchmark commands and the package layout are in [docs/cli.md](docs/cli.md#benchmark).
+`tools/bench` runs the scanner over an export of [MaliciousSkillBench](https://huggingface.co/datasets/ProtectSkills/MaliciousSkillBench) and scores the rows; the headline score counts a record as detected only when a high or critical finding names a behavior vector (something the skill does), not a capability declaration (something it asks for), so a benign skill that merely asks for a lot is not a false positive. The benchmark commands are in [docs/cli.md](docs/cli.md#benchmark) and the package layout in [docs/cli.md](docs/cli.md#layout).
 
 ## Contributing
 
