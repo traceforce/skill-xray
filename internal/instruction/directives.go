@@ -307,7 +307,7 @@ func directiveFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []findin
 		if raw == "" {
 			continue
 		}
-		introPrev := exampleIntroTailRE.MatchString(previous)
+		introPrev := introEnds(previous)
 		// each list item is its own block: the cue on the intro carries through items that are
 		// one quoted string each, so an item with prose of its own is the last one cited, and
 		// any block the parser did not lift as prose (a fence, a rule) between two items ends
@@ -338,7 +338,7 @@ func directiveFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []findin
 					continue
 				}
 				before := raw[:m[0]]
-				if exampleIntroTailRE.MatchString(before) || introPrev || isDefensiveFrame(before) || quoted(raw, m[0], m[1], cited) {
+				if introEnds(before) || introPrev || isDefensiveFrame(before) || quoted(raw, m[0], m[1], cited) {
 					continue
 				}
 				if rule.vector == "SXV-028" && (bareWeakNounRE.MatchString(matched) || reportedRefusal(before, restOfLine(raw, m[1]))) {
@@ -715,7 +715,7 @@ var (
 	// _COVERT_RUN_CUE_RE
 	covertRunCueRE = regexp.MustCompile(`(?i)` +
 		`\b(?:silently|quietly|covertly)\s+(?:run|execute|invoke|launch|call|start|trigger|source)\b|` +
-		`\b(?:run|execute|invoke|launch|call|start|trigger)\b(?:[^.\n]|\.[^\s.\n]){0,40}` +
+		`\b(?:run|execute|invoke|launch|call|start|trigger)\b\s+(?:\x60[^\x60\n]{1,80}\x60|(?:(?:[^\s\x60.;,]|\.[^\s\x60.;,]){1,40}\s+){0,3}(?:[^\s\x60.;,]|\.[^\s\x60.;,]){1,40})[^.;,\n]{0,12}(?:,\s*)?` +
 		`\b(?:silently|quietly|covertly)\b|` +
 		`\b(?:do not|don'?t|never|without|avoid)\s+(?:\w+\s+){0,3}` +
 		`(?:surfac\w*|show\w*|display\w*|mention\w*|reveal\w*|disclos\w*|tell\w*|inform\w*|` +
@@ -802,18 +802,52 @@ var (
 )
 
 // bundledRuns is _BUNDLED_RUN_RE.finditer.
-// otherCommandRE: a command named right after a concealment cue that is not a shipped script.
-var otherCommandRE = regexp.MustCompile("(?i)^[^.!?\n]{0,12}?(?:`[^`\n]+`|\\b(?:npm|npx|pnpm|yarn|pip3?|pipx|uv|brew|apt(?:-get)?|cargo|go|git|gh|docker|make|codex|claude|cursor|gemini)\\b)")
+// otherCommandRE: a command named after a concealment cue that is not a shipped script.
+var otherCommandRE = regexp.MustCompile(`(?i)^[^!?\n]*?(?:\x60[^\x60\n]+\x60|\b(?:npm|npx|pnpm|yarn|pip3?|pipx|uv|brew|apt(?:-get)?|cargo|go|git|gh|docker|make|codex|claude|cursor|gemini)\b)`)
 
-// warnsAboutAnotherCommand is true when the sentence after a concealment cue names a command
-// that is not a bundled run: "do not tell the user to run `codex plugin add`" warns against
-// a command, it does not hide the shipped script named elsewhere in the block.
-func warnsAboutAnotherCommand(block string, cueEnd int) bool {
-	rest := block[cueEnd:]
-	if i := strings.IndexAny(rest, ".!?\n"); i >= 0 {
-		rest = rest[:i]
+// transparencyCueRE: the sentence-end concealment phrase, which needs a run in its own
+// sentence; "changes are applied without telling the user" describes a program, not a run.
+var transparencyCueRE = regexp.MustCompile(`(?i)^(?:without|do not|don'?t|never)\s+(?:telling|informing|notifying|alerting)\b`)
+
+// cueNegatedRE: "run it silently is not supported" denies the concealment it names.
+var cueNegatedRE = regexp.MustCompile(`(?i)^[^.;!?\n]{0,40}?\b(?:(?:is|are|was|were)\s+not\s+(?:supported|allowed|possible|available|recommended|permitted)|not\s+(?:a\s+)?(?:supported|valid|possible))\b`)
+
+// sentenceBounds is the sentence holding text[start:end]: a dot ends it only before a space
+// or the end, so a script path's extension does not.
+func sentenceBounds(text string, start, end int) (int, int) {
+	s := start
+	for s > 0 && !(strings.IndexByte(".!?\n", text[s-1]) >= 0 && (text[s] == ' ' || text[s] == '\n')) {
+		s--
 	}
-	return otherCommandRE.MatchString(rest) && len(bundledRuns(rest)) == 0 && !bundledProseRE.MatchString(rest)
+	e := end
+	for e < len(text) && !(strings.IndexByte(".!?\n", text[e]) >= 0 && (e+1 >= len(text) || text[e+1] == ' ' || text[e+1] == '\n')) {
+		e++
+	}
+	return s, e
+}
+
+// warnsAboutAnotherCommand is true when a concealment cue's sentence names no bundled run and
+// names another command after the cue: "do not tell the user to run `codex plugin add`" warns
+// against a command, it does not hide the shipped script named elsewhere in the block.
+func warnsAboutAnotherCommand(text string, start, end int) bool {
+	s, e := sentenceBounds(text, start, end)
+	if len(bundledRuns(text[s:e])) > 0 || bundledProseRE.MatchString(text[s:e]) {
+		return false
+	}
+	return otherCommandRE.MatchString(text[end:e])
+}
+
+// usableCovertCue drops a cue that is a warning about another command, a transparency phrase
+// with no run in its sentence, or a concealment the sentence denies.
+func usableCovertCue(text string, c []int) bool {
+	if warnsAboutAnotherCommand(text, c[0], c[1]) {
+		return false
+	}
+	s, e := sentenceBounds(text, c[0], c[1])
+	if transparencyCueRE.MatchString(text[c[0]:c[1]]) && len(bundledRuns(text[s:e])) == 0 && !bundledProseRE.MatchString(text[s:e]) {
+		return false
+	}
+	return !cueNegatedRE.MatchString(text[c[1]:e])
 }
 
 func bundledRuns(s string) [][]int {
@@ -907,12 +941,20 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 			joined.WriteString(sb.raw + " ")
 		}
 		j := joined.String()
-		var coverts [][]int // every covert cue that is not itself a quoted citation
+		// every usable concealment cue, in order; the first that is not an override sentence
+		// brands every run in the section, an override sentence only its own block
+		var coverts [][]int
+		var sectionCue []int
 		for _, c := range covertRunCueRE.FindAllStringIndex(j, -1) {
-			if !quoted(j, c[0], c[1], false) {
-				coverts = append(coverts, c)
+			if quoted(j, c[0], c[1], false) || !usableCovertCue(j, c) {
+				continue
+			}
+			coverts = append(coverts, c)
+			if sectionCue == nil && !covertOverrideRE.MatchString(j[c[0]:c[1]]) {
+				sectionCue = c
 			}
 		}
+		nextCue := 0
 		// "Before using any tool, read the docs" is ordinary prose: the before-any cue counts
 		// only when its own sentence orders the shipped run.
 		coercion := map[string][]int{}
@@ -928,39 +970,27 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 		}
 		for i, sb := range blocks {
 			offset := offsets[i]
-			introPrev := sxv042ExampleIntroTailRE.MatchString(previous)
+			introPrev := sxv042IntroEnds(previous)
 			previous = sb.raw
 			if inFrontmatter(a, sb.Start) {
 				previous = ""
 			}
-			// A concealment cue in this block grades the run high; one elsewhere in the section
-			// grades it medium, like a lone coercion cue, so the report names the cue without
-			// asserting a verdict. An override sentence brands only its own block, and a warning
-			// about another command brands nothing.
-			var covert []int
-			covertHere := false
-			for _, c := range coverts {
-				if warnsAboutAnotherCommand(j, c[1]) {
-					continue
-				}
-				inBlock := offset <= c[0] && c[0] < offset+len(sb.raw)
-				if !inBlock && covertOverrideRE.MatchString(j[c[0]:c[1]]) {
-					continue
-				}
-				if inBlock || covert == nil {
-					covert, covertHere = c, inBlock
-				}
-				if inBlock {
-					break
-				}
+			// the cue named in the evidence is the one in this block when there is one, else the
+			// section's; cues and blocks are both in text order, so the search is one pass
+			for nextCue < len(coverts) && coverts[nextCue][0] < offset {
+				nextCue++
+			}
+			covert := sectionCue
+			if nextCue < len(coverts) && coverts[nextCue][0] < offset+len(sb.raw) {
+				covert = coverts[nextCue]
 			}
 			if covert == nil && len(coercion) == 0 {
 				continue
 			}
-			strong := covertHere || len(coercion) >= 2
+			strong := covert != nil || len(coercion) >= 2
 			// A lone coercion cue (medium) must sit in this block; only the strong grade may
 			// correlate across the section.
-			if !strong && covert == nil && !coercedRunCueRE.MatchString(sb.raw) {
+			if !strong && !coercedRunCueRE.MatchString(sb.raw) {
 				continue
 			}
 			cue := covert
@@ -995,7 +1025,7 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 					}
 				}
 				before := sb.raw[:cut]
-				if sxv042ExampleIntroTailRE.MatchString(before) || introPrev || isDefensiveFrame(before) {
+				if sxv042IntroEnds(before) || introPrev || isDefensiveFrame(before) {
 					continue
 				}
 				if negatedRunOf(sb.raw, m) {
@@ -1015,9 +1045,16 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 				}
 				severity, verdict, pyStrong := "high", "", "True"
 				if !strong {
-					severity, verdict, pyStrong = "medium", " (a single cue, or one outside this paragraph: reported, not a verdict)", "False"
+					severity, verdict, pyStrong = "medium", " (single coercion cue: reported, not a verdict)", "False"
 				}
 				line, col := SourcePosition(sb.Text, sb.Start, runeIdx(sb.raw, m[0]))
+				cueLine := line
+				for k := len(offsets) - 1; k >= 0; k-- {
+					if offsets[k] <= cue[0] {
+						cueLine, _ = SourcePosition(blocks[k].Text, blocks[k].Start, runeIdx(blocks[k].raw, cue[0]-offsets[k]))
+						break
+					}
+				}
 				cues := []any{}
 				for _, k := range slices.Sorted(maps.Keys(coercion))[:min(6, len(coercion))] {
 					cues = append(cues, k)
@@ -1029,7 +1066,7 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 						cutRunes(script, 80), why, verdict),
 					Evidence: map[string]any{
 						"directive_text": cutRunes(pytext.Strip(sliceRunes(j, max(0, runeIdx(j, first)-20), runeIdx(j, max(offset+m[1], cue[1]))+20)), 200),
-						"script":         script, "cue": cutRunes(j[cue[0]:cue[1]], 80), "cues": cues,
+						"script":         script, "cue": cutRunes(j[cue[0]:cue[1]], 80), "cue_line": cueLine, "cues": cues,
 						"line": line, "col": col,
 						// ponytail: reproduces Python's tuple repr of akey[:50] in the selector;
 						// drop when the oracle changes to akey[0].

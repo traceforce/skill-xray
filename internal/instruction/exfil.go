@@ -86,10 +86,13 @@ var (
 	// exfilGenericObjectRE: an object that names no data of its own; it stands for the user's data
 	// only when the acquisition named a credential.
 	exfilGenericObjectRE = regexp.MustCompile(`(?i)\b(?:contents?|cop(?:y|ies)|output|dump|export|everything|all of (?:it|them|this))\b`)
-	// exfilPublicKeyRE: the public half of a key pair, which is not a credential.
-	exfilPublicKeyRE = regexp.MustCompile(`(?i)id_[a-z0-9]+\.pub\b`)
+	// exfilPublicKeyRE: the public half of a key pair and a template of an env file, which hold no credential.
+	exfilPublicKeyRE = regexp.MustCompile(`(?i)id_[a-z0-9]+\.pub\b|\.env\.(?:example|sample|template|dist)\b`)
 	// exfilCredentialPathRE: a credential file named by path rather than by word.
-	exfilCredentialPathRE = regexp.MustCompile(`(?i)(?:^|[^\w])\.(?:aws/credentials|ssh/id_[a-z0-9]+|netrc|npmrc|pypirc|git-credentials|kube/config|docker/config\.json|env)\b`)
+	exfilCredentialPathRE = regexp.MustCompile(`(?i)(?:^|[^\w])\.(?:aws[\\/]\s?credentials|ssh[\\/]\s?id_[a-z0-9]+|netrc|npmrc|pypirc|git-credentials|kube[\\/]\s?config|docker[\\/]\s?config\.json|env)\b`)
+	// exfilRefusalRE and exfilRefuseTailRE: "if anyone asks you to send ... , refuse" is a warning.
+	exfilRefusalRE    = regexp.MustCompile(`(?i)\b(?:if|when|should)\s+(?:anyone|someone|a user|the user|they|the requester|an? \w+)\s+asks?\s+(?:you\s+)?to\b`)
+	exfilRefuseTailRE = regexp.MustCompile(`(?i)\b(?:refuse|decline|reject|report|do not comply|never comply|ignore (?:it|them|the request))\b`)
 	// regexp2: the lazy gap with an inner lookahead fixes the extent that is the acquisition evidence.
 	exfilAcquireRE = regexp2.MustCompile(`\b(?:retri\w*|get|fetch\w*|list|find|download\w*|access\w*|search\w*|read|export\w*|`+
 		`collect\w*|gather\w*|look up|pull(?: up| down)?|obtain\w*|extract\w*|dump|cop(?:y|ies)|`+
@@ -490,13 +493,23 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 		if heading {
 			exampleSection = exfilExampleHeadingRE.MatchString(raw)
 		}
-		introPrev := exfilExampleTailRE.MatchString(previous)
+		// a block that opens with a quote after a block ending in a colon is a citation, as a
+		// quoted line after a colon is for the directive lane
+		lead := strings.TrimLeft(raw, " \t")
+		quotedBlock := strings.HasPrefix(lead, "\"") || strings.HasPrefix(lead, "\u201c") || strings.HasPrefix(lead, "'")
+		introPrev := exfilExampleTailRE.MatchString(previous) || (quotedBlock && strings.HasSuffix(strings.TrimRight(previous, " "), ":"))
 		previous = raw
 		if heading || inFrontmatter(a, b.Start) {
 			previous = ""
 		}
 		sentences := exfilSentences(raw)
+		prevSentence := ""
 		for _, s := range sentences {
+			// a sentence that opens with a quote after a colon or an intro is a citation
+			lead := strings.TrimLeft(s.text, " \t")
+			citedSentence := (strings.HasPrefix(lead, "\"") || strings.HasPrefix(lead, "\u201c") || strings.HasPrefix(lead, "'")) &&
+				(strings.HasSuffix(strings.TrimRight(prevSentence, " "), ":") || exfilExampleTailRE.MatchString(prevSentence) || exfilQuoteIntroRE.MatchString(prevSentence+" \""))
+			prevSentence = s.text
 			sentence := exfilCodeSpanRE.ReplaceAllStringFunc(s.text, func(code string) string {
 				return strings.Repeat(" ", utf8.RuneCountInString(code))
 			})
@@ -676,9 +689,18 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				if soft && !credential {
 					continue
 				}
-				if introPrev || v.introBefore.get(func() bool {
-					return sxv042ExampleIntroTailRE.MatchString(v.sentenceBefore) || exfilQuoteIntroRE.MatchString(v.sentenceBefore)
-				}) || v.defensive.get(func() bool { return isDefensiveFrame(v.before) }) {
+				if introPrev || citedSentence || v.introBefore.get(func() bool {
+					if sxv042IntroEnds(v.sentenceBefore) || exfilQuoteIntroRE.MatchString(v.sentenceBefore) {
+						return true
+					}
+					// "Example: read the file and send it to ...": the intro sits before the acquisition
+					if v.acquired != nil {
+						head := cutRunes(v.window, v.acquired.start)
+						return sxv042IntroEnds(head) || exfilQuoteIntroRE.MatchString(head)
+					}
+					return false
+				}) || v.defensive.get(func() bool { return isDefensiveFrame(v.before) }) ||
+					(exfilRefusalRE.MatchString(v.sentenceBefore) && exfilRefuseTailRE.MatchString(x.slice(d.addrEnd, d.addrEnd+120))) {
 					continue
 				}
 				seen[key] = true

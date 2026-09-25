@@ -227,7 +227,7 @@ skill-xray version
 | 0 | the scan and the report completed. Findings, even critical ones, do not change the exit code; read the verdict or the report for those |
 | 2 | something did not complete: a usage error, a refused or failed input, a report that could not be written, a package whose analysis hit an internal error, a high-severity analysis gap, or for `system-scan` a root that could not be walked |
 
-Every exit 2 comes with a reason on stderr. A script the scanner recognizes but cannot analyze is a high `analysis-incomplete` result and sets exit code 2: one in PowerShell, batch, Ruby or Perl, a shell script whose shebang or `.zsh` suffix names zsh, ksh or fish, or an unparseable Python code fence. A source file in any other language, such as Go, PHP or Rust, is a medium `analysis-incomplete` result: it was read but not analyzed, the package reads `FINDINGS`, and the exit code stays 0. The code engine gets 45 seconds per package; a package whose code takes longer gets a high `opengrep-timeout` gap and exit code 2 in place of its code findings.
+Every exit 2 comes with a reason on stderr. A script the scanner recognizes but cannot analyze is a high `analysis-incomplete` result and sets exit code 2: one in PowerShell, batch, Ruby or Perl, a shell script whose shebang or `.zsh` suffix names zsh, ksh or fish, or an unparseable Python code fence. A source file with one of the extensions listed in [docs/cli.md](docs/cli.md#exit-code-reasons), such as Go, PHP or Rust, is a medium `analysis-incomplete` result: it was read but not analyzed, the package reads `FINDINGS`, and the exit code stays 0. A file with any other extension the parser does not model is a low note. The code engine gets 45 seconds per package; a package whose code takes longer gets a high `opengrep-timeout` gap and exit code 2 in place of its code findings.
 
 ## Output format
 
@@ -295,12 +295,12 @@ Every report also records what the package claims about its execution and networ
 The deterministic lane reads prose for meaning and shipped code through the code engine. Measured on this release, it does not read for meaning:
 
 - text inside a fenced or four-space-indented code block whose language the code engine does not cover, and the natural-language comments inside code it does cover;
-- HTML comments beyond the hidden-comment check, HTML blocks with tags the prose model does not know, and the title attribute of a Markdown link;
+- HTML comments beyond the hidden-comment check, and HTML blocks with tags the prose model does not know;
 - the prompt and handler strings of a `hooks.json` or `.mcp.json`, which are checked for structure only;
 - a directive quoted after a colon, or held in a quoted frontmatter value, which the example guard treats as a citation;
 - a script path or address that lives in another file of the package, and a run cue and its script placed in different sections.
 
-It also reports a quoted description of a past attack as a live instruction when the quote is an override sentence, and a shipped source file in a language no lane covers as a medium gap rather than analyzing it. The LLM lane's review mode can dispute only the text-pattern findings SXV-028 to SXV-031. These limits are the follow-up work; the report and the console say what was not analyzed.
+It also reports a quoted description of a past attack as a live instruction when the quote is an override sentence, and a shipped source file with a listed extension as a medium gap rather than analyzing it. The LLM lane's review mode can dispute only the text-pattern findings SXV-028 to SXV-031. These limits are the follow-up work; the report and the console say what was not analyzed.
 
 ## Coverage
 

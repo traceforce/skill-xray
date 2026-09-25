@@ -19,9 +19,14 @@ var (
 		"unsupported_markup")
 	lowStatic = ingest.BenignLedger
 	// unanalyzedSource: source files no lane analyzes; an agent can be told to build or run them.
-	unanalyzedSource = pytext.Set(".go", ".rs", ".php", ".java", ".kt", ".kts", ".swift", ".c", ".cc", ".cpp", ".cxx",
-		".h", ".hpp", ".cs", ".lua", ".r", ".scala", ".dart", ".ex", ".exs", ".hs", ".m", ".mm", ".zig", ".nim", ".jl",
-		".vb", ".fs", ".clj", ".erl", ".groovy", ".gradle", ".ksh", ".fish", ".csh", ".tcsh", ".awk", ".vbs", ".ahk", ".applescript")
+	unanalyzedSource = map[string]string{".go": "Go", ".rs": "Rust", ".php": "PHP", ".java": "Java", ".kt": "Kotlin", ".kts": "Kotlin",
+		".swift": "Swift", ".c": "C", ".h": "C", ".cc": "C++", ".cpp": "C++", ".cxx": "C++", ".hpp": "C++", ".cs": "C#", ".lua": "Lua",
+		".r": "R", ".scala": "Scala", ".dart": "Dart", ".ex": "Elixir", ".exs": "Elixir", ".hs": "Haskell", ".m": "Objective-C",
+		".mm": "Objective-C", ".zig": "Zig", ".nim": "Nim", ".jl": "Julia", ".vb": "Visual Basic", ".vbs": "VBScript", ".fs": "F#",
+		".fsx": "F#", ".clj": "Clojure", ".erl": "Erlang", ".groovy": "Groovy", ".gradle": "Gradle", ".ksh": "ksh", ".fish": "fish",
+		".csh": "csh", ".tcsh": "tcsh", ".awk": "awk", ".ahk": "AutoHotkey", ".applescript": "AppleScript", ".ml": "OCaml",
+		".pas": "Pascal", ".f90": "Fortran", ".cr": "Crystal", ".rkt": "Racket", ".lisp": "Lisp", ".d": "D", ".nix": "Nix",
+		".tf": "Terraform", ".cmake": "CMake", ".pyx": "Cython", ".psm1": "PowerShell", ".v": "V", ".elm": "Elm"}
 )
 
 // IsInventoryNote is coverage.is_inventory_note over a finding's fields: the low static
@@ -67,11 +72,11 @@ func Coverage(p *parse.Package) []findings.Finding {
 			if lowParse[reason] {
 				severity = "low"
 			}
-			if reason == "unmodeled_content" && unanalyzedSource[strings.ToLower(path.Ext(e.Path))] {
+			if language, ok := unanalyzedSource[strings.ToLower(path.Ext(e.Path))]; ok && reason == "unmodeled_content" {
 				// shipped source an agent can be told to build or run, read but analyzed by no
 				// lane: visible as FINDINGS on the console, not hidden under CLEAN
 				severity = "medium"
-				message = fmt.Sprintf("%s was read but not analyzed: no lane covers %s source.", e.Path, strings.TrimPrefix(path.Ext(e.Path), "."))
+				message = fmt.Sprintf("%s was read but not analyzed: no lane covers %s.", e.Path, language)
 			}
 		} else {
 			kind := ""

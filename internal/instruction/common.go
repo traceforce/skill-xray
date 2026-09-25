@@ -347,9 +347,12 @@ var (
 	// exampleIntroTailRE is exampleIntroRE anchored to the end of the text it is tested on: an
 	// intro cites only what immediately follows it, so a paragraph that merely contains "read"
 	// or "below" somewhere does not silence the directive after it.
-	exampleIntroTailRE = regexp.MustCompile(`(?i)(?:\b(?:such as|e\.?g\.?|i\.?e\.?|for example|for instance|a typical|an example|looks? like|the following|as follows|shown below|the one (?:below|above)|like this|as shown|might (?:say|write|include|contain|read)|would (?:say|write|read))\b[^.:;\n]{0,40}[.:,]?\s*["'\x{201c}\x{2018}(]?|\b(?:example|payload|reads?|below(?: this)?)\b\s*(?::\s*["'\x{201c}\x{2018}(]?|["'\x{201c}\x{2018}(])|:\s*["'\x{201c}\x{2018}(])\s*\z`)
+	exampleIntroTailRE = regexp.MustCompile(`(?i)(?:\b(?:such as|e\.g\.|eg|i\.e\.|ie|for example|for instance|a typical|an example|looks? like|the following|as follows|shown below|the one (?:below|above)|like this|as shown|might (?:say|write|include|contain|read)|would (?:say|write|read))\b[^\n]{0,60}[.:,]?\s*["'\x{201c}\x{2018}(]?|\b(?:example(?:\s*\([^)\n]{0,20}\))?|payload|reads?|below(?: this)?)\b\s*(?::\s*["'\x{201c}\x{2018}(]?|[-\x{2013}\x{2014}]\s*["'\x{201c}\x{2018}(]?|["'\x{201c}\x{2018}(])|:\s*["'\x{201c}\x{2018}(]|\|\s*["'\x{201c}\x{2018}(])\s*[*_]{0,3}\s*\z`)
 	// sxv042ExampleIntroTailRE is sxv042ExampleIntroRE anchored the same way.
-	sxv042ExampleIntroTailRE = regexp.MustCompile(`(?i)(?:\b(?:such as|e\.?g\.?|for example|for instance|a typical|an example|looks? like|might (?:say|write|include|contain|read)|would (?:say|write|read)|as shown|like this)\b[^.:;\n]{0,40}[.:,]?\s*["'\x{201c}\x{2018}(]?|\b(?:example|payload)\b\s*(?::\s*["'\x{201c}\x{2018}(]?|["'\x{201c}\x{2018}(])|:\s*["'\x{201c}\x{2018}(])\s*\z`)
+	sxv042ExampleIntroTailRE = regexp.MustCompile(`(?i)(?:\b(?:such as|e\.g\.|eg|for example|for instance|a typical|an example|looks? like|might (?:say|write|include|contain|read)|would (?:say|write|read)|as shown|like this)\b[^\n]{0,60}[.:,]?\s*["'\x{201c}\x{2018}(]?|\b(?:example(?:\s*\([^)\n]{0,20}\))?|payload)\b\s*(?::\s*["'\x{201c}\x{2018}(]?|[-\x{2013}\x{2014}]\s*["'\x{201c}\x{2018}(]?|["'\x{201c}\x{2018}(])|:\s*["'\x{201c}\x{2018}(]|\|\s*["'\x{201c}\x{2018}(])\s*[*_]{0,3}\s*\z`)
+	// imperativeIntroRE: "do the following:" or "follow the steps below:" orders what comes next, it
+	// does not cite it.
+	imperativeIntroRE = regexp.MustCompile(`(?i)\b(?:do|follow|proceed|read|run|complete|perform|apply|use|execute)\s+(?:\w+\s+){0,3}(?:the following|as follows|the steps below|below)\b\s*[:.]?\s*[*_]{0,3}\s*\z`)
 	// _SENTENCE_END_RE (?<=[.!?])\s+ without the lookbehind: the split point is one past the match start.
 	sentenceEndRE = regexp.MustCompile(`[.!?]\s+`)
 	// _EGRESS_URL_RE (SXV-041 and SXV-011)
@@ -554,4 +557,14 @@ func fencedLines(md *parse.Markdown, lineCount int) (inFence map[int]bool, openB
 		}
 	}
 	return
+}
+
+// introEnds reports whether text ends with an intro that cites what follows it, for the
+// directive lanes; sxv042IntroEnds is the same for the bundled-run and exfil lanes.
+func introEnds(text string) bool {
+	return exampleIntroTailRE.MatchString(text) && !imperativeIntroRE.MatchString(text)
+}
+
+func sxv042IntroEnds(text string) bool {
+	return sxv042ExampleIntroTailRE.MatchString(text) && !imperativeIntroRE.MatchString(text)
 }
