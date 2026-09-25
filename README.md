@@ -81,7 +81,7 @@ BLOCKING  seen=4   read=4   cov=100.0%  ./my-skill
 report: findings.sarif.json
 ```
 
-`seen` is the number of files found, `read` the number read as text, and `cov` the share that was read. `BLOCKING` means at least one high or critical finding that names a vector, the class of behavior a rule detects. `FINDINGS` means any other finding that names a vector, or an analysis gap (a file or a part of one the scanner could not analyze) at medium severity or above. `CLEAN` means neither. The findings themselves are in the report, not on the console.
+`seen` is the number of files found, `read` the number read as text, and `cov` the share of the inspectable files that was read; inert assets such as images and fonts, and compiled files, are outside that share. `BLOCKING` means at least one high or critical finding that names a vector, the class of behavior a rule detects. `FINDINGS` means any other finding that names a vector, or an analysis gap (a file or a part of one the scanner could not analyze) at medium severity or above. `CLEAN` means neither. The findings themselves are in the report, not on the console.
 
 A folder with no `SKILL.md` still scans and can read `CLEAN`; stderr then says `note: no SKILL.md found`, so look for that line before trusting a `CLEAN` on something you unpacked by hand. A folder that holds several skills becomes one merged run, so use `system-scan --root` for a folder of skills.
 
@@ -225,7 +225,7 @@ skill-xray version
 | 0 | the scan and the report completed. Findings, even critical ones, do not change the exit code; read the verdict or the report for those |
 | 2 | something did not complete: a usage error, a refused or failed input, a report that could not be written, a package whose analysis hit an internal error, a high-severity analysis gap, or for `system-scan` a root that could not be walked |
 
-Every exit 2 comes with a reason on stderr. A script the scanner recognizes but cannot analyze, which means one in PowerShell, batch, zsh, Ruby or Perl, or an unparseable Python code fence, is a high `analysis-incomplete` result and sets exit code 2. A source file in any other language, such as Go, PHP, Rust, ksh or fish, is only a low `coverage-note` in the report: it does not set exit code 2 and the package can still read `CLEAN`, so read the report's coverage notes before trusting a `CLEAN` on a package that ships such files. The code engine gets 45 seconds per package; a package whose code takes longer gets a high `opengrep-timeout` gap and exit code 2 in place of its code findings.
+Every exit 2 comes with a reason on stderr. A script the scanner recognizes but cannot analyze is a high `analysis-incomplete` result and sets exit code 2: one in PowerShell, batch, Ruby or Perl, a shell script whose shebang or `.zsh` suffix names zsh, ksh or fish, or an unparseable Python code fence. A source file in any other language, such as Go, PHP or Rust, is only a low `coverage-note` in the report: it does not set exit code 2 and the package can still read `CLEAN`, so read the report's coverage notes before trusting a `CLEAN` on a package that ships such files. The code engine gets 45 seconds per package; a package whose code takes longer gets a high `opengrep-timeout` gap and exit code 2 in place of its code findings.
 
 ## Output format
 
@@ -249,7 +249,7 @@ skill-xray scan ~/Downloads/deploy-helper
 skill-xray scan ./skills/release-notes --output ../reports/release-notes.sarif --policy ./reviews/release-notes.json
 ```
 
-Sample reports are in [examples/findings](examples/findings/): `deploy-helper.sarif.json` is the BLOCKING scan of a small skill that ships a fetch-and-run installer, a credential-reading script and instructions to send credentials elsewhere, and `notes.sarif.json` is the CLEAN scan of a manifest-only skill. [examples/policy.json](examples/policy.json) suppresses the installer result of the first one.
+Sample reports are in [examples/findings](examples/findings/): `deploy-helper.sarif.json` is the BLOCKING scan of a small skill whose instructions pipe an installer download into a shell, make a bundled script a precondition of every task and tell the agent to send credentials elsewhere, and whose scripts read a credential file and pass input to a shell command; `notes.sarif.json` is the CLEAN scan of a manifest-only skill. [examples/policy.json](examples/policy.json) suppresses the installer result of the first one.
 
 ## Configuration
 
@@ -290,7 +290,7 @@ Every report also records what the package claims about its execution and networ
 
 ## Coverage
 
-The file walker treats every package as hostile. It caps per-file size (1 MiB), file count (5000) and total bytes read (256 MiB), so a crafted package cannot make it run out of memory; time is not capped the same way, and a Markdown file at the 1 MiB cap takes between ten seconds and a minute to analyze, so give a scan of a very large package a CI timeout. It does not follow a symlink or NTFS junction inside the package and does not open a FIFO, device or socket; each is recorded as unread. Shipped compiled code, a `.pdf`, a nested archive and raw HTML with text inside Markdown are each reported as a gap, and every run carries a coverage status, `no-reported-gap` or `incomplete`, with each gap a result of its own. The full ledger rules are in [docs/cli.md](docs/cli.md#coverage-ledger).
+The file walker treats every package as hostile. It caps per-file size (1 MiB), file count (5000) and total bytes read (256 MiB), so a crafted package cannot make it run out of memory; time is not capped the same way, and a Markdown file at the 1 MiB cap takes between ten seconds and a minute to analyze, so give a scan of a very large package a CI timeout. It does not follow a symlink or NTFS junction inside the package and does not open a FIFO, device or socket; each is recorded as unread. Shipped compiled code, a `.pdf`, a nested archive, and raw HTML inside Markdown that carries text in a tag the prose model cannot project are each reported as a gap, and every run carries a coverage status, `no-reported-gap` or `incomplete`, with each gap a result of its own. The full ledger rules are in [docs/cli.md](docs/cli.md#coverage-ledger).
 
 ## Develop
 
