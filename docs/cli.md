@@ -1,6 +1,6 @@
 # Command reference
 
-The details behind the README: what each command accepts and refuses, what the console prints, how the LLM review decides, where a report may go, what the coverage ledger records, and how the repository is laid out. Every statement here was checked against the 0.1.0 binary.
+The details behind the README, checked against the 0.1.0 binary: what each command accepts and refuses, what the console prints, how the LLM review decides, where a report may go, what the coverage ledger records, and how the repository is laid out.
 
 ## Targets
 
@@ -19,7 +19,7 @@ BLOCKING  seen=4   read=4   cov=100.0%  ./my-skill
 report: findings.sarif.json
 ```
 
-`seen` is the number of files found, `read` the number read as text, and `cov` the share of the inspectable files that was read; inert assets such as images and fonts, and compiled files, are outside that share. A vector is the class of behavior a rule detects (`SXV-nnn`); an analysis gap is a result with no vector that records what could not be checked. The verdict word means:
+`seen` is the number of files found (a pruned directory such as `node_modules` counts as one), `read` the number read as text, and `cov` the share of the inspectable files that was read; inert assets such as images and fonts, and compiled files, are outside that share. A vector is the class of behavior a rule detects (`SXV-nnn`); an analysis gap is a result with no vector that records what could not be checked. The verdict word means:
 
 - `BLOCKING`: at least one high or critical finding that names a vector;
 - `FINDINGS`: any other finding that names a vector, or an analysis gap at medium severity or above;

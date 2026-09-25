@@ -4,7 +4,7 @@
 
 Skill X-Ray is a static security scanner for AI agent skill packages. A skill package is a folder with a `SKILL.md` manifest and, often, bundled `scripts/`, `references/`, a `hooks.json` or a `.mcp.json`. Coding agents such as Claude Code, Cursor, Codex, Gemini CLI and OpenCode load these folders and act on them: the instructions go straight into the agent's context and the scripts run with the agent's privileges, so a bad skill can read your data or run code on your machine. Skill X-Ray reads a package before you install it, reports what it finds in its instructions and scripts, and never executes anything in it.
 
-It is the sibling of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same job for MCP servers. Like MCP X-Ray it writes a [SARIF](https://sarifweb.azurewebsites.net/) report that SARIF-aware tools and CI pipelines can read, and it can scan one skill or every skill in the folders the common coding agents load from.
+It is the sibling of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same job for MCP servers; if an MCP server is what you need to scan, use that one. Like MCP X-Ray it writes a [SARIF](https://sarifweb.azurewebsites.net/) report that SARIF-aware tools and CI pipelines can read, and it can scan one skill or every skill in the folders the common coding agents load from, in one go.
 
 The scanner works offline with deterministic rules. A pinned [OpenGrep](https://github.com/opengrep/opengrep) engine, called the code engine below, covers bundled Python, POSIX shell (bash, sh, dash), JavaScript and TypeScript. An optional LLM pass, called the LLM lane below, adds a semantic check on top. It is off unless you ask for it, and when it is on it sends the skill text to the provider you configure.
 
@@ -81,7 +81,7 @@ BLOCKING  seen=4   read=4   cov=100.0%  ./my-skill
 report: findings.sarif.json
 ```
 
-`seen` is the number of files found, `read` the number read as text, and `cov` the share of the inspectable files that was read; inert assets such as images and fonts, and compiled files, are outside that share. `BLOCKING` means at least one high or critical finding that names a vector, the class of behavior a rule detects. `FINDINGS` means any other finding that names a vector, or an analysis gap (a file or a part of one the scanner could not analyze) at medium severity or above. `CLEAN` means neither. The findings themselves are in the report, not on the console.
+`seen` is the number of files found (a pruned directory such as `node_modules` counts as one), `read` the number read as text, and `cov` the share of the inspectable files that was read; inert assets such as images and fonts, and compiled files, are outside that share. `BLOCKING` means at least one high or critical finding that names a vector, the class of behavior a rule detects. `FINDINGS` means any other finding that names a vector, or an analysis gap (a file or a part of one the scanner could not analyze) at medium severity or above. `CLEAN` means neither. The findings themselves are in the report, not on the console.
 
 A folder with no `SKILL.md` still scans and can read `CLEAN`; stderr then says `note: no SKILL.md found`, so look for that line before trusting a `CLEAN` on something you unpacked by hand. A folder that holds several skills becomes one merged run, so use `system-scan --root` for a folder of skills.
 
@@ -110,11 +110,13 @@ export SKILLXRAY_LLM_BASE_URL=https://llm.example.com/v1
 skill-xray scan ./my-skill --llm
 ```
 
-With `--llm` alone the lane runs a semantic prompt-injection check (SXV-038). Its results are advisory and capped at medium severity: they can move a clean package to `FINDINGS` but not to `BLOCKING`, and they do not remove or lower a deterministic finding. The `llm:` console line says what the lane did; if the provider is down or rejects the key, the deterministic scan still completes and that line names the failure:
+With `--llm` alone the lane runs a semantic prompt-injection check (SXV-038). Its results are advisory and capped at medium severity: they can move a clean package to `FINDINGS` but not to `BLOCKING`, and they do not remove or lower a deterministic finding. The `llm:` console line says what the lane did, for example:
 
 ```
 llm: 3 model calls; semantic check (SXV-038) ran
 ```
+
+If the provider is down or rejects the key, the deterministic scan still completes, that line names the failure, and the exit code is unchanged.
 
 Three more flags turn the lane into a reviewer of the static text-pattern findings (SXV-028 to SXV-031), and a fourth keeps the semantic check running alongside the review:
 
@@ -145,7 +147,7 @@ skill-xray system-scan --root ./vendored-skills --root ~/.claude/skills
 skill-xray system-scan --llm
 ```
 
-The known roots are the skill folders of Claude Code, Cursor, Codex, Gemini CLI, OpenCode and Copilot under your home directory, plus the project-local ones; [docs/cli.md](docs/cli.md#discovery) lists the paths and the plugin markers that make a folder a package.
+The known roots are the skill folders of Claude Code, Cursor, Codex, Gemini CLI, OpenCode and Copilot under your home directory, the shared `~/.agents/skills`, and the project-local ones; [docs/cli.md](docs/cli.md#discovery) lists the paths and the plugin markers that make a folder a package.
 
 ```
 CLEAN     seen=3   read=3   cov=100.0%  /home/me/.claude/skills/notes
@@ -279,7 +281,7 @@ Each deterministic finding names a vector (`SXV-nnn`, the class of behavior it d
 
 | vector | reports | severity |
 |---|---|---|
-| SXV-009 / SXV-041 | an installer-style fetch piped to a shell, such as `curl -fsSL https://cli.vendor.com/install.sh \| sh`, reported as an unpinned remote install; only the plain vendor shape matches, one HTTPS URL to an installer path with no credentials, TLS bypass, raw IP, paste site or shell substitution in the fetch | medium |
+| SXV-009 / SXV-041 | an installer-style fetch piped to a shell, such as `curl -fsSL https://cli.vendor.com/install.sh \| sh`, reported as an unpinned remote install; only the plain vendor shape matches, one HTTPS URL to an installer path or a bare vendor host, with no credentials, TLS bypass, raw IP, paste site or shell substitution in the fetch | medium |
 | SXV-032 | a read of the skill's own install directory under an agent's skills tree, which is its own files, not another agent's state | medium |
 | SXV-033 | the skill's description claims less permission than its files use (permission understatement); a capability signal, not on its own a malicious one | medium |
 | SXV-042 | a prose directive to run a script shipped with the skill, framed as hidden from the user (`covert-bundled-script-run`) or as an unconditional precondition of every task (`coerced-bundled-preflight`) | high; medium with a single coercion cue |
