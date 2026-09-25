@@ -81,7 +81,7 @@ BLOCKING  seen=4   read=4   cov=100.0%  ./my-skill
 report: findings.sarif.json
 ```
 
-`seen` is the number of files found (a pruned directory such as `node_modules` counts as one), `read` the number read as text, and `cov` the share of the inspectable files that was read; inert assets such as images and fonts, and compiled files, are outside that share. `BLOCKING` means at least one high or critical finding that names a vector, the class of behavior a rule detects. `FINDINGS` means any other finding that names a vector, or an analysis gap (a file or a part of one the scanner could not analyze) at medium severity or above. `CLEAN` means neither. The findings themselves are in the report, not on the console.
+`seen` is the number of files found (a pruned directory such as `node_modules` counts as one), `read` the number read as text, and `cov` the share of the inspectable files that was read; inert assets such as images and fonts, and compiled files, are outside that share. It is read coverage, not detection coverage: a file counts as read whether or not a lane could analyze it. `BLOCKING` means at least one high or critical finding that names a vector, the class of behavior a rule detects. `FINDINGS` means any other finding that names a vector, or an analysis gap (a file or a part of one the scanner could not analyze) at medium severity or above. `CLEAN` means neither. The findings themselves are in the report, not on the console.
 
 A folder with no `SKILL.md` still scans and can read `CLEAN`; stderr then says `note: no SKILL.md found`, so look for that line before trusting a `CLEAN` on something you unpacked by hand. A folder that holds several skills becomes one merged run, so use `system-scan --root` for a folder of skills.
 
@@ -227,7 +227,7 @@ skill-xray version
 | 0 | the scan and the report completed. Findings, even critical ones, do not change the exit code; read the verdict or the report for those |
 | 2 | something did not complete: a usage error, a refused or failed input, a report that could not be written, a package whose analysis hit an internal error, a high-severity analysis gap, or for `system-scan` a root that could not be walked |
 
-Every exit 2 comes with a reason on stderr. A script the scanner recognizes but cannot analyze is a high `analysis-incomplete` result and sets exit code 2: one in PowerShell, batch, Ruby or Perl, a shell script whose shebang or `.zsh` suffix names zsh, ksh or fish, or an unparseable Python code fence. A source file in any other language, such as Go, PHP or Rust, is only a low `coverage-note` in the report: it does not set exit code 2 and the package can still read `CLEAN`, so read the report's coverage notes before trusting a `CLEAN` on a package that ships such files. The code engine gets 45 seconds per package; a package whose code takes longer gets a high `opengrep-timeout` gap and exit code 2 in place of its code findings.
+Every exit 2 comes with a reason on stderr. A script the scanner recognizes but cannot analyze is a high `analysis-incomplete` result and sets exit code 2: one in PowerShell, batch, Ruby or Perl, a shell script whose shebang or `.zsh` suffix names zsh, ksh or fish, or an unparseable Python code fence. A source file in any other language, such as Go, PHP or Rust, is a medium `analysis-incomplete` result: it was read but not analyzed, the package reads `FINDINGS`, and the exit code stays 0. The code engine gets 45 seconds per package; a package whose code takes longer gets a high `opengrep-timeout` gap and exit code 2 in place of its code findings.
 
 ## Output format
 
@@ -283,12 +283,24 @@ Each deterministic finding names a vector (`SXV-nnn`, the class of behavior it d
 |---|---|---|
 | SXV-009 / SXV-041 | an installer-style fetch piped to a shell, such as `curl -fsSL https://cli.vendor.com/install.sh \| sh`, reported as an unpinned remote install; only the plain vendor shape matches, one HTTPS URL to an installer path or a bare vendor host, with no credentials, TLS bypass, raw IP, paste site or shell substitution in the fetch | medium |
 | SXV-032 | a read of the skill's own install directory under an agent's skills tree, which is its own files, not another agent's state | medium |
-| SXV-033 | the skill's description claims less permission than its files use (permission understatement); a capability signal, not on its own a malicious one | medium |
+| SXV-033 | the skill's manifest declares less permission than its code was observed to use (permission understatement, declared against observed); a capability signal, not on its own a malicious one | medium |
 | SXV-042 | a prose directive to run a script shipped with the skill, framed as hidden from the user (`covert-bundled-script-run`) or as an unconditional precondition of every task (`coerced-bundled-preflight`) | high; medium with a single coercion cue |
 | SXV-043 | a prose directive to obtain the user's data and send it to an e-mail address or URL hard-coded in the skill text | high |
 | SXV-044 | a shipped JavaScript or TypeScript script that is one machine-generated line: an obfuscator's hex identifiers and escaped string tables (`obfuscated-script`), or a minifier's output outside a declared `.min.js` (`minified-script`) | high; medium when only minified |
 
 Every report also records what the package claims about its execution and network needs, what its manifest declares, and what its code was observed doing. Unknown is not treated as safe, and neither a claim in the description nor a permission grant in the manifest authorizes behavior.
+
+## Coverage limits
+
+The deterministic lane reads prose for meaning and shipped code through the code engine. Measured on this release, it does not read for meaning:
+
+- text inside a fenced or four-space-indented code block whose language the code engine does not cover, and the natural-language comments inside code it does cover;
+- HTML comments beyond the hidden-comment check, HTML blocks with tags the prose model does not know, and the title attribute of a Markdown link;
+- the prompt and handler strings of a `hooks.json` or `.mcp.json`, which are checked for structure only;
+- a directive quoted after a colon, or held in a quoted frontmatter value, which the example guard treats as a citation;
+- a script path or address that lives in another file of the package, and a run cue and its script placed in different sections.
+
+It also reports a quoted description of a past attack as a live instruction when the quote is an override sentence, and a shipped source file in a language no lane covers as a medium gap rather than analyzing it. The LLM lane's review mode can dispute only the text-pattern findings SXV-028 to SXV-031. These limits are the follow-up work; the report and the console say what was not analyzed.
 
 ## Coverage
 

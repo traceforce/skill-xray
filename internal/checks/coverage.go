@@ -3,6 +3,7 @@ package checks
 import (
 	"cmp"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/traceforce/skill-xray/internal/findings"
@@ -17,6 +18,10 @@ var (
 		"grants_unparsed_shape", "markdown_parse_error", "raw_html_markup", "requirement_unparsed", "unmodeled_content",
 		"unsupported_markup")
 	lowStatic = ingest.BenignLedger
+	// unanalyzedSource: source files no lane analyzes; an agent can be told to build or run them.
+	unanalyzedSource = pytext.Set(".go", ".rs", ".php", ".java", ".kt", ".kts", ".swift", ".c", ".cc", ".cpp", ".cxx",
+		".h", ".hpp", ".cs", ".lua", ".r", ".scala", ".dart", ".ex", ".exs", ".hs", ".m", ".mm", ".zig", ".nim", ".jl",
+		".vb", ".fs", ".clj", ".erl", ".groovy", ".gradle", ".ksh", ".fish", ".csh", ".tcsh", ".awk", ".vbs", ".ahk", ".applescript")
 )
 
 // IsInventoryNote is coverage.is_inventory_note over a finding's fields: the low static
@@ -57,9 +62,16 @@ func Coverage(p *parse.Package) []findings.Finding {
 		}
 		seen[key] = true
 		severity := "high"
+		message := fmt.Sprintf("%s analysis coverage is incomplete (%s).", phase, reason)
 		if phase == "parse" {
 			if lowParse[reason] {
 				severity = "low"
+			}
+			if reason == "unmodeled_content" && unanalyzedSource[strings.ToLower(path.Ext(e.Path))] {
+				// shipped source an agent can be told to build or run, read but analyzed by no
+				// lane: visible as FINDINGS on the console, not hidden under CLEAN
+				severity = "medium"
+				message = fmt.Sprintf("%s was read but not analyzed: no lane covers %s source.", e.Path, strings.TrimPrefix(path.Ext(e.Path), "."))
 			}
 		} else {
 			kind := ""
@@ -71,9 +83,9 @@ func Coverage(p *parse.Package) []findings.Finding {
 		if severity == "" {
 			continue
 		}
-		rule := map[string]string{"high": "analysis-incomplete", "low": "coverage-note"}[severity]
+		rule := map[string]string{"high": "analysis-incomplete", "medium": "analysis-incomplete", "low": "coverage-note"}[severity]
 		out = append(out, findings.Finding{Rule: rule, Severity: severity, Path: e.Path,
-			Message:  fmt.Sprintf("%s analysis coverage is incomplete (%s).", phase, reason),
+			Message:  message,
 			Evidence: map[string]any{"phase": phase, "reason": reason}})
 	}
 	return out

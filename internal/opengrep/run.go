@@ -91,6 +91,22 @@ func gap(rule, message string) []findings.Finding {
 	return []findings.Finding{coverage(rule, message, "")}
 }
 
+// packageGap is a gap about the whole package, anchored to its manifest so that every result
+// carries a location a SARIF consumer can show.
+func packageGap(p *parse.Package, rule, message string) []findings.Finding {
+	rel := ""
+	for _, a := range p.Artifacts {
+		if strings.EqualFold(filepath.Base(a.Rel), "SKILL.md") {
+			rel = a.Rel
+			break
+		}
+	}
+	if rel == "" && len(p.Artifacts) > 0 {
+		rel = p.Artifacts[0].Rel
+	}
+	return []findings.Finding{coverage(rule, message, rel)}
+}
+
 // run is opengrep_bridge.check: write the selected code to a temporary tree, run the pinned
 // engine over it once, and translate the report. Every failure is a high coverage finding.
 func run(p *parse.Package, o Options) []findings.Finding {
@@ -105,10 +121,10 @@ func run(p *parse.Package, o Options) []findings.Finding {
 	if o.Runner == nil || binary == "" {
 		var err error
 		if binary, err = Resolve(o.Executable); err != nil {
-			return gap("opengrep-unverified", err.Error())
+			return packageGap(p, "opengrep-unverified", err.Error())
 		}
 		if binary == "" {
-			return gap("opengrep-unavailable", "Executable code was selected, but the OpenGrep binary is unavailable.")
+			return packageGap(p, "opengrep-unavailable", "Executable code was selected, but the OpenGrep binary is unavailable.")
 		}
 	}
 	rules := Rules
@@ -175,7 +191,7 @@ func run(p *parse.Package, o Options) []findings.Finding {
 	status, err := runner(ctx, argv, root, env, stderr)
 	stderr.Close()
 	if errors.Is(err, context.DeadlineExceeded) {
-		return gap("opengrep-timeout", "OpenGrep exceeded the package analysis deadline.")
+		return packageGap(p, "opengrep-timeout", "OpenGrep exceeded the package analysis deadline.")
 	}
 	if err != nil {
 		return couldNotStart(err)

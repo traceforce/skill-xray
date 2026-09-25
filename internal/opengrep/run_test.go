@@ -484,3 +484,13 @@ func TestShellContractHasUniqueShellOnlyCases(t *testing.T) {
 	}
 	assert.Len(t, names, len(cases))
 }
+
+// A package-level engine gap is anchored to the manifest, so every result has a location.
+func TestPackageGapIsAnchoredToTheManifest(t *testing.T) {
+	p := parsed(t, map[string]string{"SKILL.md": "---\nname: x\n---\n", "run.py": "exec(input())\n"})
+	bogus := filepath.Join(t.TempDir(), "opengrep")
+	require.NoError(t, os.WriteFile(bogus, []byte("x"), 0o644))
+	fs := run(p, Options{Executable: bogus})
+	require.Equal(t, []string{"opengrep-unverified"}, rules(fs))
+	assert.Equal(t, "SKILL.md", fs[0].Path)
+}

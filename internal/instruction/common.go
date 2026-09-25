@@ -344,16 +344,12 @@ var (
 		`payloads?|jailbreaks?|prompt injection|remote instructions?|attacks?|abuse|documents?|` +
 		`inputs?|texts?|contents?|messages?|files?) (?:that|which)|` +
 		`is an? (?:example|indicator) of|do not follow|never comply with)\b`)
-	// _EXAMPLE_INTRO_RE
-	exampleIntroRE = regexp.MustCompile(`(?i)\b(?:such as|e\.?g\.?|i\.?e\.?|for example|for instance|a typical|an example|` +
-		`example|payload|looks? like|reads?|the following|as follows|shown below|` +
-		`the one (?:below|above)|like this|as shown|below(?: this)?|` +
-		`might (?:say|write|include|contain|read)|would (?:say|write|read))\b\s*:?|` +
-		`:\s*["']`)
-	// _SXV042_EXAMPLE_INTRO_RE (SXV-042 and SXV-043)
-	sxv042ExampleIntroRE = regexp.MustCompile(`(?i)\b(?:such as|e\.?g\.?|for example|for instance|a typical|an example|example|payload|` +
-		`looks? like|might (?:say|write|include|contain|read)|would (?:say|write|read)|` +
-		`as shown|like this)\b\s*:?|:\s*["']`)
+	// exampleIntroTailRE is exampleIntroRE anchored to the end of the text it is tested on: an
+	// intro cites only what immediately follows it, so a paragraph that merely contains "read"
+	// or "below" somewhere does not silence the directive after it.
+	exampleIntroTailRE = regexp.MustCompile(`(?i)(?:\b(?:such as|e\.?g\.?|i\.?e\.?|for example|for instance|a typical|an example|looks? like|the following|as follows|shown below|the one (?:below|above)|like this|as shown|might (?:say|write|include|contain|read)|would (?:say|write|read))\b[^.:;\n]{0,40}[.:,]?\s*["'\x{201c}\x{2018}(]?|\b(?:example|payload|reads?|below(?: this)?)\b\s*(?::\s*["'\x{201c}\x{2018}(]?|["'\x{201c}\x{2018}(])|:\s*["'\x{201c}\x{2018}(])\s*\z`)
+	// sxv042ExampleIntroTailRE is sxv042ExampleIntroRE anchored the same way.
+	sxv042ExampleIntroTailRE = regexp.MustCompile(`(?i)(?:\b(?:such as|e\.?g\.?|for example|for instance|a typical|an example|looks? like|might (?:say|write|include|contain|read)|would (?:say|write|read)|as shown|like this)\b[^.:;\n]{0,40}[.:,]?\s*["'\x{201c}\x{2018}(]?|\b(?:example|payload)\b\s*(?::\s*["'\x{201c}\x{2018}(]?|["'\x{201c}\x{2018}(])|:\s*["'\x{201c}\x{2018}(])\s*\z`)
 	// _SENTENCE_END_RE (?<=[.!?])\s+ without the lookbehind: the split point is one past the match start.
 	sentenceEndRE = regexp.MustCompile(`[.!?]\s+`)
 	// _EGRESS_URL_RE (SXV-041 and SXV-011)

@@ -124,3 +124,12 @@ func TestCanonicallyCollidingDirectoriesFailBeforeGrantSelection(t *testing.T) {
 	assert.Empty(t, pkg.Artifacts)
 	assert.True(t, has(fs, "", "high", "", "portable_path_collision"))
 }
+
+// A shipped source file no lane analyzes is a medium gap that reads FINDINGS, not a note under
+// CLEAN; a schema file stays a note.
+func TestUnanalyzedSourceIsAMediumGap(t *testing.T) {
+	assert.Equal(t, []gap{{"analysis-incomplete", "medium", "main.go"}},
+		gaps(coverage(t, map[string]string{"main.go": "package main\n\nfunc main() {}\n"})))
+	assert.Equal(t, []gap{{"coverage-note", "low", "schema.xsd"}},
+		gaps(coverage(t, map[string]string{"schema.xsd": "<xs:schema/>\n"})))
+}

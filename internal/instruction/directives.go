@@ -307,7 +307,7 @@ func directiveFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []findin
 		if raw == "" {
 			continue
 		}
-		introPrev := exampleIntroRE.MatchString(previous)
+		introPrev := exampleIntroTailRE.MatchString(previous)
 		// each list item is its own block: the cue on the intro carries through items that are
 		// one quoted string each, so an item with prose of its own is the last one cited, and
 		// any block the parser did not lift as prose (a fence, a rule) between two items ends
@@ -338,7 +338,7 @@ func directiveFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []findin
 					continue
 				}
 				before := raw[:m[0]]
-				if exampleIntroRE.MatchString(before) || introPrev || isDefensiveFrame(before) || quoted(raw, m[0], m[1], cited) {
+				if exampleIntroTailRE.MatchString(before) || introPrev || isDefensiveFrame(before) || quoted(raw, m[0], m[1], cited) {
 					continue
 				}
 				if rule.vector == "SXV-028" && (bareWeakNounRE.MatchString(matched) || reportedRefusal(before, restOfLine(raw, m[1]))) {
@@ -715,7 +715,7 @@ var (
 	// _COVERT_RUN_CUE_RE
 	covertRunCueRE = regexp.MustCompile(`(?i)` +
 		`\b(?:silently|quietly|covertly)\s+(?:run|execute|invoke|launch|call|start|trigger|source)\b|` +
-		`\b(?:run|execute|invoke|launch|call|start|trigger)\b[^.\n]{0,40}` +
+		`\b(?:run|execute|invoke|launch|call|start|trigger)\b(?:[^.\n]|\.[^\s.\n]){0,40}` +
 		`\b(?:silently|quietly|covertly)\b|` +
 		`\b(?:do not|don'?t|never|without|avoid)\s+(?:\w+\s+){0,3}` +
 		`(?:surfac\w*|show\w*|display\w*|mention\w*|reveal\w*|disclos\w*|tell\w*|inform\w*|` +
@@ -739,7 +739,8 @@ var (
 		`\beven (?:if|when) the user (?:did not|didn'?t|does not|doesn'?t|never) ask\w*\b|` +
 		`\bwhether or not the user\b|` +
 		`\b(?:ignore|disregard|override)\s+(?:any\s+|all\s+)?(?:earlier|prior|previous|conflicting|` +
-		`existing)\s+(?:system\s+)?(?:instruction|rule|guideline|directive)s?\b`)
+		`existing)\s+(?:system\s+)?(?:instruction|rule|guideline|directive)s?\b|` +
+		`\b(?:without|do not|don'?t|never)\s+(?:telling|informing|notifying|alerting)\s+(?:the\s+)?(?:end[- ]?)?(?:user|human|operator|person)s?\s*(?:[.;!?]|\z)`)
 	// _COVERT_OVERRIDE_RE
 	covertOverrideRE = regexp.MustCompile(`(?i)regardless|even (?:if|when)|whether or not|ignore|disregard|override`)
 	// _COERCED_RUN_CUE_RE; \x60 is the backtick
@@ -801,6 +802,20 @@ var (
 )
 
 // bundledRuns is _BUNDLED_RUN_RE.finditer.
+// otherCommandRE: a command named right after a concealment cue that is not a shipped script.
+var otherCommandRE = regexp.MustCompile("(?i)^[^.!?\n]{0,12}?(?:`[^`\n]+`|\\b(?:npm|npx|pnpm|yarn|pip3?|pipx|uv|brew|apt(?:-get)?|cargo|go|git|gh|docker|make|codex|claude|cursor|gemini)\\b)")
+
+// warnsAboutAnotherCommand is true when the sentence after a concealment cue names a command
+// that is not a bundled run: "do not tell the user to run `codex plugin add`" warns against
+// a command, it does not hide the shipped script named elsewhere in the block.
+func warnsAboutAnotherCommand(block string, cueEnd int) bool {
+	rest := block[cueEnd:]
+	if i := strings.IndexAny(rest, ".!?\n"); i >= 0 {
+		rest = rest[:i]
+	}
+	return otherCommandRE.MatchString(rest) && len(bundledRuns(rest)) == 0 && !bundledProseRE.MatchString(rest)
+}
+
 func bundledRuns(s string) [][]int {
 	return findAll(bundledRunRE, s, func(m []int) bool {
 		if m[2] >= 0 {
@@ -892,11 +907,10 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 			joined.WriteString(sb.raw + " ")
 		}
 		j := joined.String()
-		var covert []int // the first covert cue that is not itself a quoted citation
+		var coverts [][]int // every covert cue that is not itself a quoted citation
 		for _, c := range covertRunCueRE.FindAllStringIndex(j, -1) {
 			if !quoted(j, c[0], c[1], false) {
-				covert = c
-				break
+				coverts = append(coverts, c)
 			}
 		}
 		// "Before using any tool, read the docs" is ordinary prose: the before-any cue counts
@@ -914,18 +928,39 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 		}
 		for i, sb := range blocks {
 			offset := offsets[i]
-			introPrev := sxv042ExampleIntroRE.MatchString(previous)
+			introPrev := sxv042ExampleIntroTailRE.MatchString(previous)
 			previous = sb.raw
 			if inFrontmatter(a, sb.Start) {
 				previous = ""
 			}
+			// A concealment cue in this block grades the run high; one elsewhere in the section
+			// grades it medium, like a lone coercion cue, so the report names the cue without
+			// asserting a verdict. An override sentence brands only its own block, and a warning
+			// about another command brands nothing.
+			var covert []int
+			covertHere := false
+			for _, c := range coverts {
+				if warnsAboutAnotherCommand(j, c[1]) {
+					continue
+				}
+				inBlock := offset <= c[0] && c[0] < offset+len(sb.raw)
+				if !inBlock && covertOverrideRE.MatchString(j[c[0]:c[1]]) {
+					continue
+				}
+				if inBlock || covert == nil {
+					covert, covertHere = c, inBlock
+				}
+				if inBlock {
+					break
+				}
+			}
 			if covert == nil && len(coercion) == 0 {
 				continue
 			}
-			strong := covert != nil || len(coercion) >= 2
+			strong := covertHere || len(coercion) >= 2
 			// A lone coercion cue (medium) must sit in this block; only the strong grade may
 			// correlate across the section.
-			if !strong && !coercedRunCueRE.MatchString(sb.raw) {
+			if !strong && covert == nil && !coercedRunCueRE.MatchString(sb.raw) {
 				continue
 			}
 			cue := covert
@@ -960,7 +995,7 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 					}
 				}
 				before := sb.raw[:cut]
-				if sxv042ExampleIntroRE.MatchString(before) || introPrev || isDefensiveFrame(before) {
+				if sxv042ExampleIntroTailRE.MatchString(before) || introPrev || isDefensiveFrame(before) {
 					continue
 				}
 				if negatedRunOf(sb.raw, m) {
@@ -980,7 +1015,7 @@ func covertScriptFindings(a *parse.Artifact, _ map[string]*parse.Artifact) []fin
 				}
 				severity, verdict, pyStrong := "high", "", "True"
 				if !strong {
-					severity, verdict, pyStrong = "medium", " (single coercion cue: reported, not a verdict)", "False"
+					severity, verdict, pyStrong = "medium", " (a single cue, or one outside this paragraph: reported, not a verdict)", "False"
 				}
 				line, col := SourcePosition(sb.Text, sb.Start, runeIdx(sb.raw, m[0]))
 				cues := []any{}
