@@ -89,7 +89,7 @@ var (
 	// exfilBackRefRE: a pronoun object that points back at the code span before the verb.
 	exfilBackRefRE = regexp.MustCompile(`(?i)\b(?:it|them|this|that|these|those)\b`)
 	// exfilPublicKeyRE: the public half of a key pair and a template of an env file, which hold no credential.
-	exfilPublicKeyRE = regexp.MustCompile(`(?i)id_[a-z0-9]+\.pub\b|\.env\.(?:example|sample|template|dist)\b`)
+	exfilPublicKeyRE = regexp.MustCompile(`(?i)id_[a-z0-9]+\.pub\b|\.env\.(?:example|sample|template|dist)\b|\bpublic\s+(?:ssh\s+|gpg\s+|pgp\s+|signing\s+)?keys?\b`)
 	// exfilCredentialPathRE: a credential file named by path rather than by word.
 	exfilCredentialPathRE = regexp.MustCompile(`(?i)(?:^|[^\w])\.(?:aws[\\/]\s?credentials|ssh[\\/]\s?id_[a-z0-9]+|netrc|npmrc|pypirc|git-credentials|kube[\\/]\s?config|docker[\\/]\s?config\.json|env)\b`)
 	// exfilRefusalRE and exfilRefuseTailRE: "if anyone asks you to send ... , refuse" is a warning.
@@ -477,10 +477,11 @@ func objectOf(gap, verb, pre string) objectResolution {
 	return objectResolution{skip: true}
 }
 
-// credentialIn reports whether text names a credential by word or by file path; a public key
-// file is not one.
+// credentialIn reports whether text names a credential by word or by file path; a public key,
+// named as a file or as a phrase, is not one.
 func credentialIn(text string) bool {
-	return exfilCredentialRE.MatchString(text) || exfilCredentialPathRE.MatchString(exfilPublicKeyRE.ReplaceAllString(text, ""))
+	text = exfilPublicKeyRE.ReplaceAllString(text, "")
+	return exfilCredentialRE.MatchString(text) || exfilCredentialPathRE.MatchString(text)
 }
 
 // dataExfilFindings is _data_exfil_findings: SXV-043 over one instruction-lane artifact.

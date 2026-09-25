@@ -21,12 +21,12 @@ var (
 	// unanalyzedSource: source files no lane analyzes; an agent can be told to build or run them.
 	unanalyzedSource = map[string]string{".go": "Go", ".rs": "Rust", ".php": "PHP", ".java": "Java", ".kt": "Kotlin", ".kts": "Kotlin",
 		".swift": "Swift", ".c": "C", ".h": "C", ".cc": "C++", ".cpp": "C++", ".cxx": "C++", ".hpp": "C++", ".cs": "C#", ".lua": "Lua",
-		".r": "R", ".scala": "Scala", ".dart": "Dart", ".ex": "Elixir", ".exs": "Elixir", ".hs": "Haskell", ".m": "Objective-C",
-		".mm": "Objective-C", ".zig": "Zig", ".nim": "Nim", ".jl": "Julia", ".vb": "Visual Basic", ".vbs": "VBScript", ".fs": "F#",
+		".r": "R", ".scala": "Scala", ".dart": "Dart", ".ex": "Elixir", ".exs": "Elixir", ".hs": "Haskell", ".m": "Objective-C or MATLAB",
+		".mm": "Objective-C", ".zig": "Zig", ".nim": "Nim", ".jl": "Julia", ".vb": "Visual Basic", ".vbs": "VBScript", ".fs": "F# or Forth",
 		".fsx": "F#", ".clj": "Clojure", ".erl": "Erlang", ".groovy": "Groovy", ".gradle": "Gradle", ".ksh": "ksh", ".fish": "fish",
 		".csh": "csh", ".tcsh": "tcsh", ".awk": "awk", ".ahk": "AutoHotkey", ".applescript": "AppleScript", ".ml": "OCaml",
 		".pas": "Pascal", ".f90": "Fortran", ".cr": "Crystal", ".rkt": "Racket", ".lisp": "Lisp", ".d": "D", ".nix": "Nix",
-		".tf": "Terraform", ".cmake": "CMake", ".pyx": "Cython", ".psm1": "PowerShell", ".v": "V", ".elm": "Elm"}
+		".tf": "Terraform", ".cmake": "CMake", ".pyx": "Cython", ".psm1": "PowerShell", ".v": "V or Verilog", ".elm": "Elm"}
 )
 
 // IsInventoryNote is coverage.is_inventory_note over a finding's fields: the low static

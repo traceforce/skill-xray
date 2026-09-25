@@ -858,7 +858,12 @@ func (cs *cueSentences) sentence(c []int) (int, int, bool) {
 func (cs *cueSentences) usable(c []int) bool {
 	_, e, runs := cs.sentence(c)
 	cue, rest := cs.text[c[0]:c[1]], cs.text[min(c[1], e):e]
-	if !runs && ((warnedRunCueRE.MatchString(cue) && otherCommandRE.MatchString(rest)) || transparencyCueRE.MatchString(cue)) {
+	// a warning against another command, wherever the sentence names the bundled run; a cue
+	// that names the bundled script itself ("do not tell the user to run `scripts/x.sh`") stays
+	if m := otherCommandRE.FindString(rest); m != "" && warnedRunCueRE.MatchString(cue) && len(bundledRuns(m)) == 0 && !bundledProseRE.MatchString(m) {
+		return false
+	}
+	if !runs && transparencyCueRE.MatchString(cue) {
 		return false
 	}
 	return !cueNegatedRE.MatchString(rest)
