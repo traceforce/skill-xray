@@ -66,7 +66,7 @@ skill-xray scan https://github.com/example/my-skill.git
 
 The target can be a directory, a single file such as `SKILL.md`, a `.zip` archive, an `https://` URL to a zip or to a single file, or a git repository given as an `https://` address ending in `.git`. `ssh://`, `git@` and `git://` addresses are refused with `git ingest supports https:// repository URLs only`. A plain `http://` address is refused as `not a directory, file, .zip, URL or git repo`, because only `https://` counts as a URL. Tar archives are refused with `unpack it and scan the directory`, so unpack those first.
 
-Directory, file and zip scans never touch the network. URL and git scans do, and they stop with exit code 2 rather than carry on when the URL redirects, the download is too large, holds too many files, or resolves to a private or local address. Give a URL that points directly at the file: a GitHub archive link such as `.../archive/refs/heads/main.zip` redirects and is refused, while its target `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/main` downloads.
+Directory, file and zip scans never touch the network unless `--llm` is on, which sends the skill text to the configured provider. URL and git scans do, and they stop with exit code 2 rather than carry on when the URL redirects, the download is too large, holds too many files, or resolves to a private or local address. Give a URL that points directly at the file: a GitHub archive link such as `.../archive/refs/heads/main.zip` redirects and is refused, while its target `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/main` downloads.
 
 `scan` treats whatever you point it at as one package. A folder that holds several skills becomes one merged run named after that folder, so use `system-scan --root` for a folder of skills. A folder with no `SKILL.md` still scans and can read `CLEAN`; stderr then says `note: no SKILL.md found under <path>; nothing was evaluated as a skill manifest`, so look for that line before trusting a `CLEAN` on something you unpacked by hand.
 
@@ -115,7 +115,7 @@ export SKILLXRAY_LLM_BASE_URL=https://llm.example.com/v1
 skill-xray scan ./my-skill --llm
 ```
 
-With `--llm` alone the lane runs a semantic prompt-injection check (SXV-038). Its results are advisory and capped at medium severity: they can move a clean package to `FINDINGS` but not to `BLOCKING`, and they do not remove or lower a deterministic finding. If the provider is down or rejects the key, the deterministic scan still completes with exit code 0; the `llm:` console line names the failure, and the report records it under `llmUsage`.
+With `--llm` alone the lane runs a semantic prompt-injection check (SXV-038). Its results are advisory and capped at medium severity: they can move a clean package to `FINDINGS` but not to `BLOCKING`, and they do not remove or lower a deterministic finding. If the provider is down or rejects the key, the deterministic scan still completes and the failure does not change the exit code on its own: the `llm:` console line names it, and the report records it under `llmUsage`.
 
 The console adds one line for the lane, for example:
 
@@ -167,7 +167,7 @@ report: findings.sarif.json
 packages: 2, blocking: 1, with findings: 0, clean: 1, incomplete: 0, discovery exceptions: 0
 ```
 
-On a Windows machine the first `system-scan` will often exit 2: a skill that ships PowerShell, or any other language the code engine does not cover, is read but not analyzed, and each such file is a high `analysis-incomplete` gap named on stderr. See [Exit codes](#exit-codes).
+On a Windows machine the first `system-scan` will often exit 2: a skill that ships a PowerShell, zsh, ksh or fish script is read but not analyzed, and each such file is a high `analysis-incomplete` gap named on stderr. See [Exit codes](#exit-codes).
 
 | flag | what it does |
 |---|---|
@@ -301,7 +301,7 @@ The run properties keep the audit: `rawCandidates` holds the emitted candidates,
 The file walker, the part of the scanner that reads the package off disk, treats every package as hostile, so:
 
 - it caps per-file size, file count and total bytes read, so a crafted package cannot make it hang or run out of memory;
-- it does not follow any symlink or NTFS junction, wherever it points; each is recorded in the ledger as unread;
+- it does not follow a symlink or NTFS junction inside the package, wherever it points; each is recorded in the ledger as unread. The package root you name may itself be a symlink;
 - it does not open a FIFO, device or socket;
 - it inventories shipped compiled and native code (`.pyc`, `.pyo`, `.pyd`, `.so`, versioned `.so.N`, `.dylib`, `.dll`, `.exe`, `.wasm`, `.jar`, `.war`, `.class`, `.node`, `.o`, `.a`) as one `analysis-incomplete` result per file with the reason `shipped_compiled`, so a full coverage number can never hide code nobody reviewed;
 - it reports content it cannot review with the reason `unreviewable_content`. An `.svg` is a low `coverage-note`, because an agent never reads it as instructions. A `.pdf` or a nested archive is a high `analysis-incomplete` gap with exit code 2, because an agent may be told to read or unpack it;
