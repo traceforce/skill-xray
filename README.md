@@ -6,7 +6,7 @@ Skill X-Ray is a static security scanner for AI agent skill packages. A skill pa
 
 It is the sibling of [MCP X-Ray](https://github.com/traceforce/mcp-xray), which does the same job for MCP servers; if an MCP server is what you need to scan, use that one. Like MCP X-Ray it writes a [SARIF](https://sarifweb.azurewebsites.net/) report that SARIF-aware tools and CI pipelines can read, and it can scan one skill or every skill in the folders the common coding agents load from, in one go.
 
-The scanner works offline with deterministic rules. A pinned [OpenGrep](https://github.com/opengrep/opengrep) engine covers bundled Python, POSIX shell (bash, sh, dash), JavaScript and TypeScript. An optional LLM pass, called the LLM lane in this file and in the report, adds a semantic check on top. It is off unless you ask for it, and when it is on it sends the skill text to the provider you configure.
+The scanner works offline with deterministic rules. A pinned [OpenGrep](https://github.com/opengrep/opengrep) engine, called the code engine in this file, covers bundled Python, POSIX shell (bash, sh, dash), JavaScript and TypeScript. An optional LLM pass, called the LLM lane in this file and in the report, adds a semantic check on top. It is off unless you ask for it, and when it is on it sends the skill text to the provider you configure.
 
 ## Installation
 
@@ -18,13 +18,15 @@ The scanner works offline with deterministic rules. A pinned [OpenGrep](https://
 
 ### Download a release
 
-Each release `v<version>` on the [Releases](https://github.com/traceforce/skill-xray/releases) page has archives for Linux (amd64, arm64), macOS (amd64, arm64) and Windows (amd64), plus a `SHA256SUMS` file. Check the sum, unpack the archive and put `skill-xray` on your PATH. Then fetch the code engine. This is safe to repeat: it verifies the cached copy and downloads only when that copy is missing or fails the size and SHA-256 check.
+Each release `v<version>` on the [Releases](https://github.com/traceforce/skill-xray/releases) page has archives for Linux (amd64, arm64), macOS (amd64, arm64) and Windows (amd64), plus a `SHA256SUMS` file. Check the sum, unpack the archive and put `skill-xray` on your PATH. Then install the code engine. Running the command again is safe: it keeps a cached copy that passes the size and SHA-256 check and sits in a directory only you or an administrator can change, and downloads again otherwise.
 
 ```bash
 skill-xray install-opengrep
 ```
 
-The command downloads OpenGrep 1.29.0 for your platform, checks its size and SHA-256 against the values built into the binary, and stores it in the user cache. Without an engine the scanner still runs, but a package that ships code gets a high `opengrep-unavailable` gap in its report and exit code 2. An engine you point at explicitly that is missing or does not match the pin gives the same kind of gap under the name `opengrep-unverified`.
+The command downloads OpenGrep 1.29.0 for your platform, checks its size and SHA-256 against the values built into the binary, and stores it in the user cache. Without an engine the scanner still runs, but a package that ships code gets a high `opengrep-unavailable` gap in its report and exit code 2. An engine you point at explicitly that is missing, does not match the pin or sits in a directory another user could change gives the same kind of gap under the name `opengrep-unverified`. A gap is a result that records what could not be checked; [Exit codes](#exit-codes) says what exit code 2 means.
+
+Pinned builds exist for Windows x86_64, Linux x86_64 and aarch64, and macOS x86_64 and arm64. The cache is `%LOCALAPPDATA%\skill-xray\opengrep\1.29.0` on Windows, `~/Library/Caches/skill-xray/opengrep/1.29.0` on macOS, and `$XDG_CACHE_HOME` or `~/.cache` followed by `skill-xray/opengrep/1.29.0` elsewhere. The scanner looks for the code engine in this order: `--opengrep-bin`, then `SKILL_XRAY_OPENGREP_BIN`, then the cache, then `opengrep` on the PATH; every candidate must match the pinned size and SHA-256 and sit in a directory only you or an administrator can change.
 
 ### Build from source
 
@@ -41,11 +43,11 @@ make install-opengrep
 
 Without make, `go build -o bin/ ./cmd/skill-xray` does the same as `make all`. The examples below assume `skill-xray` is on your PATH; from a source build use `./bin/skill-xray` instead.
 
-On Windows the same commands run from PowerShell or cmd. Write `$env:SKILLXRAY_LLM_PROVIDER = "anthropic"` where a bash example says `export SKILLXRAY_LLM_PROVIDER=anthropic`, and give `scan` a full path such as `$HOME\Downloads\deploy-helper` rather than `~/Downloads/deploy-helper`, because PowerShell does not expand `~` in that position. `--root ~/.claude/skills` works as written, since the tool expands `~` in roots itself.
-
 ## Usage
 
-There are four commands. `scan` analyzes one skill package, `system-scan` analyzes every skill installed on the machine, `install-opengrep` fetches the code engine, and `version` prints the version. Both scans write one SARIF report and print one verdict line per package.
+There are four commands. `scan` analyzes one skill package, `system-scan` analyzes every skill installed on the machine, `install-opengrep` fetches the code engine, and `version` prints the version. Both scans write one SARIF report and print one verdict line per package. The two `scan` options most people need, the LLM lane and a reviewed policy, have their own subsections below.
+
+On Windows the same commands run from PowerShell or cmd. Write `$env:SKILLXRAY_LLM_PROVIDER = "anthropic"` where a bash example says `export SKILLXRAY_LLM_PROVIDER=anthropic`, and give `scan` a full path such as `$HOME\Downloads\deploy-helper` rather than `~/Downloads/deploy-helper`, because PowerShell does not expand `~` in that position. `--root ~/.claude/skills` works as written, since the tool expands `~` in roots itself.
 
 ### Scan one skill
 
@@ -64,6 +66,15 @@ skill-xray scan https://example.com/my-skill.zip
 skill-xray scan https://github.com/example/my-skill.git
 ```
 
+| flag | what it does |
+|---|---|
+| `-o`, `--output <path>` | where the report is written; default `findings.sarif.json`; see [Output format](#output-format) for where it may go |
+| `--policy <path>` | apply a reviewed operator policy that suppresses or demotes named results; see [Apply a reviewed policy](#apply-a-reviewed-policy) |
+| `--opengrep-bin <path>` | use this OpenGrep binary instead of the cached one; it must match the pinned OpenGrep 1.29.0 size and SHA-256 and sit in a directory only you or an administrator can change |
+| `--llm` | also run the LLM lane; see [Scan with the LLM lane](#scan-with-the-llm-lane) |
+
+What it looks for: prompt-injection patterns and directives to run a bundled script covertly or as a forced precondition; directives to send your data to an address written into the skill; unpinned remote installs; obfuscated or minified scripts; permission understatement; writes that persist into agent configuration; and every analysis gap, kept visible as a result. The full list with severities is under [Detection vectors](#detection-vectors).
+
 The target can be a directory, a single file such as `SKILL.md`, a `.zip` archive, an `https://` URL to a zip or to a single file, or a git repository given as an `https://` address ending in `.git`. `ssh://`, `git@` and `git://` addresses are refused with `git ingest supports https:// repository URLs only`. A plain `http://` address is refused as `not a directory, file, .zip, URL or git repo`, because only `https://` counts as a URL. Tar archives are refused with `unpack it and scan the directory`, so unpack those first.
 
 Directory, file and zip scans never touch the network unless `--llm` is on, which sends the skill text to the configured provider. URL and git scans do, and they stop with exit code 2 rather than carry on when the URL redirects, the download is too large, holds too many files, or resolves to a private or local address. Give a URL that points directly at the file: a GitHub archive link such as `.../archive/refs/heads/main.zip` redirects and is refused, while its target `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/main` downloads.
@@ -77,20 +88,13 @@ BLOCKING  seen=4   read=4   cov=100.0%  ./my-skill
 report: findings.sarif.json
 ```
 
-`seen` is the number of files found, `read` the number read as text, and `cov` the share that was read. The verdict word means:
+`seen` is the number of files found, `read` the number read as text, and `cov` the share that was read. A vector is the class of behavior a rule detects (`SXV-nnn`, listed under [Detection vectors](#detection-vectors)); an analysis gap is a result with no vector that records what could not be checked (see [Coverage ledger](#coverage-ledger)). The verdict word means:
 
 - `BLOCKING`: at least one high or critical finding that names a vector;
 - `FINDINGS`: any other finding that names a vector, or an analysis gap at medium severity or above;
 - `CLEAN`: neither.
 
 The findings themselves are in the report, not on the console. Control characters and line or paragraph separators in a printed path are shown as escapes, so a file name cannot hide or split a console line.
-
-| flag | what it does |
-|---|---|
-| `-o`, `--output <path>` | where the report is written; default `findings.sarif.json`; see [Output format](#output-format) for where it may go |
-| `--policy <path>` | apply a reviewed operator policy that suppresses or demotes named results; see [Apply a reviewed policy](#apply-a-reviewed-policy) |
-| `--opengrep-bin <path>` | use this OpenGrep binary instead of the cached one; it must match the pinned OpenGrep 1.29.0 size and SHA-256 |
-| `--llm` | also run the LLM lane; see [Scan with the LLM lane](#scan-with-the-llm-lane) |
 
 ### Scan with the LLM lane
 
@@ -130,13 +134,17 @@ Three more flags turn the lane into a reviewer of the static text-pattern findin
 | `--llm --llm-shadow` | the model reviews the text-pattern findings and its proposals are recorded in the report; nothing changes |
 | `--llm --llm-review` | as shadow, but a validated false-positive proposal is annotated as `llm-disputed`; nothing is removed or downgraded |
 | `--llm --llm-review --llm-apply` | a validated dispute may demote that one finding to `low`, recorded as `corrected`; the finding is not suppressed and its severity is not raised |
-| `... --llm-additive` | also run the semantic SXV-038 check after the review; without it, shadow and review turn that check off |
+| `--llm --llm-shadow --llm-additive` or `--llm --llm-review --llm-additive` | also run the semantic SXV-038 check after the review; without it, shadow and review turn that check off. The flag needs one of the two review flags |
 
 `--llm-shadow` and `--llm-review` exclude each other. A scan makes at most 25 model calls and sends at most 1 MiB of text per package, and `system-scan` spends that budget again for every package it finds. Do not gate CI on a disputed finding. The text the model reads while it reviews is written by the skill's author, and an author who wants a finding dismissed can write prose that argues for dismissing it.
 
+In shadow and review mode the model sees a text-pattern candidate together with its rule contract, evidence, nearby source and the untrusted description that governs it, and answers `retain_finding`, `propose_false_positive` or `insufficient_context`. A false-positive proposal has to name the rule condition that is missing. It is accepted only with high confidence and complete, bounded source; redacted, oversized or externally linked context blocks it, and mechanical findings and coverage notes cannot be disputed at all. The client pins `temperature: 0`, and OpenAI's best-effort `seed`, where the model accepts them. That removes one source of variance, not all of it, which is why the lane stays advisory and medium-capped. Credential redaction before sending is best effort, not a guarantee.
+
+The run properties keep the audit: `rawCandidates` holds the emitted candidates, `candidateLinks` ties each to the result that retained it, `capabilityContexts` holds the capability evidence once per manifest, and `llmReview` records each review decision with its disposition, status, reason, tags, policy version, provenance, proposal, and request and response hashes.
+
 ### Scan every skill installed on this machine
 
-`system-scan` finds every skill package under the folders the common coding agents load skills from, scans each one as `scan` would, and writes one report with one run per package.
+`system-scan` finds every skill package under the folders the common coding agents load skills from, scans each one as `scan` would, and writes one report with one run per package. It detects the same things as `scan`, for each package.
 
 ```bash
 # Every skill installed for Claude Code, Cursor, Codex, Gemini CLI, OpenCode, Copilot and the project-local folders
@@ -154,7 +162,7 @@ skill-xray system-scan --llm
 
 The known roots are `~/.claude/skills`, `~/.claude/plugins`, `~/.config/opencode/skills`, `~/.cursor/skills`, `~/.gemini/skills`, `~/.codex/skills`, `~/.copilot/skills`, `~/.agents/skills`, and in the current project `.claude/skills`, `.opencode/skills`, `.cursor/skills`, `.gemini/skills`, `.codex/skills`, `.github/skills` and `.agents/skills`. A known root that does not exist is skipped.
 
-A package is a directory holding a `SKILL.md` or a plugin marker; once found, its subtree is not searched further.
+A package is a directory holding a `SKILL.md` or one of the plugin markers `.claude-plugin`, `.codex-plugin`, `plugin.json`, `.mcp.json` or `hooks.json`; once found, its subtree is not searched further.
 
 A `--root` you name must exist and be a directory. A mistyped one is not refused up front: the run continues over the other roots, the report is still written, the summary counts it under `discovery exceptions`, stderr prints `skill discovery incomplete (root_missing): <path>`, and the exit code is 2. A typo therefore never passes as a clean run.
 
@@ -167,7 +175,7 @@ report: findings.sarif.json
 packages: 2, blocking: 1, with findings: 0, clean: 1, incomplete: 0, discovery exceptions: 0
 ```
 
-On a Windows machine the first `system-scan` will often exit 2: a skill that ships a PowerShell, zsh, ksh or fish script is read but not analyzed, and each such file is a high `analysis-incomplete` gap named on stderr. See [Exit codes](#exit-codes).
+On a Windows machine the first `system-scan` will often exit 2: a skill that ships a PowerShell, batch, zsh, Ruby or Perl script is read but not analyzed, and each such file is a high `analysis-incomplete` gap named on stderr. See [Exit codes](#exit-codes).
 
 | flag | what it does |
 |---|---|
@@ -186,7 +194,16 @@ When you have reviewed a finding and decided it is a false positive for this pac
 skill-xray scan ./my-skill --output reports/my-skill.sarif --policy reviews/my-skill-policy.json
 ```
 
-A policy is a JSON file with a `version` of `skill-xray/scoped-policy/v1` and a `decisions` list. Each decision names one result by four fields copied from the report: `rule_id` is the result's `ruleId`, `path` is its first `locations[0].physicalLocation.artifactLocation.uri` with its percent-encoding decoded (`dir/a%20b.py` in the report is `dir/a b.py` in the policy), `fingerprint` is `partialFingerprints["skill-xray/evidence/v1"]` and `context_digest` is `properties.contextDigest`. `action` is `suppress`, or `demote` with a lower `effective_severity`; `reason` is free text kept in the report.
+A policy is a JSON file with a `version` of `skill-xray/scoped-policy/v1` and a `decisions` list. Each decision names one result by four fields copied from the report:
+
+| policy field | copied from the result |
+|---|---|
+| `rule_id` | `ruleId` |
+| `path` | `locations[0].physicalLocation.artifactLocation.uri`, percent-decoded: `dir/a%20b.py` in the report is `dir/a b.py` in the policy |
+| `fingerprint` | `partialFingerprints["skill-xray/evidence/v1"]` |
+| `context_digest` | `properties.contextDigest` |
+
+`action` is `suppress`, or `demote` with a lower `effective_severity`; `reason` is free text kept in the report.
 
 ```json
 {
@@ -204,27 +221,29 @@ A policy is a JSON file with a `version` of `skill-xray/scoped-policy/v1` and a 
 }
 ```
 
-The console then adds a line such as `policy: 1 suppressed, 0 demoted, 0 of 1 decisions matched no result`. That line is how you tell a `CLEAN` that came from a suppression apart from a `CLEAN` that came from a clean package, and it also shows when a decision no longer matches anything.
+The console then adds a line such as `policy: 1 suppressed, 0 demoted, 0 of 1 decisions matched no result`. That line is how you tell a `CLEAN` that came from a suppression apart from a `CLEAN` that came from a clean package, and its last count shows when a decision no longer matches anything.
 
 There is no vector-wide ignore and no wildcard, and any edit to the package invalidates the decision. Suppressed results stay in the report under `suppressions`; demoted ones keep the lower `level` with `properties.disposition` set to `corrected`. [docs/reporting.md](docs/reporting.md) has the full format.
 
-### install-opengrep
+### Install the code engine
+
+`install-opengrep` downloads the pinned OpenGrep build for your platform, verifies it and stores it in the user cache. It is safe to run again.
 
 ```bash
 skill-xray install-opengrep
 # installed OpenGrep 1.29.0 at <cache path>
 ```
 
-Pinned builds exist for Windows x86_64, Linux x86_64 and aarch64, and macOS x86_64 and arm64. The cache is `%LOCALAPPDATA%\skill-xray\opengrep\1.29.0` on Windows, `~/Library/Caches/skill-xray/opengrep/1.29.0` on macOS, and `$XDG_CACHE_HOME` or `~/.cache` followed by `skill-xray/opengrep/1.29.0` elsewhere. The code lane looks for the engine in this order: `--opengrep-bin`, then `SKILL_XRAY_OPENGREP_BIN`, then the cache, then `opengrep` on the PATH; every candidate must match the pinned size and SHA-256.
+The platforms, the cache path and the order in which the scanner looks for an engine are under [Download a release](#download-a-release).
 
-### version
+### Print the version
+
+`version` prints the scanner's version; `skill-xray --version` prints the same line.
 
 ```bash
 skill-xray version
 # skill-xray 0.1.0
 ```
-
-`skill-xray --version` prints the same line.
 
 ## Exit codes
 
@@ -243,7 +262,14 @@ The code engine gets 45 seconds per package. A package whose code takes longer, 
 
 `scan` and `system-scan` write one [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) document, validated against the OASIS schema embedded in the binary before anything is written. `scan` writes one run; `system-scan` writes one file with one run per package. Each result carries a readable rule ID, a stable fingerprint, a severity, bounded evidence, source locations, and a `properties.category` of `security-finding` or `analysis-diagnostic`. Each run also records, under its properties, what it ran with and what it saw: the OpenGrep version and ruleset digest, the package name and content digest, the coverage status, the capability context, the raw candidates and how they became results, and, with the LLM lane on, `llmUsage`, plus `llmReview` in shadow or review mode. [docs/reporting.md](docs/reporting.md) describes each field.
 
-The report and the policy file must be outside the scanned package, and the report's directory must exist. `scan` checks both before any file of the package is read and refuses with `cannot prepare SARIF: Report directory is missing or not a directory: <path>` or `cannot prepare SARIF: Report must be outside the scanned package` (a report path that is itself a symlink gets the second message); `system-scan` reports the second as `cannot write SARIF: ...` after discovery. A directory you cannot write to is found out only when the report is written, after the scan, as `cannot write SARIF: ...`. A policy that is missing, inside the package or not valid JSON is refused the same way with `Operator policy ...` in place of `Report ...`. Nothing is written on a refusal and the exit code is 2. The writer validates the document first, then replaces the target through a temporary file in the same directory, so a failed run leaves an earlier report untouched. Reports over 64 MiB fail instead of being truncated. A scan you interrupt writes no report and can leave the engine's working directory, `skill-xray-opengrep-*`, in the system temp folder.
+Where the report may go:
+
+- The report and the policy file must be outside the scanned package, and the report's directory must exist. `scan` checks both before any file of the package is read and refuses with `cannot prepare SARIF: Report directory is missing or not a directory: <path>` or `cannot prepare SARIF: Report must be outside the scanned package`; a report path that is itself a symlink gets the second message. `system-scan` reports the second as `cannot write SARIF: ...` after discovery.
+- A directory you cannot write to is found out only when the report is written, after the scan, as `cannot write SARIF: ...`.
+- A policy that is missing, inside the package or not valid JSON is refused the same way, with `Operator policy ...` in place of `Report ...`.
+- Nothing is written on a refusal and the exit code is 2.
+- The writer validates the document first, then replaces the target through a temporary file in the same directory, so a failed run leaves an earlier report untouched. Reports over 64 MiB fail instead of being truncated.
+- A scan you interrupt writes no report and can leave the engine's working directory, `skill-xray-opengrep-*`, in the system temp folder.
 
 Output is canonical ASCII JSON with sorted keys, so with the LLM lane off the same input and configuration produce a byte-identical report; the Windows and Linux builds were compared and agree. The one known exception is a zip whose member names end in a space or a dot, which Windows renames on extraction. Source evidence can contain credentials, so treat reports as sensitive.
 
@@ -252,12 +278,14 @@ Output is canonical ASCII JSON with sorted keys, so with the LLM lane off the sa
 ```bash
 # A skill you downloaded and are about to install
 skill-xray scan ~/Downloads/deploy-helper
-# BLOCKING  seen=6   read=6   cov=100.0%  /home/me/Downloads/deploy-helper
+# BLOCKING  seen=3   read=3   cov=100.0%  /home/me/Downloads/deploy-helper
 # report: findings.sarif.json
 
 # A CI job: the report goes next to the checkout, a reviewed policy quiets one known false positive
 skill-xray scan ./skills/release-notes --output ../reports/release-notes.sarif --policy ./reviews/release-notes.json
 ```
+
+Sample reports are in [examples/findings](examples/findings/): `deploy-helper.sarif.json` is the BLOCKING scan of a small skill that ships a fetch-and-run installer, a credential-reading script and instructions to send credentials elsewhere, and `notes.sarif.json` is the CLEAN scan of a manifest-only skill. [examples/policy.json](examples/policy.json) suppresses the installer result of the first one.
 
 ## Configuration
 
@@ -269,9 +297,19 @@ skill-xray scan ./skills/release-notes --output ../reports/release-notes.sarif -
 | `SKILLXRAY_LLM_API_KEY` | the API key; on a vendor's own endpoint `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is accepted as a fallback, but not on a custom base URL |
 | `SKILLXRAY_LLM_MODEL` | the model; defaults to `claude-haiku-4-5` for anthropic and `gpt-4.1-mini` for openai; required for openai-compatible |
 | `SKILLXRAY_LLM_BASE_URL` | an https endpoint origin, with no userinfo, query or fragment; defaults to the vendor endpoint; required for openai-compatible |
-| `SKILL_XRAY_OPENGREP_BIN` | an OpenGrep binary to use instead of the cache; it must match the pinned size and SHA-256. Note the underscore after `SKILL`, unlike the `SKILLXRAY_LLM_*` variables |
+| `SKILL_XRAY_OPENGREP_BIN` | an OpenGrep binary to use instead of the cache; it must match the pinned size and SHA-256 and sit in a directory only you or an administrator can change. Note the underscore after `SKILL`, unlike the `SKILLXRAY_LLM_*` variables |
 
 Without `--llm` the LLM variables are ignored. `--llm` without a provider and a key is a usage error.
+
+### Supported providers
+
+| provider | `SKILLXRAY_LLM_PROVIDER` | default model | needs |
+|---|---|---|---|
+| Anthropic | `anthropic` | `claude-haiku-4-5` | `SKILLXRAY_LLM_API_KEY`, or `ANTHROPIC_API_KEY` as a fallback |
+| OpenAI | `openai` | `gpt-4.1-mini` | `SKILLXRAY_LLM_API_KEY`, or `OPENAI_API_KEY` as a fallback |
+| Any OpenAI-compatible endpoint | `openai-compatible` | none, set `SKILLXRAY_LLM_MODEL` | `SKILLXRAY_LLM_API_KEY`, `SKILLXRAY_LLM_MODEL` and `SKILLXRAY_LLM_BASE_URL` |
+
+The commands for each provider are under [Scan with the LLM lane](#scan-with-the-llm-lane).
 
 ### If the `llm:` line says `HTTP 404`
 
@@ -290,19 +328,15 @@ Each deterministic finding names a vector (`SXV-nnn`, the class of behavior it d
 | SXV-043 | a prose directive to obtain the user's data and send it to an e-mail address or URL hard-coded in the skill text | high |
 | SXV-044 | a shipped JavaScript or TypeScript script that is one machine-generated line: an obfuscator's hex identifiers and escaped string tables (`obfuscated-script`), or a minifier's output outside a declared `.min.js` (`minified-script`) | high; medium when only minified |
 
-### Capability context and LLM review
+### Capability context
 
 Every report records what the package claims about its execution and network needs, what its manifest declares, and what its code was observed doing. Unknown is not treated as safe, and a claim or a grant never authorizes behavior.
-
-In shadow and review mode the model sees a text-pattern candidate together with its rule contract, evidence, nearby source and the untrusted description that governs it, and answers `retain_finding`, `propose_false_positive` or `insufficient_context`. A false-positive proposal has to name the rule condition that is missing. It is accepted only with high confidence and complete, bounded source; redacted, oversized or externally linked context blocks it, and mechanical findings and coverage notes cannot be disputed at all. The client pins `temperature: 0`, and OpenAI's best-effort `seed`, where the model accepts them. That removes one source of variance, not all of it, which is why the lane stays advisory and medium-capped. Credential redaction before sending is best effort, not a guarantee.
-
-The run properties keep the audit: `rawCandidates` holds the emitted candidates, `candidateLinks` ties each to the result that retained it, `capabilityContexts` holds the capability evidence once per manifest, and `llmReview` records each review decision with its disposition, status, reason, tags, policy version, provenance, proposal, and request and response hashes.
 
 ## Coverage ledger
 
 The file walker, the part of the scanner that reads the package off disk, treats every package as hostile, so:
 
-- it caps per-file size, file count and total bytes read, so a crafted package cannot make it run out of memory. Time is bounded only through those caps: a 1 MiB Markdown file takes about a minute, so give a scan of a very large package a CI timeout;
+- it caps per-file size (1 MiB), file count (5000) and total bytes read (256 MiB), so a crafted package cannot make it run out of memory. The walker and the text lanes have no time limit of their own: a Markdown file at the 1 MiB cap takes between ten seconds and a minute to analyze depending on its shape, so give a scan of a very large package a CI timeout. The code engine's 45 second deadline (see [Exit codes](#exit-codes)) and the 120 second deadline on a URL or git download cover only those steps;
 - it does not follow a symlink or NTFS junction inside the package, wherever it points; each is recorded in the ledger as unread. The package root you name may itself be a symlink;
 - it does not open a FIFO, device or socket;
 - it inventories shipped compiled and native code (`.pyc`, `.pyo`, `.pyd`, `.so`, versioned `.so.N`, `.dylib`, `.dll`, `.exe`, `.wasm`, `.jar`, `.war`, `.class`, `.node`, `.o`, `.a`) as one `analysis-incomplete` result per file with the reason `shipped_compiled`, so a full coverage number does not hide compiled code;
@@ -327,7 +361,7 @@ CI runs the Go job on Linux, macOS and Windows. The symlink tests run on Linux a
 
 ### Benchmark
 
-`tools/bench` runs the scanner over an export of [MaliciousSkillBench](https://huggingface.co/datasets/ProtectSkills/MaliciousSkillBench) (revision `d4b42ce5766a`) and scores the rows. The headline score counts a record as detected only when a high or critical finding names a vector from the two behavior tiers (T1 and T2); capability-only signals (T3) are not counted, so a benign skill that merely asks for a lot is not a false positive. Looser views (any high or above, any medium or above, any finding at all) are reported next to it, and a benign record whose scan did not complete is never counted as a true negative.
+`tools/bench` runs the scanner over an export of [MaliciousSkillBench](https://huggingface.co/datasets/ProtectSkills/MaliciousSkillBench) (revision `d4b42ce5766a`) and scores the rows. The headline score counts a record as detected only when a high or critical finding names a vector from the two behavior tiers (T1 and T2); capability-only signals (T3) are not counted, so a benign skill that merely asks for a lot is not a false positive (each vector's tier is set in `internal/findings/vectors.go`). Looser views (any high or above, any medium or above, any finding at all) are reported next to it, and a benign record whose scan did not complete is never counted as a true negative.
 
 ```bash
 go run ./tools/bench run --data msb/test.jsonl --out out/test.jsonl
@@ -371,6 +405,10 @@ Contributions are welcome. Before opening a pull request:
 2. `make lint` passes: `go vet` plus staticcheck.
 3. A change to detection lands with its tests and says what it did to the benchmark.
 4. The documentation matches the change.
+
+## License
+
+Apache-2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). To report a vulnerability, follow [SECURITY.md](SECURITY.md).
 
 ## References
 
