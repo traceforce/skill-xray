@@ -344,16 +344,24 @@ var (
 		`payloads?|jailbreaks?|prompt injection|remote instructions?|attacks?|abuse|documents?|` +
 		`inputs?|texts?|contents?|messages?|files?) (?:that|which)|` +
 		`is an? (?:example|indicator) of|do not follow|never comply with)\b`)
-	// _EXAMPLE_INTRO_RE
-	exampleIntroRE = regexp.MustCompile(`(?i)\b(?:such as|e\.?g\.?|i\.?e\.?|for example|for instance|a typical|an example|` +
-		`example|payload|looks? like|reads?|the following|as follows|shown below|` +
-		`the one (?:below|above)|like this|as shown|below(?: this)?|` +
-		`might (?:say|write|include|contain|read)|would (?:say|write|read))\b\s*:?|` +
-		`:\s*["']`)
-	// _SXV042_EXAMPLE_INTRO_RE (SXV-042 and SXV-043)
-	sxv042ExampleIntroRE = regexp.MustCompile(`(?i)\b(?:such as|e\.?g\.?|for example|for instance|a typical|an example|example|payload|` +
-		`looks? like|might (?:say|write|include|contain|read)|would (?:say|write|read)|` +
-		`as shown|like this)\b\s*:?|:\s*["']`)
+	// exampleIntroTailRE is exampleIntroRE anchored to the end of the text it is tested on: an
+	// intro cites only what immediately follows it, so a paragraph that merely contains "read"
+	// or "below" somewhere does not silence the directive after it. A forward reference ("the
+	// following", "as follows") may carry a short trailing sentence; an example cue ("such as",
+	// "like this") introduces only when it ends the text or its trailing words end in a colon,
+	// a comma or an opening quote, so "use a tool such as make." is a finished sentence; a label
+	// word needs a colon, a dash or a quote right after it.
+	exampleIntroTailRE = regexp.MustCompile(introTail(
+		`the following|as follows|shown below|the one (?:below|above)`,
+		`example(?:\s*\([^)\n]{0,20}\))?|payload|reads?|below(?: this)?`))
+	// sxv042ExampleIntroTailRE is sxv042ExampleIntroRE anchored the same way, without the
+	// forward references.
+	sxv042ExampleIntroTailRE = regexp.MustCompile(introTail("", `example(?:\s*\([^)\n]{0,20}\))?|payload`))
+	// imperativeIntroRE: "do the following:" or "follow the steps below:" at the start of its
+	// clause orders what comes next, it does not cite it; "attackers use phrasing like the
+	// following:" describes, and negatedIntroRE keeps "do not apply the following:" a citation.
+	imperativeIntroRE = regexp.MustCompile(`(?i)(?:^|[.!?:;,]\s+|\b(?:then|first|next|finally|please|always|you (?:must|should|need to|have to|will|can|may))\s*,?\s+)[*_]{0,3}(?:do|follow|proceed|read|run|complete|perform|apply|use|execute|take|repeat)\s+(?:\w+\s+){0,3}(?:the following|as follows|the steps below|below)\b`)
+	negatedIntroRE    = regexp.MustCompile(`(?i)\bnot\b|\bnever\b|n't\b`)
 	// _SENTENCE_END_RE (?<=[.!?])\s+ without the lookbehind: the split point is one past the match start.
 	sentenceEndRE = regexp.MustCompile(`[.!?]\s+`)
 	// _EGRESS_URL_RE (SXV-041 and SXV-011)
@@ -361,6 +369,28 @@ var (
 	// _LIST_ITEM_RE, used with .match
 	listItemRE = regexp.MustCompile(`^\s*(?:[-*+]\s|\d+[.)]\s)`)
 )
+
+// introTail is the anchored intro regex over three cue classes: forward references may carry
+// up to 60 characters of trailing text, example cues only trailing words that end in a colon or
+// a comma (or the cue ends the text), label words need a colon, a dash or a quote right after;
+// a lone colon or a table cell before a quote introduces too, and emphasis marks may close it.
+func introTail(forward, label string) string {
+	const q = `["'\x{201c}\x{2018}(]`
+	forwardBranch := ""
+	if forward != "" {
+		forwardBranch = `\b(?:` + forward + `)\b[^\n]{0,60}[.:,]?\s*` + q + `?|`
+	}
+	return `(?i)(?:` + forwardBranch +
+		`\b(?:(?:such as|eg|ie|for example|for instance|a typical|an example|looks? like|like this|this one|as shown|might (?:say|write|include|contain|read)|would (?:say|write|read))\b|e\.g\.|i\.e\.)(?:[^.:;!?\n]{0,60}[:,]|[.:,]?)\s*` + q + `?|` +
+		`\b(?:` + label + `)\b\s*(?::\s*` + q + `?|[-\x{2013}\x{2014}]\s*` + q + `?|` + q + `)|` +
+		`:\s*` + q + `|\|\s*` + q + `)\s*[*_]{0,3}\s*(?:\|\s*)?\z` // an intro cell may end at the next cell
+}
+
+// imperativeIntro: an order at the start of its clause, not negated.
+func imperativeIntro(text string) bool {
+	m := imperativeIntroRE.FindString(text)
+	return m != "" && !negatedIntroRE.MatchString(m)
+}
 
 // isDefensiveFrame is _is_defensive_frame.
 func isDefensiveFrame(text string) bool {
@@ -558,4 +588,14 @@ func fencedLines(md *parse.Markdown, lineCount int) (inFence map[int]bool, openB
 		}
 	}
 	return
+}
+
+// introEnds reports whether text ends with an intro that cites what follows it, for the
+// directive lanes; sxv042IntroEnds is the same for the bundled-run and exfil lanes.
+func introEnds(text string) bool {
+	return exampleIntroTailRE.MatchString(text) && !imperativeIntro(text)
+}
+
+func sxv042IntroEnds(text string) bool {
+	return sxv042ExampleIntroTailRE.MatchString(text) && !imperativeIntro(text)
 }

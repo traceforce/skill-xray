@@ -290,7 +290,7 @@ func TestMissingEngineTimeoutAndInvalidJSONAreNotClean(t *testing.T) {
 	status, err := execRunner(context.Background(), []string{filepath.Join(t.TempDir(), "no-such-opengrep")}, t.TempDir(), nil, nil)
 	assert.Equal(t, 0, status)
 	assert.Error(t, err)
-	assert.Equal(t, "OpenGrep could not start: FileNotFoundError", couldNotStart(err)[0].Message)
+	assert.Equal(t, "OpenGrep could not start: FileNotFoundError", couldNotStart(p, err)[0].Message)
 }
 
 // tests/test_opengrep_bridge.py::test_missing_and_oversized_reports_are_not_clean
@@ -483,4 +483,15 @@ func TestShellContractHasUniqueShellOnlyCases(t *testing.T) {
 		assert.Contains(t, []string{"", "sh"}, c.Ext)
 	}
 	assert.Len(t, names, len(cases))
+}
+
+// A package-level engine gap is anchored to the manifest, so every result has a location.
+func TestPackageGapIsAnchoredToTheManifest(t *testing.T) {
+	p := parsed(t, map[string]string{"SKILL.md": "---\nname: x\n---\n", "run.py": "exec(input())\n"})
+	bogus := filepath.Join(t.TempDir(), "opengrep")
+	require.NoError(t, os.WriteFile(bogus, []byte("x"), 0o644))
+	fs := run(p, Options{Executable: bogus})
+	require.Equal(t, []string{"opengrep-unverified"}, rules(fs))
+	assert.Equal(t, "SKILL.md", fs[0].Path)
+	assert.Equal(t, "SKILL.md", couldNotStart(p, os.ErrNotExist)[0].Path, "every package-level failure is anchored")
 }

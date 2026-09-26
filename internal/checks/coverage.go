@@ -3,6 +3,7 @@ package checks
 import (
 	"cmp"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/traceforce/skill-xray/internal/findings"
@@ -17,6 +18,16 @@ var (
 		"grants_unparsed_shape", "markdown_parse_error", "raw_html_markup", "requirement_unparsed", "unmodeled_content",
 		"unsupported_markup")
 	lowStatic = ingest.BenignLedger
+	// unanalyzedSource: source files no lane analyzes; an agent can be told to build or run them.
+	// Build and infrastructure files (.gradle, .tf, .cmake, .nix) stay a low note.
+	unanalyzedSource = map[string]string{".go": "Go", ".rs": "Rust", ".php": "PHP", ".java": "Java", ".kt": "Kotlin", ".kts": "Kotlin",
+		".swift": "Swift", ".c": "C", ".h": "C", ".cc": "C++", ".cpp": "C++", ".cxx": "C++", ".hpp": "C++", ".cs": "C#", ".lua": "Lua",
+		".r": "R", ".scala": "Scala", ".dart": "Dart", ".ex": "Elixir", ".exs": "Elixir", ".hs": "Haskell", ".m": "Objective-C or MATLAB",
+		".mm": "Objective-C", ".zig": "Zig", ".nim": "Nim", ".jl": "Julia", ".vb": "Visual Basic", ".vbs": "VBScript", ".fs": "F# or Forth",
+		".fsx": "F#", ".clj": "Clojure", ".erl": "Erlang", ".groovy": "Groovy", ".ksh": "ksh", ".fish": "fish",
+		".csh": "csh", ".tcsh": "tcsh", ".awk": "awk", ".ahk": "AutoHotkey", ".applescript": "AppleScript", ".ml": "OCaml",
+		".pas": "Pascal", ".f90": "Fortran", ".cr": "Crystal", ".rkt": "Racket", ".lisp": "Lisp", ".d": "D",
+		".pyx": "Cython", ".psm1": "PowerShell", ".v": "V or Verilog", ".elm": "Elm"}
 )
 
 // IsInventoryNote is coverage.is_inventory_note over a finding's fields: the low static
@@ -57,9 +68,16 @@ func Coverage(p *parse.Package) []findings.Finding {
 		}
 		seen[key] = true
 		severity := "high"
+		message := fmt.Sprintf("%s analysis coverage is incomplete (%s).", phase, reason)
 		if phase == "parse" {
 			if lowParse[reason] {
 				severity = "low"
+			}
+			if language, ok := unanalyzedSource[strings.ToLower(path.Ext(e.Path))]; ok && reason == "unmodeled_content" {
+				// shipped source an agent can be told to build or run, read but analyzed by no
+				// lane: visible as FINDINGS on the console, not hidden under CLEAN
+				severity = "medium"
+				message = fmt.Sprintf("%s was read but not analyzed: no lane covers %s.", e.Path, language)
 			}
 		} else {
 			kind := ""
@@ -71,9 +89,9 @@ func Coverage(p *parse.Package) []findings.Finding {
 		if severity == "" {
 			continue
 		}
-		rule := map[string]string{"high": "analysis-incomplete", "low": "coverage-note"}[severity]
+		rule := map[string]string{"high": "analysis-incomplete", "medium": "analysis-incomplete", "low": "coverage-note"}[severity]
 		out = append(out, findings.Finding{Rule: rule, Severity: severity, Path: e.Path,
-			Message:  fmt.Sprintf("%s analysis coverage is incomplete (%s).", phase, reason),
+			Message:  message,
 			Evidence: map[string]any{"phase": phase, "reason": reason}})
 	}
 	return out
