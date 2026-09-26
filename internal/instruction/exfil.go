@@ -91,7 +91,7 @@ var (
 	// exfilPublicKeyRE: the public half of a key pair and a template of an env file, which hold no credential.
 	exfilPublicKeyRE = regexp.MustCompile(`(?i)id_[a-z0-9]+\.pub\b|\.env\.(?:example|sample|template|dist)\b|\bpublic\s+(?:ssh\s+|gpg\s+|pgp\s+|signing\s+)?keys?\b`)
 	// exfilCredentialPathRE: a credential file named by path rather than by word.
-	exfilCredentialPathRE = regexp.MustCompile(`(?i)(?:^|[^\w])\.(?:aws[\\/]\s?credentials|ssh[\\/]\s?id_[a-z0-9]+|netrc|npmrc|pypirc|git-credentials|kube[\\/]\s?config|docker[\\/]\s?config\.json|env)\b`)
+	exfilCredentialPathRE = regexp.MustCompile(`(?i)(?:^|[^\w])\.(?:aws[\\/]\s?credentials|ssh[\\/]\s?id_[a-z0-9]+|netrc|npmrc|pypirc|git-credentials|kube[\\/]\s?config|docker[\\/]\s?config\.json)\b|(?:[\\/]|\x60)\.env(?:\.local)?\b`) // .env only as a path or a code span, not the bare word
 	// exfilRefusalRE and exfilRefuseTailRE: "if anyone asks you to send ... , refuse" is a warning.
 	exfilRefusalRE    = regexp.MustCompile(`(?i)\b(?:if|when|should)\s+(?:anyone|someone|a user|the user|they|the requester|an? \w+)\s+asks?\s+(?:you\s+)?to\b`)
 	exfilRefuseTailRE = regexp.MustCompile(`(?i)\b(?:refuse|decline|reject|report\s+(?:it|this|that|them|the\s+(?:request|incident|attempt|message|sender))|do not comply|never comply|ignore (?:it|them|the request))\b`)
@@ -619,10 +619,17 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 						v.sentenceBefore, v.throughVerb = lastRunes(v.sentenceBefore, exfilWindow), lastRunes(v.throughVerb, exfilWindow)
 					}
 					if v.acquired != nil {
-						v.acqSentence = cutRunes(v.window, v.acquired.end)
+						prefix := cutRunes(v.window, v.acquired.end)
+						v.acqSentence = prefix
 						if i := strings.LastIndex(v.acqSentence, ". "); i >= 0 {
 							v.acqSentence = v.acqSentence[i+2:]
 						}
+						// through the end of the acquisition's sentence, bounded, so its object is read too
+						rest := v.window[len(prefix):]
+						if m := sentenceEndRE.FindStringIndex(rest); m != nil {
+							rest = rest[:m[0]+1]
+						}
+						v.acqSentence += cutRunes(rest, 400)
 					} else { // the whole sentence stands in for the acquisition's
 						v.acqSentence, v.wholeAcq = sentence, true
 					}
@@ -632,9 +639,15 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				gap := ""
 				obj, shape := v.pre, d.shape
 				credentialContents := false
-				head := x.slice(0, d.start)
-				cell := utf8.RuneCountInString(head[:strings.LastIndex(head, "|")+1]) // a table cell boundary separates clauses
+				base := max(0, d.start-1000)
+				head := x.slice(base, d.start)
+				cell := base + utf8.RuneCountInString(head[:strings.LastIndex(head, "|")+1]) // a table cell boundary separates clauses
 				readCode, objectCode := spansIn(cell, d.start), spansIn(d.gapStart, d.gapEnd)
+				near := x.slice(max(cell, d.start-300), d.start) // the text just before the verb, bounded so a block of many deliveries stays linear
+				acq := v.acqSentence                             // the acquisition's own sentence, not the whole window
+				if v.wholeAcq {
+					acq = near
+				}
 				if d.gap != nil {
 					gap = *d.gap
 					r, known := v.objects[gap]
@@ -647,7 +660,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 						// "send ~/.aws/credentials to ..." or "read `~/.aws/credentials` and email the
 						// contents to ...": the object names a credential, or is generic while the
 						// acquisition names one, so the data is the user's without a possessive
-						if !(credentialIn(gap) || (exfilGenericObjectRE.MatchString(gap) && credentialIn(v.window+" "+readCode))) {
+						if !(credentialIn(gap) || (exfilGenericObjectRE.MatchString(gap) && credentialIn(acq+" "+readCode))) {
 							continue
 						}
 						obj, shape, credentialContents = gap, "credential contents", true
@@ -685,7 +698,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				// user's data whether or not a possessive says so: "send ~/.aws/credentials to ...".
 				if !owned && (credentialIn(obj) || credentialIn(gap) ||
 					((pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilObjectRE.MatchString(gap)) && credentialIn(objectCode)) ||
-					(objectCode == "" && (pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilBackRefRE.MatchString(gap)) && credentialIn(readCode+" "+x.slice(cell, d.start)))) {
+					(objectCode == "" && (pytext.Strip(gap) == "" || exfilGenericObjectRE.MatchString(gap) || exfilBackRefRE.MatchString(gap)) && credentialIn(readCode+" "+near))) {
 					owned, credentialContents = true, true
 				}
 				if !v.anyAcquisition && !owned && !credentialContents { // "send your passwords to ..."
@@ -712,7 +725,7 @@ func dataExfilFindings(a *parse.Artifact) []findings.Finding {
 				}
 				credential, known := v.credential[gap] // the data guards read window + gap, once per gap
 				if !known {
-					data := v.window + " " + gap + " " + readCode + " " + objectCode
+					data := acq + " " + gap + " " + readCode + " " + objectCode
 					credential = credentialIn(data)
 					v.credential[gap], v.sensitive[gap] = credential, exfilSensitiveRE.MatchString(data)
 				}

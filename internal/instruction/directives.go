@@ -716,7 +716,7 @@ var (
 	covertRunCueRE = regexp.MustCompile(`(?i)` +
 		`\b(?:silently|quietly|covertly)\s+(?:run|execute|invoke|launch|call|start|trigger|source)\b|` +
 		`\b(?:run|execute|invoke|launch|call|start|trigger)\b\s+(?:\x60[^\x60\n]{1,80}\x60|(?:(?:[^\s\x60.;,]|\.[^\s\x60.;,]){1,40}\s+){0,3}(?:[^\s\x60.;,]|\.[^\s\x60.;,]){1,40})[^.;,\n]{0,12}(?:,\s*)?` +
-		`\b(?:silently|quietly|covertly)\b|` +
+		`\b(?:silently|quietly|covertly)\b(?:\s*(?:[.,;:!?)]|\z)|\s+(?:to|before|after|at|on|during|and|then|so|without|from|in|with|via|using|as|when|whenever|every|each|before)\b)|` + // the adverb ends its clause: "quietly move on" belongs to the next verb
 		`\b(?:do not|don'?t|never|without|avoid)\s+(?:\w+\s+){0,3}` +
 		`(?:surfac\w*|show\w*|display\w*|mention\w*|reveal\w*|disclos\w*|tell\w*|inform\w*|` +
 		`notif\w*|expos\w*|report\w*|announc\w*|narrat\w*|echo\w*|print\w*)` +
